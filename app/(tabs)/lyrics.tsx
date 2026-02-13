@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, ComponentProps } from 'react';
 import {
   StyleSheet,
   Text,
@@ -66,6 +66,14 @@ export default function LyricsScreen() {
   }, []);
 
   const handleSave = useCallback(() => {
+    if (!editText.trim()) {
+      Alert.alert('No Lyrics', 'Please write some lyrics before saving.');
+      return;
+    }
+    const duplicate = songs.find(s => s.title.toLowerCase() === (songTitle || 'Untitled').toLowerCase() && s.id !== activeSong?.id);
+    if (duplicate) {
+      Alert.alert('Duplicate Title', `A song named "${duplicate.title}" already exists. Consider using a different title.`);
+    }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const sections = parseSections(editText);
     if (activeSong) {
@@ -92,7 +100,7 @@ export default function LyricsScreen() {
       addSong(newSong);
       setActiveSong(newSong);
     }
-  }, [editText, songTitle, activeSong, parseSections, selectedGenre]);
+  }, [editText, songTitle, activeSong, parseSections, selectedGenre, songs]);
 
   const handleImport = useCallback(() => {
     if (!importText.trim()) return;
@@ -137,7 +145,7 @@ export default function LyricsScreen() {
     setActiveTab('write');
   };
 
-  const tabs: { key: TabKey; label: string; icon: string }[] = [
+  const tabs: { key: TabKey; label: string; icon: ComponentProps<typeof Feather>['name'] }[] = [
     { key: 'write', label: 'Write', icon: 'edit-3' },
     { key: 'structure', label: 'Structure', icon: 'layers' },
     { key: 'import', label: 'Import', icon: 'download' },
@@ -190,7 +198,7 @@ export default function LyricsScreen() {
                   Haptics.selectionAsync();
                 }}
               >
-                <Ionicons name={g.icon as any} size={14} color={isSelected ? g.color : Colors.textTertiary} />
+                <Ionicons name={g.icon} size={14} color={isSelected ? g.color : Colors.textTertiary} />
                 <Text style={[styles.genreChipText, isSelected && { color: g.color }]}>
                   {g.label}
                 </Text>
@@ -211,7 +219,7 @@ export default function LyricsScreen() {
             }}
           >
             <Feather
-              name={tab.icon as any}
+              name={tab.icon}
               size={16}
               color={activeTab === tab.key ? Colors.gradientStart : Colors.textTertiary}
             />

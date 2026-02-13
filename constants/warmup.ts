@@ -1,3 +1,6 @@
+import { ComponentProps } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+
 export interface WarmUpTip {
   text: string;
   type: 'do' | 'dont';
@@ -7,7 +10,7 @@ export interface WarmUpExercise {
   id: string;
   title: string;
   subtitle: string;
-  icon: string;
+  icon: ComponentProps<typeof Ionicons>['name'];
   durationSeconds: number;
   instruction: string;
   howTo: string[];
@@ -237,7 +240,7 @@ export const warmUpExercises: WarmUpExercise[] = [
 export interface SafetyRule {
   title: string;
   description: string;
-  icon: string;
+  icon: ComponentProps<typeof Ionicons>['name'];
   type: 'warning' | 'danger' | 'info';
 }
 

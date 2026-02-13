@@ -293,7 +293,7 @@ export default function WarmUpScreen() {
               ]}>
                 <View style={styles.safetyIconWrap}>
                   <Ionicons
-                    name={rule.icon as any}
+                    name={rule.icon}
                     size={20}
                     color={
                       rule.type === 'danger' ? '#F87171' :
@@ -311,7 +311,7 @@ export default function WarmUpScreen() {
           </View>
 
           <View style={styles.exercisePreview}>
-            <Text style={styles.sectionTitle}>Today's Routine</Text>
+            <Text style={styles.sectionTitle}>{"Today's Routine"}</Text>
             {warmUpExercises.map((ex, i) => (
               <View key={ex.id} style={styles.previewItem}>
                 <View style={[styles.previewNumber, { backgroundColor: ex.categoryColor + '25' }]}>
@@ -377,7 +377,7 @@ export default function WarmUpScreen() {
             </View>
             <View style={styles.completeTipCard}>
               <Ionicons name="timer" size={20} color={Colors.gradientStart} />
-              <Text style={styles.completeTipText}>You're good to sing for the next 1-2 hours</Text>
+              <Text style={styles.completeTipText}>{"You're good to sing for the next 1-2 hours"}</Text>
             </View>
             <View style={styles.completeTipCard}>
               <Ionicons name="snow" size={20} color="#A78BFA" />
@@ -464,7 +464,7 @@ export default function WarmUpScreen() {
         <View style={styles.tipsSection}>
           <View style={styles.tipsHeader}>
             <Ionicons name="close-circle" size={18} color="#F87171" />
-            <Text style={styles.tipsTitleDont}>Don't</Text>
+            <Text style={styles.tipsTitleDont}>{"Don't"}</Text>
           </View>
           {currentExercise.tips.filter(t => t.type === 'dont').map((tip, i) => (
             <TipCard key={i} tip={tip} />

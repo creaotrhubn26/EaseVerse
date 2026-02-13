@@ -89,9 +89,35 @@ export default function PracticeLoopScreen() {
     };
   }, [isLooping, loopLength]);
 
+  const pulseOpacity = useSharedValue(1);
+
+  useEffect(() => {
+    if (isLooping) {
+      pulseOpacity.value = withRepeat(
+        withSequence(
+          withTiming(0.6, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        false
+      );
+    } else {
+      pulseOpacity.value = withTiming(1, { duration: 200 });
+    }
+  }, [isLooping]);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: pulseOpacity.value,
+  }));
+
   const progressBarStyle = useAnimatedStyle(() => ({
     width: `${progressAnim.value * 100}%`,
   }));
+
+  const progressTextStyle = useAnimatedStyle(() => {
+    const _pct = interpolate(progressAnim.value, [0, 1], [0, 100]);
+    return { opacity: progressAnim.value > 0 ? 1 : 0 };
+  });
 
   if (!session) {
     return (
@@ -162,6 +188,9 @@ export default function PracticeLoopScreen() {
               />
             </Animated.View>
           </View>
+          <Animated.Text style={[styles.progressPercent, progressTextStyle]}>
+            {Math.round(progress * 100)}%
+          </Animated.Text>
           {isLooping && (
             <Text style={styles.loopCounter}>Loop {loopCount + 1}</Text>
           )}
@@ -193,7 +222,10 @@ export default function PracticeLoopScreen() {
           </View>
 
           <View style={styles.controlGroup}>
-            <Text style={styles.controlLabel}>Speed</Text>
+            <View style={styles.controlLabelRow}>
+              <Feather name="activity" size={14} color={Colors.textTertiary} />
+              <Text style={styles.controlLabel}>Speed</Text>
+            </View>
             <View style={styles.optionsRow}>
               {speedOptions.map(s => (
                 <Pressable
@@ -223,20 +255,22 @@ export default function PracticeLoopScreen() {
           }}
           style={styles.loopPressable}
         >
-          <LinearGradient
-            colors={isLooping
-              ? [Colors.dangerUnderline, '#cc5858']
-              : [Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.loopBtn}
-          >
-            <Ionicons name={isLooping ? 'stop' : 'repeat'} size={20} color="#fff" />
-            <Text style={styles.loopBtnText}>
-              {isLooping ? 'Stop Loop' : 'Start Loop'}
-            </Text>
-          </LinearGradient>
+          <Animated.View style={isLooping ? pulseStyle : undefined}>
+            <LinearGradient
+              colors={isLooping
+                ? [Colors.dangerUnderline, '#cc5858']
+                : [Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.loopBtn}
+            >
+              <Ionicons name={isLooping ? 'stop' : 'repeat'} size={20} color="#fff" />
+              <Text style={styles.loopBtnText}>
+                {isLooping ? 'Stop Loop' : 'Start Loop'}
+              </Text>
+            </LinearGradient>
+          </Animated.View>
         </Pressable>
       </View>
     </View>
@@ -410,6 +444,16 @@ const styles = StyleSheet.create({
   loopBtnText: {
     color: '#fff',
     fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  controlLabelRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+  },
+  progressPercent: {
+    color: Colors.gradientStart,
+    fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
   },
 });

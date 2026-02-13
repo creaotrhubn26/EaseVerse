@@ -190,7 +190,7 @@ export default function SingScreen() {
         <View style={styles.topRight}>
           {activeSong && (
             <View style={[styles.genreBadge, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
-              <Ionicons name={genreProfile.icon as any} size={12} color={genreProfile.color} />
+              <Ionicons name={genreProfile.icon} size={12} color={genreProfile.color} />
               <Text style={[styles.genreBadgeText, { color: genreProfile.color }]}>{genreProfile.label}</Text>
             </View>
           )}

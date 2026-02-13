@@ -63,6 +63,7 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
         <View style={styles.meta}>
           <Text style={styles.metaText}>{formatDate(session.date)}</Text>
           <View style={styles.dot} />
+          <Feather name="clock" size={12} color={Colors.textTertiary} />
           <Text style={styles.metaText}>{formatDuration(session.duration)}</Text>
         </View>
       </View>
@@ -70,7 +71,7 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
       <View style={styles.chips}>
         {genreProfile && (
           <View style={[styles.genreChip, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
-            <Ionicons name={genreProfile.icon as any} size={11} color={genreProfile.color} />
+            <Ionicons name={genreProfile.icon} size={11} color={genreProfile.color} />
             <Text style={[styles.genreChipText, { color: genreProfile.color }]}>{genreProfile.label}</Text>
           </View>
         )}

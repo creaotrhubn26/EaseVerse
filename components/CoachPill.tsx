@@ -37,7 +37,9 @@ export default function CoachPill({ hint, visible }: CoachPillProps) {
 
   return (
     <Animated.View style={[styles.pill, animStyle]}>
-      <Feather name="zap" size={14} color={Colors.gradientStart} />
+      <View style={styles.iconWrap}>
+        <Feather name="zap" size={14} color={Colors.gradientStart} />
+      </View>
       <Text style={styles.text}>{hint}</Text>
     </Animated.View>
   );
@@ -55,6 +57,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     alignSelf: 'center',
+  },
+  iconWrap: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   text: {
     color: Colors.gradientEnd,

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, ComponentProps } from 'react';
 import {
   StyleSheet,
   Text,
@@ -47,7 +47,7 @@ export default function SessionsScreen() {
     setTimeout(() => setRefreshing(false), 600);
   }, []);
 
-  const filters: { key: FilterKey; label: string; icon: string }[] = [
+  const filters: { key: FilterKey; label: string; icon: ComponentProps<typeof Ionicons>['name'] }[] = [
     { key: 'latest', label: 'Latest', icon: 'time-outline' },
     { key: 'best', label: 'Best', icon: 'trophy-outline' },
     { key: 'flagged', label: 'Flagged', icon: 'heart-outline' },
@@ -86,7 +86,7 @@ export default function SessionsScreen() {
             }}
           >
             <Ionicons
-              name={f.icon as any}
+              name={f.icon}
               size={14}
               color={filter === f.key ? Colors.gradientStart : Colors.textTertiary}
             />

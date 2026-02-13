@@ -160,7 +160,7 @@ export default function SessionReviewScreen() {
           <View style={styles.genreCoachSection}>
             <View style={styles.genreCoachHeader}>
               <View style={[styles.genreCoachBadge, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
-                <Ionicons name={genreProfile.icon as any} size={14} color={genreProfile.color} />
+                <Ionicons name={genreProfile.icon} size={14} color={genreProfile.color} />
                 <Text style={[styles.genreCoachBadgeText, { color: genreProfile.color }]}>{genreProfile.label} Coaching</Text>
               </View>
             </View>

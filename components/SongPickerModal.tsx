@@ -65,7 +65,7 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
                 >
                   <View style={[styles.songIcon, gp && { backgroundColor: gp.accentColor }]}>
                     <Ionicons
-                      name={gp ? gp.icon as any : 'musical-notes'}
+                      name={gp ? gp.icon : 'musical-notes'}
                       size={20}
                       color={isActive ? Colors.gradientStart : gp ? gp.color : Colors.textTertiary}
                     />

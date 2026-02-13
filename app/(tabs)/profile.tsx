@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { ComponentProps } from 'react';
 import {
   StyleSheet,
   Text,
@@ -21,7 +21,7 @@ function SettingRow({
   value,
   onPress,
 }: {
-  icon: string;
+  icon: ComponentProps<typeof Feather>['name'];
   label: string;
   value: string;
   onPress?: () => void;
@@ -33,7 +33,7 @@ function SettingRow({
     >
       <View style={styles.settingLeft}>
         <View style={styles.iconContainer}>
-          <Feather name={icon as any} size={18} color={Colors.gradientMid} />
+          <Feather name={icon} size={18} color={Colors.gradientMid} />
         </View>
         <Text style={styles.settingLabel}>{label}</Text>
       </View>

@@ -38,6 +38,7 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
       >
         <Animated.View style={[styles.deleteContent, { transform: [{ scale }] }]}>
           <Ionicons name="trash-outline" size={22} color="#fff" />
+          <Text style={styles.actionLabel}>Delete</Text>
         </Animated.View>
       </Pressable>
     );
@@ -63,11 +64,14 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
         style={styles.favoriteAction}
       >
         <Animated.View style={[styles.favoriteContent, { transform: [{ scale }] }]}>
-          <Ionicons
-            name={session.favorite ? 'heart-dislike' : 'heart'}
-            size={22}
-            color="#fff"
-          />
+          <View>
+            <Ionicons
+              name={session.favorite ? 'heart-dislike' : 'heart'}
+              size={22}
+              color="#fff"
+            />
+          </View>
+          <Text style={styles.actionLabel}>{session.favorite ? 'Unfave' : 'Fave'}</Text>
         </Animated.View>
       </Pressable>
     );
@@ -105,6 +109,7 @@ const styles = StyleSheet.create({
   deleteContent: {
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
   },
   favoriteAction: {
     width: 72,
@@ -118,5 +123,11 @@ const styles = StyleSheet.create({
   favoriteContent: {
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
+  },
+  actionLabel: {
+    color: '#fff',
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

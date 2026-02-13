@@ -1,3 +1,5 @@
+import { ComponentProps } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from './colors';
 
 export type GenreId = 'pop' | 'jazz' | 'rnb' | 'rock' | 'classical' | 'hiphop' | 'country' | 'soul';
@@ -16,7 +18,7 @@ export interface WordRule {
 export interface GenreProfile {
   id: GenreId;
   label: string;
-  icon: string;
+  icon: ComponentProps<typeof Ionicons>['name'];
   color: string;
   accentColor: string;
   description: string;

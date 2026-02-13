@@ -95,17 +95,25 @@ export default function SingScreen() {
   useEffect(() => {
     if (isRecording && !isPaused) {
       setStatusText('Listening...');
-      const qTimer = setInterval(() => {
-        const r = Math.random();
-        setQuality(r > 0.7 ? 'good' : r > 0.3 ? 'ok' : 'poor');
-      }, 3000);
-      return () => clearInterval(qTimer);
     } else if (isPaused) {
       setStatusText('Paused');
     } else {
       setStatusText('Ready to sing');
     }
   }, [isRecording, isPaused]);
+
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      const level = recording.audioLevel;
+      if (level > 0.4) {
+        setQuality('good');
+      } else if (level > 0.15) {
+        setQuality('ok');
+      } else {
+        setQuality('poor');
+      }
+    }
+  }, [isRecording, isPaused, recording.audioLevel]);
 
   const handleStop = useCallback(async () => {
     const result = await recording.stop();

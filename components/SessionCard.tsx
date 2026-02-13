@@ -1,0 +1,154 @@
+import React from 'react';
+import { StyleSheet, Text, View, Pressable } from 'react-native';
+import { Ionicons, Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import Colors from '@/constants/colors';
+import type { Session } from '@/lib/types';
+
+interface SessionCardProps {
+  session: Session;
+  onPress: () => void;
+  onFavorite: () => void;
+  onDelete: () => void;
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatDate(ts: number): string {
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = now.getTime() - d.getTime();
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 172800000) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function getScoreColor(score: number): string {
+  if (score >= 85) return Colors.successUnderline;
+  if (score >= 70) return Colors.warningUnderline;
+  return Colors.dangerUnderline;
+}
+
+export default function SessionCard({ session, onPress, onFavorite, onDelete }: SessionCardProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+    >
+      <View style={styles.header}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title} numberOfLines={1}>{session.title}</Text>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onFavorite();
+            }}
+            hitSlop={12}
+          >
+            <Ionicons
+              name={session.favorite ? 'heart' : 'heart-outline'}
+              size={20}
+              color={session.favorite ? Colors.dangerUnderline : Colors.textTertiary}
+            />
+          </Pressable>
+        </View>
+        <View style={styles.meta}>
+          <Text style={styles.metaText}>{formatDate(session.date)}</Text>
+          <View style={styles.dot} />
+          <Text style={styles.metaText}>{formatDuration(session.duration)}</Text>
+        </View>
+      </View>
+
+      <View style={styles.chips}>
+        <View style={[styles.scoreChip, { borderColor: getScoreColor(session.insights.textAccuracy) + '60' }]}>
+          <Text style={[styles.scoreText, { color: getScoreColor(session.insights.textAccuracy) }]}>
+            {session.insights.textAccuracy}%
+          </Text>
+        </View>
+        {session.tags.map(tag => (
+          <View key={tag} style={styles.tagChip}>
+            <Text style={styles.tagText}>{tag}</Text>
+          </View>
+        ))}
+      </View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    gap: 12,
+  },
+  pressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+  },
+  header: {
+    gap: 4,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  title: {
+    color: Colors.textPrimary,
+    fontSize: 17,
+    fontFamily: 'Inter_600SemiBold',
+    flex: 1,
+    marginRight: 12,
+  },
+  meta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaText: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+  },
+  dot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: Colors.textTertiary,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  scoreChip: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  scoreText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  tagChip: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  tagText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+  },
+});

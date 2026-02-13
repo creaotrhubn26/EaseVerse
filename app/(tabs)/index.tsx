@@ -1,11 +1,274 @@
-// template
-import { StyleSheet, Text, View } from "react-native";
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
+import Colors from '@/constants/colors';
+import RecordButton from '@/components/RecordButton';
+import CoachPill from '@/components/CoachPill';
+import QualityPill from '@/components/QualityPill';
+import LiveLyricsCanvas from '@/components/LiveLyricsCanvas';
+import { useApp } from '@/lib/AppContext';
+import { buildDemoLyricLines } from '@/lib/demo-data';
+import { generateId } from '@/lib/storage';
+import type { LyricLine, SignalQuality, Session } from '@/lib/types';
 
-export default function TabOneScreen() {
+const coachHints = [
+  'Final T missing',
+  'Open vowel',
+  'Stress on 2nd',
+  'Slow down',
+  'Hold the note',
+  'Breathe here',
+];
+
+export default function SingScreen() {
+  const insets = useSafeAreaInsets();
+  const { activeSong, songs, setActiveSong, addSession } = useApp();
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [activeLineIndex, setActiveLineIndex] = useState(0);
+  const [activeWordIndex, setActiveWordIndex] = useState(0);
+  const [quality, setQuality] = useState<SignalQuality>('good');
+  const [coachHint, setCoachHint] = useState<string | null>(null);
+  const [statusText, setStatusText] = useState('Ready to sing');
+  const [duration, setDuration] = useState(0);
+  const [lines, setLines] = useState<LyricLine[]>([]);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const coachTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const lyricsText = activeSong?.lyrics || '';
+  const lyricsLines = lyricsText.split('\n').filter(l => l.trim());
+
+  useEffect(() => {
+    if (lyricsText) {
+      setLines(buildDemoLyricLines(lyricsText, activeLineIndex, activeWordIndex));
+    }
+  }, [lyricsText, activeLineIndex, activeWordIndex]);
+
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      intervalRef.current = setInterval(() => {
+        setDuration(d => d + 1);
+        setActiveWordIndex(prev => {
+          const currentLine = lyricsLines[activeLineIndex] || '';
+          const wordCount = currentLine.split(' ').filter(w => w.trim()).length;
+          if (prev + 1 >= wordCount) {
+            setActiveLineIndex(li => {
+              if (li + 1 >= lyricsLines.length) {
+                handleStop();
+                return li;
+              }
+              return li + 1;
+            });
+            return 0;
+          }
+          return prev + 1;
+        });
+      }, 800);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [isRecording, isPaused, activeLineIndex, lyricsLines.length]);
+
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      coachTimerRef.current = setInterval(() => {
+        const hint = coachHints[Math.floor(Math.random() * coachHints.length)];
+        setCoachHint(hint);
+        setTimeout(() => setCoachHint(null), 2500);
+      }, 4000);
+    } else {
+      if (coachTimerRef.current) clearInterval(coachTimerRef.current);
+      setCoachHint(null);
+    }
+    return () => { if (coachTimerRef.current) clearInterval(coachTimerRef.current); };
+  }, [isRecording, isPaused]);
+
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      setStatusText('Listening...');
+      const qTimer = setInterval(() => {
+        const r = Math.random();
+        setQuality(r > 0.7 ? 'good' : r > 0.3 ? 'ok' : 'poor');
+      }, 3000);
+      return () => clearInterval(qTimer);
+    } else if (isPaused) {
+      setStatusText('Paused');
+    } else {
+      setStatusText('Ready to sing');
+    }
+  }, [isRecording, isPaused]);
+
+  const handleStop = useCallback(() => {
+    setIsRecording(false);
+    setIsPaused(false);
+    if (duration > 3) {
+      const session: Session = {
+        id: generateId(),
+        songId: activeSong?.id,
+        title: `${activeSong?.title || 'Recording'} - Take`,
+        duration,
+        date: Date.now(),
+        tags: ['practice'],
+        favorite: false,
+        insights: {
+          textAccuracy: 60 + Math.floor(Math.random() * 35),
+          pronunciationClarity: 55 + Math.floor(Math.random() * 40),
+          timingConsistency: Math.random() > 0.6 ? 'high' : Math.random() > 0.3 ? 'medium' : 'low',
+          topToFix: [
+            { word: 'tonight', reason: 'Final consonant dropped' },
+            { word: 'melody', reason: 'Stress shifted' },
+            { word: 'rhythm', reason: 'TH sound unclear' },
+          ],
+        },
+        lyrics: lyricsText,
+      };
+      addSession(session);
+      router.push({ pathname: '/session/[id]', params: { id: session.id } });
+    }
+    setActiveLineIndex(0);
+    setActiveWordIndex(0);
+    setDuration(0);
+  }, [duration, activeSong, lyricsText, addSession]);
+
+  const handleRecordPress = () => {
+    if (!isRecording) {
+      setIsRecording(true);
+      setIsPaused(false);
+      setDuration(0);
+      setActiveLineIndex(0);
+      setActiveWordIndex(0);
+    } else if (isPaused) {
+      setIsPaused(false);
+    } else {
+      setIsPaused(true);
+    }
+  };
+
+  const handleMarker = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const webTopInset = Platform.OS === 'web' ? 67 : 0;
+  const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Your Replit app will be here</Text>
-      <Text style={styles.text}>Please wait until we finish building it</Text>
+    <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
+      <View style={styles.topBar}>
+        <Pressable
+          style={styles.songSelector}
+          onPress={() => {
+            if (songs.length > 1) {
+              const nextIdx = (songs.findIndex(s => s.id === activeSong?.id) + 1) % songs.length;
+              setActiveSong(songs[nextIdx]);
+              Haptics.selectionAsync();
+            }
+          }}
+        >
+          <Text style={styles.songTitle} numberOfLines={1}>
+            {activeSong?.title || 'No Song'}
+          </Text>
+          <Ionicons name="chevron-down" size={16} color={Colors.textTertiary} />
+        </Pressable>
+
+        <View style={styles.topRight}>
+          <QualityPill quality={quality} />
+          <Pressable hitSlop={12}>
+            <Ionicons name="settings-outline" size={22} color={Colors.textSecondary} />
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.lyricsArea}>
+        <LiveLyricsCanvas lines={lines} activeLineIndex={activeLineIndex} />
+      </View>
+
+      <View style={styles.coachArea}>
+        <CoachPill hint={coachHint} visible={!!coachHint} />
+      </View>
+
+      <View style={[styles.controls, { paddingBottom: Math.max(insets.bottom, webBottomInset) + 90 }]}>
+        <View style={styles.statusRow}>
+          <View style={styles.statusDot} />
+          <Text style={styles.statusText}>{statusText}</Text>
+          {isRecording && (
+            <Text style={styles.timerText}>{formatTime(duration)}</Text>
+          )}
+        </View>
+
+        <View style={styles.transportRow}>
+          <Pressable
+            style={styles.transportBtn}
+            onPress={handleMarker}
+            disabled={!isRecording}
+          >
+            <Ionicons
+              name="flag"
+              size={24}
+              color={isRecording ? Colors.textSecondary : Colors.textTertiary}
+            />
+          </Pressable>
+
+          <RecordButton
+            isRecording={isRecording}
+            isPaused={isPaused}
+            onPress={handleRecordPress}
+            size={80}
+          />
+
+          {isRecording ? (
+            <Pressable
+              style={styles.transportBtn}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                handleStop();
+              }}
+            >
+              <Ionicons name="stop-circle" size={28} color={Colors.dangerUnderline} />
+            </Pressable>
+          ) : (
+            <Pressable style={styles.transportBtn} onPress={() => {}}>
+              <MaterialCommunityIcons
+                name="metronome"
+                size={24}
+                color={Colors.textTertiary}
+              />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      {!activeSong && (
+        <View style={styles.emptyOverlay}>
+          <View style={styles.emptyCard}>
+            <Ionicons name="musical-notes" size={48} color={Colors.textTertiary} />
+            <Text style={styles.emptyTitle}>No lyrics loaded</Text>
+            <Pressable
+              style={styles.emptyBtn}
+              onPress={() => router.push('/(tabs)/lyrics')}
+            >
+              <LinearGradient
+                colors={[Colors.gradientStart, Colors.gradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.emptyBtnGradient}
+              >
+                <Text style={styles.emptyBtnText}>Add Lyrics</Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -13,17 +276,110 @@ export default function TabOneScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: Colors.background,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  songSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    marginRight: 12,
+  },
+  songTitle: {
+    color: Colors.textPrimary,
+    fontSize: 18,
+    fontFamily: 'Inter_600SemiBold',
+    maxWidth: '80%',
+  },
+  topRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  lyricsArea: {
+    flex: 1,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  coachArea: {
+    minHeight: 40,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  controls: {
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.successUnderline,
   },
-  text: {
+  statusText: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+  },
+  timerText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    marginLeft: 4,
+  },
+  transportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 40,
+  },
+  transportBtn: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(14,15,20,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyCard: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  emptyTitle: {
+    color: Colors.textSecondary,
+    fontSize: 18,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  emptyBtn: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  emptyBtnGradient: {
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  emptyBtnText: {
+    color: '#fff',
     fontSize: 16,
-    textAlign: "center",
-    paddingHorizontal: 20,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

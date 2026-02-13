@@ -98,27 +98,42 @@ export const demoSessions: Session[] = [
   },
 ];
 
-export function buildDemoLyricLines(lyrics: string, activeLineIndex: number, activeWordIndex: number, genre?: GenreId): LyricLine[] {
+export function buildDemoLyricLines(
+  lyrics: string,
+  activeLineIndex: number,
+  activeWordIndex: number,
+  genre?: GenreId,
+  audioLevel?: number,
+  wordAudioLevels?: Map<string, number>,
+): LyricLine[] {
   const lines = lyrics.split('\n').filter(l => l.trim());
+  const level = audioLevel ?? 0;
+
   return lines.map((line, li) => {
     const words = line.split(' ').filter(w => w.trim());
     return {
       id: `line-${li}`,
       words: words.map((word, wi) => {
         let state: LyricLine['words'][0]['state'] = 'upcoming';
-        if (li < activeLineIndex) {
-          state = Math.random() > 0.15 ? 'confirmed' : (Math.random() > 0.5 ? 'unclear' : 'mismatch');
-        } else if (li === activeLineIndex) {
-          if (wi < activeWordIndex) {
-            state = Math.random() > 0.1 ? 'confirmed' : 'unclear';
-          } else if (wi === activeWordIndex) {
-            state = 'active';
+        const wordKey = `${li}-${wi}`;
+
+        if (li < activeLineIndex || (li === activeLineIndex && wi < activeWordIndex)) {
+          const savedLevel = wordAudioLevels?.get(wordKey) ?? 0;
+          if (savedLevel > 0.35) {
+            state = 'confirmed';
+          } else if (savedLevel > 0.12) {
+            state = 'unclear';
+          } else {
+            state = 'mismatch';
           }
+        } else if (li === activeLineIndex && wi === activeWordIndex) {
+          state = 'active';
         }
+
         let hint: string | undefined;
         if (state === 'mismatch' || state === 'unclear') {
           const genreTip = genre ? getWordTipForGenre(word, genre) : null;
-          hint = genreTip || 'Check pronunciation';
+          hint = genreTip || 'Sing louder and clearer';
         }
         return {
           id: `word-${li}-${wi}`,

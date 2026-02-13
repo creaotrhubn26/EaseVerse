@@ -32,6 +32,7 @@ export default function SingScreen() {
   const [showSongPicker, setShowSongPicker] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const coachTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wordAudioLevelsRef = useRef<Map<string, number>>(new Map());
 
   const isRecording = recording.isRecording;
   const isPaused = recording.isPaused;
@@ -45,16 +46,18 @@ export default function SingScreen() {
 
   useEffect(() => {
     if (lyricsText) {
-      setLines(buildDemoLyricLines(lyricsText, activeLineIndex, activeWordIndex, genre));
+      setLines(buildDemoLyricLines(lyricsText, activeLineIndex, activeWordIndex, genre, recording.audioLevel, wordAudioLevelsRef.current));
     }
-  }, [lyricsText, activeLineIndex, activeWordIndex, genre]);
+  }, [lyricsText, activeLineIndex, activeWordIndex, genre, recording.audioLevel]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
       intervalRef.current = setInterval(() => {
+        const currentLevel = recording.audioLevel;
         setActiveWordIndex(prev => {
           const currentLine = lyricsLines[activeLineIndex] || '';
           const wordCount = currentLine.split(' ').filter(w => w.trim()).length;
+          wordAudioLevelsRef.current.set(`${activeLineIndex}-${prev}`, currentLevel);
           if (prev + 1 >= wordCount) {
             setActiveLineIndex(li => {
               if (li + 1 >= lyricsLines.length) {
@@ -72,7 +75,7 @@ export default function SingScreen() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isRecording, isPaused, activeLineIndex, lyricsLines.length]);
+  }, [isRecording, isPaused, activeLineIndex, lyricsLines.length, recording.audioLevel]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -119,7 +122,42 @@ export default function SingScreen() {
     const result = await recording.stop();
     const elapsed = result.durationSeconds;
     if (elapsed > 3) {
-      const genreFixes = getGenreFixReasons(genre);
+      const levels = wordAudioLevelsRef.current;
+      const allLevels = Array.from(levels.values());
+      const totalWords = allLevels.length || 1;
+
+      const confirmedCount = allLevels.filter(l => l > 0.35).length;
+      const unclearCount = allLevels.filter(l => l > 0.12 && l <= 0.35).length;
+      const missedCount = allLevels.filter(l => l <= 0.12).length;
+
+      const textAccuracy = Math.round((confirmedCount / totalWords) * 100);
+      const pronunciationClarity = Math.round(((confirmedCount + unclearCount * 0.5) / totalWords) * 100);
+      const avgLevel = allLevels.reduce((sum, l) => sum + l, 0) / totalWords;
+      const timingConsistency = avgLevel > 0.35 ? 'high' : avgLevel > 0.2 ? 'medium' : 'low';
+
+      const allLines = lyricsText.split('\n').filter(l => l.trim());
+      const fixWords: { word: string; reason: string }[] = [];
+      levels.forEach((level, key) => {
+        if (level <= 0.35) {
+          const [li, wi] = key.split('-').map(Number);
+          const lineWords = (allLines[li] || '').split(' ').filter(w => w.trim());
+          const w = lineWords[wi];
+          if (w && !fixWords.find(f => f.word === w)) {
+            const genreTip = getWordTipForGenre(w, genre);
+            fixWords.push({
+              word: w,
+              reason: genreTip || (level <= 0.12 ? 'Not heard clearly' : 'Needs more projection'),
+            });
+          }
+        }
+      });
+
+      const topToFix = fixWords.slice(0, 5);
+      if (topToFix.length === 0) {
+        const genreFixes = getGenreFixReasons(genre);
+        topToFix.push(...genreFixes.slice(0, 3));
+      }
+
       const session: Session = {
         id: generateId(),
         songId: activeSong?.id,
@@ -130,20 +168,17 @@ export default function SingScreen() {
         tags: ['practice', genreProfile.label.toLowerCase()],
         favorite: false,
         insights: {
-          textAccuracy: 60 + Math.floor(Math.random() * 35),
-          pronunciationClarity: 55 + Math.floor(Math.random() * 40),
-          timingConsistency: Math.random() > 0.6 ? 'high' : Math.random() > 0.3 ? 'medium' : 'low',
-          topToFix: genreFixes.length > 0 ? genreFixes : [
-            { word: 'tonight', reason: 'Final consonant dropped' },
-            { word: 'melody', reason: 'Stress shifted' },
-            { word: 'rhythm', reason: 'TH sound unclear' },
-          ],
+          textAccuracy: Math.max(10, Math.min(100, textAccuracy)),
+          pronunciationClarity: Math.max(10, Math.min(100, pronunciationClarity)),
+          timingConsistency,
+          topToFix,
         },
         lyrics: lyricsText,
       };
       addSession(session);
       router.push({ pathname: '/session/[id]', params: { id: session.id } });
     }
+    wordAudioLevelsRef.current = new Map();
     setActiveLineIndex(0);
     setActiveWordIndex(0);
   }, [activeSong, lyricsText, addSession, genre, genreProfile, recording]);
@@ -152,6 +187,7 @@ export default function SingScreen() {
     if (!isRecording) {
       setActiveLineIndex(0);
       setActiveWordIndex(0);
+      wordAudioLevelsRef.current = new Map();
       await recording.start();
     } else {
       await recording.togglePause();

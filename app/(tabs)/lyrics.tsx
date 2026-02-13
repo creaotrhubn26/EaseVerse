@@ -188,7 +188,7 @@ export default function LyricsScreen() {
                     setSongTitle(demo.title);
                   }
                   Haptics.selectionAsync();
-                }
+                }}
               >
                 <Ionicons name={g.icon as any} size={14} color={isSelected ? g.color : Colors.textTertiary} />
                 <Text style={[styles.genreChipText, isSelected && { color: g.color }]}>

@@ -16,24 +16,26 @@ import SongPickerModal from '@/components/SongPickerModal';
 import { useApp } from '@/lib/AppContext';
 import { buildDemoLyricLines } from '@/lib/demo-data';
 import { generateId } from '@/lib/storage';
+import { useRecording } from '@/lib/useRecording';
 import type { LyricLine, SignalQuality, Session } from '@/lib/types';
 
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
   const { activeSong, songs, setActiveSong, addSession } = useApp();
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const recording = useRecording();
   const [activeLineIndex, setActiveLineIndex] = useState(0);
   const [activeWordIndex, setActiveWordIndex] = useState(0);
   const [quality, setQuality] = useState<SignalQuality>('good');
   const [coachHint, setCoachHint] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('Ready to sing');
-  const [duration, setDuration] = useState(0);
-  const durationRef = useRef(0);
   const [lines, setLines] = useState<LyricLine[]>([]);
   const [showSongPicker, setShowSongPicker] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const coachTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const isRecording = recording.isRecording;
+  const isPaused = recording.isPaused;
+  const duration = recording.duration;
 
   const lyricsText = activeSong?.lyrics || '';
   const lyricsLines = lyricsText.split('\n').filter(l => l.trim());
@@ -50,8 +52,6 @@ export default function SingScreen() {
   useEffect(() => {
     if (isRecording && !isPaused) {
       intervalRef.current = setInterval(() => {
-        durationRef.current += 1;
-        setDuration(durationRef.current);
         setActiveWordIndex(prev => {
           const currentLine = lyricsLines[activeLineIndex] || '';
           const wordCount = currentLine.split(' ').filter(w => w.trim()).length;
@@ -107,10 +107,9 @@ export default function SingScreen() {
     }
   }, [isRecording, isPaused]);
 
-  const handleStop = useCallback(() => {
-    setIsRecording(false);
-    setIsPaused(false);
-    const elapsed = durationRef.current;
+  const handleStop = useCallback(async () => {
+    const result = await recording.stop();
+    const elapsed = result.durationSeconds;
     if (elapsed > 3) {
       const genreFixes = getGenreFixReasons(genre);
       const session: Session = {
@@ -139,22 +138,15 @@ export default function SingScreen() {
     }
     setActiveLineIndex(0);
     setActiveWordIndex(0);
-    durationRef.current = 0;
-    setDuration(0);
-  }, [activeSong, lyricsText, addSession, genre, genreProfile]);
+  }, [activeSong, lyricsText, addSession, genre, genreProfile, recording]);
 
-  const handleRecordPress = () => {
+  const handleRecordPress = async () => {
     if (!isRecording) {
-      setIsRecording(true);
-      setIsPaused(false);
-      durationRef.current = 0;
-      setDuration(0);
       setActiveLineIndex(0);
       setActiveWordIndex(0);
-    } else if (isPaused) {
-      setIsPaused(false);
+      await recording.start();
     } else {
-      setIsPaused(true);
+      await recording.togglePause();
     }
   };
 
@@ -237,7 +229,7 @@ export default function SingScreen() {
       </View>
 
       <View style={[styles.controls, { paddingBottom: Math.max(insets.bottom, webBottomInset) + 90 }]}>
-        <VUMeter isActive={isRecording && !isPaused} />
+        <VUMeter isActive={isRecording && !isPaused} audioLevel={recording.audioLevel} />
 
         <View style={styles.statusRow}>
           <View style={[styles.statusDot, {

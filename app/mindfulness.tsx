@@ -21,6 +21,8 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { useNarration, type NarrationState } from '@/lib/useNarration';
+import { Audio } from 'expo-av';
 import Colors from '@/constants/colors';
 import {
   moodOptions,
@@ -40,7 +42,7 @@ import {
 
 type MindfulnessPhase = 'mood' | 'plan' | 'breathing' | 'technique' | 'visualization' | 'affirmation' | 'complete';
 
-function BreathingGuide({ pattern, onComplete }: { pattern: BreathingPattern; onComplete: () => void }) {
+function BreathingGuide({ pattern, onComplete, speak }: { pattern: BreathingPattern; onComplete: () => void; speak: (text: string, onDone?: () => void) => Promise<void> }) {
   const [currentCycle, setCurrentCycle] = useState(0);
   const [phase, setPhase] = useState<'inhale' | 'hold' | 'exhale' | 'holdAfter'>('inhale');
   const [countdown, setCountdown] = useState(pattern.inhale);
@@ -75,11 +77,15 @@ function BreathingGuide({ pattern, onComplete }: { pattern: BreathingPattern; on
     if (phase === 'inhale') {
       circleScale.value = withTiming(1.0, { duration: pattern.inhale * 1000, easing: Easing.inOut(Easing.ease) });
       circleOpacity.value = withTiming(0.8, { duration: pattern.inhale * 1000 });
+      speak('Breathe in deeply').catch(() => {});
+    } else if (phase === 'hold' || phase === 'holdAfter') {
+      speak('Hold gently').catch(() => {});
     } else if (phase === 'exhale') {
       circleScale.value = withTiming(0.6, { duration: pattern.exhale * 1000, easing: Easing.inOut(Easing.ease) });
       circleOpacity.value = withTiming(0.4, { duration: pattern.exhale * 1000 });
+      speak('Slowly breathe out').catch(() => {});
     }
-  }, [phase, isActive, pattern.inhale, pattern.exhale, circleScale, circleOpacity]);
+  }, [phase, isActive, pattern.inhale, pattern.exhale, circleScale, circleOpacity, speak]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -191,6 +197,7 @@ function BreathingGuide({ pattern, onComplete }: { pattern: BreathingPattern; on
           style={styles.startBreathBtn}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            speak(pattern.description).catch(() => {});
             setIsActive(true);
             setCurrentCycle(0);
             setPhase('inhale');
@@ -221,7 +228,7 @@ function BreathingGuide({ pattern, onComplete }: { pattern: BreathingPattern; on
   );
 }
 
-function TechniqueGuide({ technique, onComplete }: { technique: EnergyTechnique; onComplete: () => void }) {
+function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTechnique; onComplete: () => void; speak: (text: string, onDone?: () => void) => Promise<void> }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [timeLeft, setTimeLeft] = useState(technique.durationSeconds);
   const [isActive, setIsActive] = useState(false);
@@ -245,6 +252,7 @@ function TechniqueGuide({ technique, onComplete }: { technique: EnergyTechnique;
 
   useEffect(() => {
     if (!isActive) return;
+    speak(technique.steps[0]).catch(() => {});
     const stepDuration = (technique.durationSeconds / technique.steps.length) * 1000;
     const stepInterval = setInterval(() => {
       stepOpacity.value = withSequence(
@@ -252,15 +260,17 @@ function TechniqueGuide({ technique, onComplete }: { technique: EnergyTechnique;
         withTiming(1, { duration: 300 })
       );
       setCurrentStep(s => {
-        if (s + 1 >= technique.steps.length) {
+        const next = s + 1;
+        if (next >= technique.steps.length) {
           clearInterval(stepInterval);
           return s;
         }
-        return s + 1;
+        speak(technique.steps[next]).catch(() => {});
+        return next;
       });
     }, stepDuration);
     return () => clearInterval(stepInterval);
-  }, [isActive, technique.steps.length, technique.durationSeconds, stepOpacity]);
+  }, [isActive, technique.steps.length, technique.durationSeconds, stepOpacity, speak, technique.steps]);
 
   const stepStyle = useAnimatedStyle(() => ({
     opacity: stepOpacity.value,
@@ -308,6 +318,7 @@ function TechniqueGuide({ technique, onComplete }: { technique: EnergyTechnique;
           style={styles.startBreathBtn}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            speak(technique.description).catch(() => {});
             setIsActive(true);
             setCurrentStep(0);
           }}
@@ -337,7 +348,7 @@ function TechniqueGuide({ technique, onComplete }: { technique: EnergyTechnique;
   );
 }
 
-function VisualizationGuide({ visualization, onComplete }: { visualization: VisualizationExercise; onComplete: () => void }) {
+function VisualizationGuide({ visualization, onComplete, speak }: { visualization: VisualizationExercise; onComplete: () => void; speak: (text: string, onDone?: () => void) => Promise<void> }) {
   const [currentLine, setCurrentLine] = useState(0);
   const [isActive, setIsActive] = useState(false);
 
@@ -362,6 +373,7 @@ function VisualizationGuide({ visualization, onComplete }: { visualization: Visu
   useEffect(() => {
     if (!isActive) return;
     lineOpacity.value = withTiming(1, { duration: 600 });
+    speak(visualization.narration[0]).catch(() => {});
 
     const lineDuration = (visualization.durationSeconds / visualization.narration.length) * 1000;
     const lineInterval = setInterval(() => {
@@ -370,16 +382,18 @@ function VisualizationGuide({ visualization, onComplete }: { visualization: Visu
         withTiming(1, { duration: 500 })
       );
       setCurrentLine(l => {
-        if (l + 1 >= visualization.narration.length) {
+        const next = l + 1;
+        if (next >= visualization.narration.length) {
           clearInterval(lineInterval);
           setTimeout(() => onComplete(), 2000);
           return l;
         }
-        return l + 1;
+        speak(visualization.narration[next]).catch(() => {});
+        return next;
       });
     }, lineDuration);
     return () => clearInterval(lineInterval);
-  }, [isActive, visualization.narration.length, visualization.durationSeconds, lineOpacity, onComplete]);
+  }, [isActive, visualization.narration.length, visualization.durationSeconds, lineOpacity, onComplete, speak, visualization.narration]);
 
   const lineStyle = useAnimatedStyle(() => ({
     opacity: lineOpacity.value,
@@ -445,17 +459,35 @@ function VisualizationGuide({ visualization, onComplete }: { visualization: Visu
 
 export default function MindfulnessScreen() {
   const insets = useSafeAreaInsets();
+  const narration = useNarration();
   const [currentPhase, setCurrentPhase] = useState<MindfulnessPhase>('mood');
   const [selectedMood, setSelectedMood] = useState<MoodLevel | null>(null);
   const [selectedBreathing, setSelectedBreathing] = useState<BreathingPattern | null>(null);
   const [selectedTechnique, setSelectedTechnique] = useState<EnergyTechnique | null>(null);
   const [selectedViz, setSelectedViz] = useState<VisualizationExercise | null>(null);
   const [currentAffirmation, setCurrentAffirmation] = useState<string>('');
+  const [narrationEnabled, setNarrationEnabled] = useState(true);
 
   const fadeIn = useSharedValue(0);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+    });
+    return () => { narration.stop(); };
+  }, []);
+
+  const narrateIfEnabled = useCallback(async (text: string, onDone?: () => void) => {
+    if (narrationEnabled) {
+      await narration.speak(text, onDone);
+    } else {
+      onDone?.();
+    }
+  }, [narrationEnabled, narration]);
 
   useEffect(() => {
     fadeIn.value = withTiming(1, { duration: 400 });
@@ -479,10 +511,20 @@ export default function MindfulnessScreen() {
   }, [fadeIn]);
 
   const goToPhase = useCallback((phase: MindfulnessPhase) => {
+    narration.stop();
     fadeIn.value = 0;
     setCurrentPhase(phase);
     Haptics.selectionAsync();
-  }, [fadeIn]);
+    if (phase === 'affirmation') {
+      setTimeout(() => {
+        narrateIfEnabled(currentAffirmation).catch(() => {});
+      }, 500);
+    } else if (phase === 'complete') {
+      setTimeout(() => {
+        narrateIfEnabled('You are ready. Go make something beautiful.').catch(() => {});
+      }, 500);
+    }
+  }, [fadeIn, narration, narrateIfEnabled, currentAffirmation]);
 
   const renderMoodPicker = () => (
     <Animated.View style={[styles.phaseContent, fadeStyle]}>
@@ -595,6 +637,7 @@ export default function MindfulnessScreen() {
         <BreathingGuide
           pattern={selectedBreathing}
           onComplete={() => goToPhase('technique')}
+          speak={narrateIfEnabled}
         />
       )}
 
@@ -623,6 +666,7 @@ export default function MindfulnessScreen() {
         <TechniqueGuide
           technique={selectedTechnique}
           onComplete={() => goToPhase('visualization')}
+          speak={narrateIfEnabled}
         />
       )}
 
@@ -651,6 +695,7 @@ export default function MindfulnessScreen() {
         <VisualizationGuide
           visualization={selectedViz}
           onComplete={() => goToPhase('affirmation')}
+          speak={narrateIfEnabled}
         />
       )}
 
@@ -771,7 +816,19 @@ export default function MindfulnessScreen() {
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Mindfulness</Text>
-        <View style={{ width: 24 }} />
+        <Pressable
+          onPress={() => {
+            setNarrationEnabled(prev => !prev);
+            if (narrationEnabled) narration.stop();
+          }}
+          hitSlop={12}
+        >
+          <Ionicons
+            name={narrationEnabled ? "volume-high" : "volume-mute"}
+            size={22}
+            color={narrationEnabled ? Colors.gradientStart : Colors.textTertiary}
+          />
+        </Pressable>
       </View>
 
       {currentPhase !== 'mood' && currentPhase !== 'complete' && (
@@ -786,6 +843,13 @@ export default function MindfulnessScreen() {
               ]}
             />
           ))}
+        </View>
+      )}
+
+      {narration.state === 'loading' && (
+        <View style={styles.narrationLoading}>
+          <Ionicons name="mic" size={12} color={Colors.gradientStart} />
+          <Text style={styles.narrationLoadingText}>Generating voice...</Text>
         </View>
       )}
 
@@ -1362,5 +1426,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
+  },
+  narrationLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 4,
+  },
+  narrationLoadingText: {
+    color: Colors.gradientStart,
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
   },
 });

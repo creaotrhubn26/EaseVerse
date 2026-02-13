@@ -6,7 +6,7 @@ LyricFlow is a mobile-first app for vocalists that captures singing, reveals lyr
 
 The primary user flow is: **Sing → Review → Practice Loop**, with four bottom navigation tabs: Sing, Lyrics, Sessions, and Profile.
 
-Currently, the app uses demo/mock data to simulate real-time lyric recognition and pronunciation feedback. There is no actual audio capture or speech recognition integrated yet — the singing flow simulates word progression with timers.
+The app uses real microphone recording via expo-av with live audio metering. Word states (confirmed/unclear/mismatch) are determined by actual audio levels captured during singing. Session insights (accuracy, pronunciation clarity, timing) are derived from real recorded audio data. A pronunciation coach powered by OpenAI provides phonetic breakdowns and spoken demonstrations of correct word pronunciation.
 
 ## User Preferences
 
@@ -111,6 +111,17 @@ Preferred communication style: Simple, everyday language.
 - Eliminated all `as any` type assertions — icon types use `ComponentProps<typeof Ionicons>['name']` pattern
 - Wired all previously unused variables with real functionality (Alert validation, Feather icons, animations, progress displays)
 - Fixed unescaped entities in warmup.tsx
+- Added real microphone recording using expo-av with audio metering (lib/useRecording.ts)
+- VU meter now shows real audio levels from microphone, not random animation
+- Signal quality indicator (Good/OK/Poor) now based on real audio levels (>0.4=good, >0.15=ok, else poor)
+- Word states (confirmed/unclear/mismatch) in LiveLyricsCanvas now derived from actual audio levels per word
+- Session insights (textAccuracy, pronunciationClarity, timingConsistency) computed from real recorded audio levels
+- Top-to-fix words in sessions derived from actual low-level words in the recording
+- Added pronunciation coach API endpoint (`/api/pronounce`) using OpenAI GPT-4o-mini for phonetic breakdowns and TTS for spoken pronunciation
+- Built `usePronunciationCoach` hook (lib/usePronunciationCoach.ts) for frontend to fetch and play pronunciation demonstrations
+- Session Review "Top to Fix" items now have tap-to-hear: tap any word to hear AI-generated pronunciation with phonetic spelling and singing tip
+- Practice Loop screen has "Hear pronunciation" button that picks the hardest word in selected phrase and plays pronunciation
+- Coach panel shows phonetic spelling (e.g., "ee-KWUHL"), singing tip, speaking indicator, and replay button
 
 ### Development Workflow
 
@@ -119,6 +130,6 @@ Preferred communication style: Simple, everyday language.
 
 ## External Dependencies
 
-- **No external APIs**: No speech recognition, audio processing, or AI services are currently integrated.
+- **OpenAI via Replit AI Integrations**: Used for pronunciation coach (GPT-4o-mini for phonetic analysis, TTS for spoken pronunciation). API key managed via `AI_INTEGRATIONS_OPENAI_API_KEY`.
 - **No authentication service**: User auth schema exists in Drizzle but no auth flow is implemented.
 - **Fonts**: Inter font loaded from `@expo-google-fonts/inter` (bundled, not external CDN).

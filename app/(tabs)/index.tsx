@@ -216,6 +216,15 @@ export default function SingScreen() {
             <Ionicons name="fitness" size={16} color={Colors.gradientStart} />
             <Text style={styles.warmUpBtnText}>Warm Up</Text>
           </Pressable>
+          <Pressable
+            style={styles.mindfulBtn}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.push('/mindfulness');
+            }}
+          >
+            <Ionicons name="heart" size={16} color="#8B5CF6" />
+          </Pressable>
         </View>
       )}
 
@@ -397,6 +406,16 @@ const styles = StyleSheet.create({
     color: Colors.gradientStart,
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
+  },
+  mindfulBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(139,92,246,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.3)',
   },
   genreTipText: {
     color: Colors.textSecondary,

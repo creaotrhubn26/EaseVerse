@@ -213,7 +213,7 @@ export default function SingScreen() {
               router.push('/warmup');
             }}
           >
-            <Ionicons name="fitness" size={16} color={Colors.gradientStart} />
+            <Ionicons name="mic" size={16} color={Colors.gradientStart} />
             <Text style={styles.warmUpBtnText}>Warm Up</Text>
           </Pressable>
           <Pressable
@@ -223,7 +223,7 @@ export default function SingScreen() {
               router.push('/mindfulness');
             }}
           >
-            <Ionicons name="heart" size={16} color="#8B5CF6" />
+            <Ionicons name="leaf" size={16} color="#8B5CF6" />
           </Pressable>
         </View>
       )}

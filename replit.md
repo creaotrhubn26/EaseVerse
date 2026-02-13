@@ -99,6 +99,18 @@ Preferred communication style: Simple, everyday language.
 - Session Review shows genre coaching section with techniques, timing advice, and breathing tips
 - Session cards show genre badge in the chips row
 - Song picker modal shows genre icon and label per song
+- Added mindfulness feature for pre-performance mental preparation:
+  - 6 mood states (anxious, scattered, low, neutral, energized, confident) with personalized plans
+  - 4 breathing patterns (Box, 4-7-8, Power Breath, Singer Breath) with animated breath circle
+  - 5 energy channeling techniques (Grounding 5-4-3-2-1, Power Stance, Shake It Out, Focus Word, Channel the Fire)
+  - 3 guided visualizations (Golden Light, Perfect Take, Safe Space) with narration flow
+  - Mood-specific affirmations for vocalists
+  - Multi-phase flow: mood check-in → personalized plan → breathing → technique → visualization → affirmation → ready
+  - Heart icon button on Sing screen navigates to mindfulness (app/mindfulness.tsx)
+  - Data in constants/mindfulness.ts
+- Eliminated all `as any` type assertions — icon types use `ComponentProps<typeof Ionicons>['name']` pattern
+- Wired all previously unused variables with real functionality (Alert validation, Feather icons, animations, progress displays)
+- Fixed unescaped entities in warmup.tsx
 
 ### Development Workflow
 

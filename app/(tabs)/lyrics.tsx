@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { genreList, type GenreId } from '@/constants/genres';
+import { getGenreDemoLyrics } from '@/constants/genre-lyrics';
 import SectionCard from '@/components/SectionCard';
 import { useApp } from '@/lib/AppContext';
 import { generateId } from '@/lib/storage';
@@ -178,9 +179,16 @@ export default function LyricsScreen() {
                   isSelected && { backgroundColor: g.accentColor, borderColor: g.color },
                 ]}
                 onPress={() => {
+                  const prevDemo = getGenreDemoLyrics(selectedGenre);
+                  const isUsingDemoLyrics = editText.trim() === '' || editText.trim() === prevDemo.lyrics.trim();
                   setSelectedGenre(g.id);
+                  if (isUsingDemoLyrics) {
+                    const demo = getGenreDemoLyrics(g.id);
+                    setEditText(demo.lyrics);
+                    setSongTitle(demo.title);
+                  }
                   Haptics.selectionAsync();
-                }}
+                }
               >
                 <Ionicons name={g.icon as any} size={14} color={isSelected ? g.color : Colors.textTertiary} />
                 <Text style={[styles.genreChipText, isSelected && { color: g.color }]}>

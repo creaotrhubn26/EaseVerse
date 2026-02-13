@@ -22,7 +22,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useNarration } from '@/lib/useNarration';
-import AudioModule from 'expo-audio/build/AudioModule';
+import { Audio } from 'expo-av';
 import Colors from '@/constants/colors';
 import {
   moodOptions,
@@ -71,21 +71,33 @@ function BreathingGuide({ pattern, onComplete, speak }: { pattern: BreathingPatt
     }
   }, [phase]);
 
+  const hasSpokenPhaseRef = useRef('');
+
   useEffect(() => {
     if (!isActive) return;
 
     if (phase === 'inhale') {
       circleScale.value = withTiming(1.0, { duration: pattern.inhale * 1000, easing: Easing.inOut(Easing.ease) });
       circleOpacity.value = withTiming(0.8, { duration: pattern.inhale * 1000 });
-      speak('Breathe in deeply').catch(() => {});
+      if (hasSpokenPhaseRef.current !== `inhale-${currentCycle}`) {
+        hasSpokenPhaseRef.current = `inhale-${currentCycle}`;
+        speak('Breathe in').catch(() => {});
+      }
     } else if (phase === 'hold' || phase === 'holdAfter') {
-      speak('Hold gently').catch(() => {});
+      const key = `${phase}-${currentCycle}`;
+      if (hasSpokenPhaseRef.current !== key) {
+        hasSpokenPhaseRef.current = key;
+        speak('Hold').catch(() => {});
+      }
     } else if (phase === 'exhale') {
       circleScale.value = withTiming(0.6, { duration: pattern.exhale * 1000, easing: Easing.inOut(Easing.ease) });
       circleOpacity.value = withTiming(0.4, { duration: pattern.exhale * 1000 });
-      speak('Slowly breathe out').catch(() => {});
+      if (hasSpokenPhaseRef.current !== `exhale-${currentCycle}`) {
+        hasSpokenPhaseRef.current = `exhale-${currentCycle}`;
+        speak('Breathe out').catch(() => {});
+      }
     }
-  }, [phase, isActive, pattern.inhale, pattern.exhale, circleScale, circleOpacity, speak]);
+  }, [phase, isActive, currentCycle, pattern.inhale, pattern.exhale, circleScale, circleOpacity, speak]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -197,7 +209,7 @@ function BreathingGuide({ pattern, onComplete, speak }: { pattern: BreathingPatt
           style={styles.startBreathBtn}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            speak(pattern.description).catch(() => {});
+            hasSpokenPhaseRef.current = '';
             setIsActive(true);
             setCurrentCycle(0);
             setPhase('inhale');
@@ -250,9 +262,14 @@ function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTec
     return () => clearInterval(interval);
   }, [isActive, onComplete]);
 
+  const spokenStepRef = useRef(-1);
+
   useEffect(() => {
     if (!isActive) return;
-    speak(technique.steps[0]).catch(() => {});
+    if (spokenStepRef.current !== 0) {
+      spokenStepRef.current = 0;
+      speak(technique.steps[0]).catch(() => {});
+    }
     const stepDuration = (technique.durationSeconds / technique.steps.length) * 1000;
     const stepInterval = setInterval(() => {
       stepOpacity.value = withSequence(
@@ -265,7 +282,10 @@ function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTec
           clearInterval(stepInterval);
           return s;
         }
-        speak(technique.steps[next]).catch(() => {});
+        if (spokenStepRef.current !== next) {
+          spokenStepRef.current = next;
+          speak(technique.steps[next]).catch(() => {});
+        }
         return next;
       });
     }, stepDuration);
@@ -318,7 +338,7 @@ function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTec
           style={styles.startBreathBtn}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            speak(technique.description).catch(() => {});
+            spokenStepRef.current = -1;
             setIsActive(true);
             setCurrentStep(0);
           }}
@@ -370,10 +390,15 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
     };
   }, [isActive, pulseValue]);
 
+  const spokenLineRef = useRef(-1);
+
   useEffect(() => {
     if (!isActive) return;
     lineOpacity.value = withTiming(1, { duration: 600 });
-    speak(visualization.narration[0]).catch(() => {});
+    if (spokenLineRef.current !== 0) {
+      spokenLineRef.current = 0;
+      speak(visualization.narration[0]).catch(() => {});
+    }
 
     const lineDuration = (visualization.durationSeconds / visualization.narration.length) * 1000;
     const lineInterval = setInterval(() => {
@@ -388,7 +413,10 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
           setTimeout(() => onComplete(), 2000);
           return l;
         }
-        speak(visualization.narration[next]).catch(() => {});
+        if (spokenLineRef.current !== next) {
+          spokenLineRef.current = next;
+          speak(visualization.narration[next]).catch(() => {});
+        }
         return next;
       });
     }, lineDuration);
@@ -427,6 +455,7 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
           style={styles.startBreathBtn}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            spokenLineRef.current = -1;
             setIsActive(true);
             setCurrentLine(0);
             lineOpacity.value = 0;
@@ -474,8 +503,9 @@ export default function MindfulnessScreen() {
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
 
   useEffect(() => {
-    AudioModule.setAudioModeAsync({
-      playsInSilentMode: true,
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
     });
     return () => { narration.stop(); };
   }, []);

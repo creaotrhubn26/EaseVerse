@@ -1,5 +1,6 @@
-import type { Song, Session, LyricLine } from './types';
+import type { Song, Session, LyricLine, GenreId } from './types';
 import { generateId } from './storage';
+import { getWordTipForGenre } from '@/constants/genres';
 
 export const demoSong: Song = {
   id: 'demo-1',
@@ -97,7 +98,7 @@ export const demoSessions: Session[] = [
   },
 ];
 
-export function buildDemoLyricLines(lyrics: string, activeLineIndex: number, activeWordIndex: number): LyricLine[] {
+export function buildDemoLyricLines(lyrics: string, activeLineIndex: number, activeWordIndex: number, genre?: GenreId): LyricLine[] {
   const lines = lyrics.split('\n').filter(l => l.trim());
   return lines.map((line, li) => {
     const words = line.split(' ').filter(w => w.trim());
@@ -114,11 +115,16 @@ export function buildDemoLyricLines(lyrics: string, activeLineIndex: number, act
             state = 'active';
           }
         }
+        let hint: string | undefined;
+        if (state === 'mismatch' || state === 'unclear') {
+          const genreTip = genre ? getWordTipForGenre(word, genre) : null;
+          hint = genreTip || 'Check pronunciation';
+        }
         return {
           id: `word-${li}-${wi}`,
           text: word,
           state,
-          hint: state === 'mismatch' ? 'Check pronunciation' : undefined,
+          hint,
         };
       }),
     };

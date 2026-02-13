@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { getGenreProfile } from '@/constants/genres';
 import type { Session } from '@/lib/types';
 
 interface SessionCardProps {
@@ -35,6 +36,8 @@ function getScoreColor(score: number): string {
 }
 
 export default function SessionCard({ session, onPress, onFavorite, onDelete }: SessionCardProps) {
+  const genreProfile = session.genre ? getGenreProfile(session.genre) : null;
+
   return (
     <Pressable
       onPress={onPress}
@@ -65,6 +68,12 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
       </View>
 
       <View style={styles.chips}>
+        {genreProfile && (
+          <View style={[styles.genreChip, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
+            <Ionicons name={genreProfile.icon as any} size={11} color={genreProfile.color} />
+            <Text style={[styles.genreChipText, { color: genreProfile.color }]}>{genreProfile.label}</Text>
+          </View>
+        )}
         <View style={[styles.scoreChip, { borderColor: getScoreColor(session.insights.textAccuracy) + '60' }]}>
           <Text style={[styles.scoreText, { color: getScoreColor(session.insights.textAccuracy) }]}>
             {session.insights.textAccuracy}%
@@ -128,6 +137,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
+  },
+  genreChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  genreChipText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
   },
   scoreChip: {
     borderWidth: 1,

@@ -13,6 +13,7 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { getGenreProfile } from '@/constants/genres';
 import WaveformTimeline from '@/components/WaveformTimeline';
 import { useApp } from '@/lib/AppContext';
 
@@ -46,6 +47,7 @@ export default function SessionReviewScreen() {
   const { sessions } = useApp();
 
   const session = useMemo(() => sessions.find(s => s.id === id), [sessions, id]);
+  const genreProfile = useMemo(() => session?.genre ? getGenreProfile(session.genre) : null, [session?.genre]);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -153,6 +155,57 @@ export default function SessionReviewScreen() {
             color={getTimingColor(session.insights.timingConsistency)}
           />
         </View>
+
+        {genreProfile && (
+          <View style={styles.genreCoachSection}>
+            <View style={styles.genreCoachHeader}>
+              <View style={[styles.genreCoachBadge, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
+                <Ionicons name={genreProfile.icon as any} size={14} color={genreProfile.color} />
+                <Text style={[styles.genreCoachBadgeText, { color: genreProfile.color }]}>{genreProfile.label} Coaching</Text>
+              </View>
+            </View>
+            <View style={styles.genreCoachCard}>
+              <View style={styles.genreCoachRow}>
+                <Ionicons name="mic-outline" size={16} color={genreProfile.color} />
+                <View style={styles.genreCoachInfo}>
+                  <Text style={styles.genreCoachLabel}>Vocal Style</Text>
+                  <Text style={styles.genreCoachValue}>{genreProfile.vocalStyle}</Text>
+                </View>
+              </View>
+              <View style={styles.genreCoachDivider} />
+              <View style={styles.genreCoachRow}>
+                <Ionicons name="time-outline" size={16} color={genreProfile.color} />
+                <View style={styles.genreCoachInfo}>
+                  <Text style={styles.genreCoachLabel}>Timing</Text>
+                  <Text style={styles.genreCoachValue}>{genreProfile.timingStyle}</Text>
+                </View>
+              </View>
+              <View style={styles.genreCoachDivider} />
+              <View style={styles.genreCoachRow}>
+                <Ionicons name="leaf-outline" size={16} color={genreProfile.color} />
+                <View style={styles.genreCoachInfo}>
+                  <Text style={styles.genreCoachLabel}>Breathing</Text>
+                  <Text style={styles.genreCoachValue}>{genreProfile.breathingTip}</Text>
+                </View>
+              </View>
+              {genreProfile.techniques.length > 0 && (
+                <>
+                  <View style={styles.genreCoachDivider} />
+                  <Text style={styles.techniquesSectionLabel}>Key Techniques</Text>
+                  {genreProfile.techniques.map((t, i) => (
+                    <View key={i} style={styles.techniqueRow}>
+                      <View style={[styles.techniqueDot, { backgroundColor: genreProfile.color }]} />
+                      <View style={styles.techniqueInfo}>
+                        <Text style={styles.techniqueName}>{t.name}</Text>
+                        <Text style={styles.techniqueDesc}>{t.description}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )}
+            </View>
+          </View>
+        )}
 
         <View style={styles.fixSection}>
           <Text style={styles.fixSectionTitle}>Top to Fix</Text>
@@ -281,6 +334,96 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter_500Medium',
     textAlign: 'center',
+  },
+  genreCoachSection: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+    gap: 10,
+  },
+  genreCoachHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  genreCoachBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  genreCoachBadgeText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  genreCoachCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    gap: 12,
+  },
+  genreCoachRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  genreCoachInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  genreCoachLabel: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  genreCoachValue: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 20,
+  },
+  genreCoachDivider: {
+    height: 1,
+    backgroundColor: Colors.borderGlass,
+  },
+  techniquesSectionLabel: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginTop: 2,
+  },
+  techniqueRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingLeft: 2,
+  },
+  techniqueDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 6,
+  },
+  techniqueInfo: {
+    flex: 1,
+    gap: 1,
+  },
+  techniqueName: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  techniqueDesc: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
   },
   fixSection: {
     paddingHorizontal: 20,

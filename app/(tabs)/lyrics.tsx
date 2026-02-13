@@ -14,6 +14,7 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { genreList, type GenreId } from '@/constants/genres';
 import SectionCard from '@/components/SectionCard';
 import { useApp } from '@/lib/AppContext';
 import { generateId } from '@/lib/storage';
@@ -28,6 +29,7 @@ export default function LyricsScreen() {
   const [editText, setEditText] = useState(activeSong?.lyrics || '');
   const [importText, setImportText] = useState('');
   const [songTitle, setSongTitle] = useState(activeSong?.title || '');
+  const [selectedGenre, setSelectedGenre] = useState<GenreId>(activeSong?.genre || 'pop');
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -35,6 +37,7 @@ export default function LyricsScreen() {
   React.useEffect(() => {
     setEditText(activeSong?.lyrics || '');
     setSongTitle(activeSong?.title || '');
+    setSelectedGenre(activeSong?.genre || 'pop');
   }, [activeSong?.id]);
 
   const parseSections = useCallback((text: string): SongSection[] => {
@@ -69,6 +72,7 @@ export default function LyricsScreen() {
         ...activeSong,
         title: songTitle || 'Untitled',
         lyrics: editText,
+        genre: selectedGenre,
         sections,
         updatedAt: Date.now(),
       };
@@ -79,6 +83,7 @@ export default function LyricsScreen() {
         id: generateId(),
         title: songTitle || 'Untitled',
         lyrics: editText,
+        genre: selectedGenre,
         sections,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -86,7 +91,7 @@ export default function LyricsScreen() {
       addSong(newSong);
       setActiveSong(newSong);
     }
-  }, [editText, songTitle, activeSong, parseSections]);
+  }, [editText, songTitle, activeSong, parseSections, selectedGenre]);
 
   const handleImport = useCallback(() => {
     if (!importText.trim()) return;
@@ -126,6 +131,7 @@ export default function LyricsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setEditText('');
     setSongTitle('');
+    setSelectedGenre('pop');
     setActiveSong(null);
     setActiveTab('write');
   };
@@ -153,6 +159,37 @@ export default function LyricsScreen() {
           placeholderTextColor={Colors.textTertiary}
           style={styles.titleField}
         />
+      </View>
+
+      <View style={styles.genreSection}>
+        <Text style={styles.genreSectionLabel}>Genre</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.genreScrollContent}
+        >
+          {genreList.map(g => {
+            const isSelected = selectedGenre === g.id;
+            return (
+              <Pressable
+                key={g.id}
+                style={[
+                  styles.genreChip,
+                  isSelected && { backgroundColor: g.accentColor, borderColor: g.color },
+                ]}
+                onPress={() => {
+                  setSelectedGenre(g.id);
+                  Haptics.selectionAsync();
+                }}
+              >
+                <Ionicons name={g.icon as any} size={14} color={isSelected ? g.color : Colors.textTertiary} />
+                <Text style={[styles.genreChipText, isSelected && { color: g.color }]}>
+                  {g.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <View style={styles.tabBar}>
@@ -311,6 +348,38 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderWidth: 1,
     borderColor: Colors.borderGlass,
+  },
+  genreSection: {
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    gap: 8,
+  },
+  genreSectionLabel: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.8,
+  },
+  genreScrollContent: {
+    gap: 8,
+    paddingRight: 20,
+  },
+  genreChip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  genreChipText: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
   },
   tabBar: {
     flexDirection: 'row',

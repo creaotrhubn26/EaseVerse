@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,6 +6,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
+import { getGenreProfile, getGenreCoachHints, getWordTipForGenre, getGenreFixReasons } from '@/constants/genres';
 import RecordButton from '@/components/RecordButton';
 import CoachPill from '@/components/CoachPill';
 import QualityPill from '@/components/QualityPill';
@@ -16,17 +17,6 @@ import { useApp } from '@/lib/AppContext';
 import { buildDemoLyricLines } from '@/lib/demo-data';
 import { generateId } from '@/lib/storage';
 import type { LyricLine, SignalQuality, Session } from '@/lib/types';
-
-const coachHints = [
-  'Final T missing',
-  'Open vowel',
-  'Stress on 2nd',
-  'Slow down',
-  'Hold the note',
-  'Breathe here',
-  'Soften the S',
-  'Round the vowel',
-];
 
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
@@ -47,12 +37,15 @@ export default function SingScreen() {
 
   const lyricsText = activeSong?.lyrics || '';
   const lyricsLines = lyricsText.split('\n').filter(l => l.trim());
+  const genre = activeSong?.genre || 'pop';
+  const genreProfile = useMemo(() => getGenreProfile(genre), [genre]);
+  const genreHints = useMemo(() => getGenreCoachHints(genre), [genre]);
 
   useEffect(() => {
     if (lyricsText) {
-      setLines(buildDemoLyricLines(lyricsText, activeLineIndex, activeWordIndex));
+      setLines(buildDemoLyricLines(lyricsText, activeLineIndex, activeWordIndex, genre));
     }
-  }, [lyricsText, activeLineIndex, activeWordIndex]);
+  }, [lyricsText, activeLineIndex, activeWordIndex, genre]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -84,7 +77,11 @@ export default function SingScreen() {
   useEffect(() => {
     if (isRecording && !isPaused) {
       coachTimerRef.current = setInterval(() => {
-        const hint = coachHints[Math.floor(Math.random() * coachHints.length)];
+        const currentLine = lyricsLines[activeLineIndex] || '';
+        const words = currentLine.split(' ').filter(w => w.trim());
+        const currentWord = words[activeWordIndex] || '';
+        const wordTip = currentWord ? getWordTipForGenre(currentWord, genre) : null;
+        const hint = wordTip || genreHints[Math.floor(Math.random() * genreHints.length)];
         setCoachHint(hint);
         setTimeout(() => setCoachHint(null), 2500);
       }, 4000);
@@ -93,7 +90,7 @@ export default function SingScreen() {
       setCoachHint(null);
     }
     return () => { if (coachTimerRef.current) clearInterval(coachTimerRef.current); };
-  }, [isRecording, isPaused]);
+  }, [isRecording, isPaused, genreHints, genre, activeLineIndex, activeWordIndex]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -115,19 +112,21 @@ export default function SingScreen() {
     setIsPaused(false);
     const elapsed = durationRef.current;
     if (elapsed > 3) {
+      const genreFixes = getGenreFixReasons(genre);
       const session: Session = {
         id: generateId(),
         songId: activeSong?.id,
+        genre,
         title: `${activeSong?.title || 'Recording'} - Take`,
         duration: elapsed,
         date: Date.now(),
-        tags: ['practice'],
+        tags: ['practice', genreProfile.label.toLowerCase()],
         favorite: false,
         insights: {
           textAccuracy: 60 + Math.floor(Math.random() * 35),
           pronunciationClarity: 55 + Math.floor(Math.random() * 40),
           timingConsistency: Math.random() > 0.6 ? 'high' : Math.random() > 0.3 ? 'medium' : 'low',
-          topToFix: [
+          topToFix: genreFixes.length > 0 ? genreFixes : [
             { word: 'tonight', reason: 'Final consonant dropped' },
             { word: 'melody', reason: 'Stress shifted' },
             { word: 'rhythm', reason: 'TH sound unclear' },
@@ -142,7 +141,7 @@ export default function SingScreen() {
     setActiveWordIndex(0);
     durationRef.current = 0;
     setDuration(0);
-  }, [activeSong, lyricsText, addSession]);
+  }, [activeSong, lyricsText, addSession, genre, genreProfile]);
 
   const handleRecordPress = () => {
     if (!isRecording) {
@@ -189,9 +188,24 @@ export default function SingScreen() {
         </Pressable>
 
         <View style={styles.topRight}>
+          {activeSong && (
+            <View style={[styles.genreBadge, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
+              <Ionicons name={genreProfile.icon as any} size={12} color={genreProfile.color} />
+              <Text style={[styles.genreBadgeText, { color: genreProfile.color }]}>{genreProfile.label}</Text>
+            </View>
+          )}
           <QualityPill quality={quality} />
         </View>
       </View>
+
+      {activeSong && !isRecording && (
+        <View style={styles.genreTipBar}>
+          <Ionicons name="bulb-outline" size={14} color={genreProfile.color} />
+          <Text style={styles.genreTipText} numberOfLines={1}>
+            {genreProfile.vocalStyle}
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.lyricsArea, { pointerEvents: 'box-none' as const }]}>
         <LiveLyricsCanvas lines={lines} activeLineIndex={activeLineIndex} />
@@ -323,7 +337,38 @@ const styles = StyleSheet.create({
   topRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+  },
+  genreBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  genreBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  genreTipBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: Colors.surfaceGlass,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  genreTipText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    flex: 1,
   },
   lyricsArea: {
     flex: 1,

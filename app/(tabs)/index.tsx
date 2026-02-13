@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
+import { StyleSheet, Text, View, Pressable, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -223,7 +223,7 @@ export default function SingScreen() {
               router.push('/mindfulness');
             }}
           >
-            <Ionicons name="leaf" size={16} color="#8B5CF6" />
+            <Image source={require('@/assets/images/mindfulness-icon.png')} style={styles.mindfulIcon} />
           </Pressable>
         </View>
       )}
@@ -413,9 +413,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(139,92,246,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.3)',
+    overflow: 'hidden',
+  },
+  mindfulIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
   },
   genreTipText: {
     color: Colors.textSecondary,

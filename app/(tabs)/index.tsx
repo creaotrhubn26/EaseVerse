@@ -199,11 +199,23 @@ export default function SingScreen() {
       </View>
 
       {activeSong && !isRecording && (
-        <View style={styles.genreTipBar}>
-          <Ionicons name="bulb-outline" size={14} color={genreProfile.color} />
-          <Text style={styles.genreTipText} numberOfLines={1}>
-            {genreProfile.vocalStyle}
-          </Text>
+        <View style={styles.preRecordRow}>
+          <View style={styles.genreTipBar}>
+            <Ionicons name="bulb-outline" size={14} color={genreProfile.color} />
+            <Text style={styles.genreTipText} numberOfLines={1}>
+              {genreProfile.vocalStyle}
+            </Text>
+          </View>
+          <Pressable
+            style={styles.warmUpBtn}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.push('/warmup');
+            }}
+          >
+            <Ionicons name="fitness" size={16} color={Colors.gradientStart} />
+            <Text style={styles.warmUpBtnText}>Warm Up</Text>
+          </Pressable>
         </View>
       )}
 
@@ -352,17 +364,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
   },
+  preRecordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 20,
+  },
   genreTipBar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginHorizontal: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: Colors.surfaceGlass,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.borderGlass,
+  },
+  warmUpBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.accentSubtle,
+    borderWidth: 1,
+    borderColor: Colors.accentBorder,
+  },
+  warmUpBtnText: {
+    color: Colors.gradientStart,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
   },
   genreTipText: {
     color: Colors.textSecondary,

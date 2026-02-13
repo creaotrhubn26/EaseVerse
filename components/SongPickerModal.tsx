@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { getGenreProfile } from '@/constants/genres';
 import type { Song } from '@/lib/types';
 
 interface SongPickerModalProps {
@@ -52,6 +53,7 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
             renderItem={({ item }) => {
               const isActive = item.id === activeSongId;
               const lineCount = item.lyrics.split('\n').filter(l => l.trim()).length;
+              const gp = item.genre ? getGenreProfile(item.genre) : null;
               return (
                 <Pressable
                   style={[styles.songItem, isActive && styles.songItemActive]}
@@ -61,11 +63,11 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
                     onClose();
                   }}
                 >
-                  <View style={styles.songIcon}>
+                  <View style={[styles.songIcon, gp && { backgroundColor: gp.accentColor }]}>
                     <Ionicons
-                      name="musical-notes"
+                      name={gp ? gp.icon as any : 'musical-notes'}
                       size={20}
-                      color={isActive ? Colors.gradientStart : Colors.textTertiary}
+                      color={isActive ? Colors.gradientStart : gp ? gp.color : Colors.textTertiary}
                     />
                   </View>
                   <View style={styles.songInfo}>
@@ -73,7 +75,7 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
                       {item.title}
                     </Text>
                     <Text style={styles.songMeta}>
-                      {lineCount} lines  {formatDate(item.updatedAt)}
+                      {gp ? gp.label + '  ' : ''}{lineCount} lines  {formatDate(item.updatedAt)}
                     </Text>
                   </View>
                   {isActive && (

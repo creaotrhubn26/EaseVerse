@@ -92,6 +92,13 @@ Preferred communication style: Simple, everyday language.
 - Migrated pointerEvents from props to style to avoid deprecation warnings
 - Added pointerEvents:'none' to RecordButton pulse ring to prevent click interception
 - Added pointerEvents:'box-none' to lyrics area and zIndex to topBar/controls for proper click targeting on web
+- Added genre system: 8 genres (Pop, Jazz, R&B, Rock, Classical, Hip-Hop, Country, Soul) with genre-specific vocal coaching
+- Each genre has unique color, icon, vocal style, techniques, word-level pronunciation rules, timing style, and breathing tips
+- Genre picker on Lyrics screen lets users tag each song with a genre
+- Sing screen shows genre badge and vocal style tip, coach hints now genre-aware
+- Session Review shows genre coaching section with techniques, timing advice, and breathing tips
+- Session cards show genre badge in the chips row
+- Song picker modal shows genre icon and label per song
 
 ### Development Workflow
 

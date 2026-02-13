@@ -1,0 +1,405 @@
+Product promise
+
+A pocket‑ready app for vocalists that captures singing, reveals lyrics in real time, and provides non‑interruptive pronunciation coaching.
+
+Design goals:
+
+Flow-first: never break performance momentum.
+
+Stable feedback: avoid flicker/flapping in live recognition.
+
+One-handed: big controls, minimal steps.
+
+Confidence-aware: show uncertainty without blaming the user.
+
+Information architecture
+
+Bottom navigation (4):
+
+Sing (primary)
+
+Lyrics
+
+Sessions
+
+Profile
+
+Primary loop: Sing → Review → Practice Loop
+
+Design system — CreatorHub Style
+
+LyricFlow must visually feel like part of the CreatorHub ecosystem:
+
+Cinematic
+
+Modern
+
+Slight glassmorphism
+
+High-contrast typography
+
+Warm accent gradient (CreatorHub orange)
+
+Color system (CreatorHub aligned)
+
+Background (Stage Mode)
+
+Base: #0E0F14
+
+Elevated surface: #151823
+
+Glass surface: rgba(255,255,255,0.04)
+
+Border (glass): rgba(255,255,255,0.08)
+
+Primary Gradient (CreatorHub Accent)
+
+Gradient start: #FF7A18
+
+Gradient mid: #FF914D
+
+Gradient end: #FFC371
+
+Used for:
+
+Record button glow
+
+Active underline highlight
+
+Focus states
+
+Semantic States (Subtle, not aggressive)
+
+Success underline: #4ADE80
+
+Warning underline: #FACC15
+
+Danger underline: #F87171
+
+Unclear (low confidence): rgba(255,255,255,0.35)
+
+Important: never flood entire words with red/green. Use thin 2px underline bars.
+
+Typography (CreatorHub standard)
+
+Primary font: Inter (or system fallback)
+
+Scale:
+
+Live lyrics: 36–44 pt / weight 500
+
+Active word: 600
+
+Coach pill: 14–16 pt / 500
+
+Buttons: 16–18 pt / 600
+
+Tracking slightly increased (+1%) for live readability. Line height generous (130–140%) for stage clarity.
+
+Glassmorphism rules
+
+Live Lyrics Canvas:
+
+Background: rgba(255,255,255,0.03)
+
+Blur: 20px (if supported)
+
+Border: 1px rgba(255,255,255,0.08)
+
+Radius: 20px
+
+Subtle inner shadow for depth
+
+Coach Pill:
+
+Background: rgba(255,122,24,0.08)
+
+Border: rgba(255,122,24,0.3)
+
+Radius: 999 (fully rounded)
+
+Motion & micro-interactions (CreatorHub feel)
+
+Word confirmation: soft fade-in underline (120ms)
+
+Gradient pulse on Record: slow breathing animation (2.5s loop)
+
+Page transitions: slide + fade (180ms cubic-bezier 0.4,0,0.2,1)
+
+No bounce animations during live singing
+
+Record Button (Hero element)
+
+Design:
+
+Large circular button (72–88px)
+
+CreatorHub gradient fill
+
+Soft outer glow (rgba(255,122,24,0.35))
+
+Subtle inner shadow when pressed
+
+States:
+
+Idle: soft gradient
+
+Recording: pulsing ring
+
+Paused: gradient + pause icon
+
+Live recognition states (must be consistent)
+
+Words can be in these states:
+
+Upcoming: default
+
+Active: expected right now (subtle underline)
+
+Confirmed: correct (thin success underline, not full green text)
+
+Unclear: low confidence (small dotted underline or dot)
+
+Mismatch: likely wrong (thin danger underline + optional hint)
+
+Stability rules:
+
+Lock a word as Confirmed after 2 consistent frames.
+
+Don’t flip Confirmed → Unclear unless confidence drops severely.
+
+Don’t mark Mismatch unless confidence > threshold.
+
+Screen 1 — Sing (Live)
+Purpose
+
+Start singing instantly; see lyrics appear; get micro coaching.
+
+Layout
+Top bar
+
+Project/Song title (tap to switch)
+
+Signal pill: Good / OK / Poor (recognition quality)
+
+Settings icon
+
+Live Lyrics Canvas (center)
+
+2–4 lines visible
+
+Current line centered
+
+“Now” guide line (very subtle)
+
+Word styling:
+
+Upcoming: normal
+
+Active: light underline
+
+Confirmed: success underline
+
+Unclear: dotted underline
+
+Mismatch: danger underline
+
+Coach pill (below lyrics)
+
+A single compact pill that appears only when useful:
+
+Examples: Final T missing, Open vowel, Stress on 2nd, Too fast
+
+Tap opens post-session detail (no modal interrupts)
+
+Bottom controls (sticky)
+
+Large controls for one-hand use:
+
+Record / Pause (primary)
+
+Marker (flag moment)
+
+Backtrack (optional, if track is loaded)
+
+Metronome (optional)
+
+Micro status line
+
+Listening… / Transcribing… / Offline mode
+
+Mini VU meter (confidence & input level)
+
+Empty state
+
+If no lyrics loaded:
+
+CTA: Add lyrics
+
+Secondary: Quick record anyway (still stores audio)
+
+Screen 1A — Sing (Pre-roll)
+Purpose
+
+Quick setup without friction.
+
+Controls:
+
+Mic input selector (if available)
+
+Backtrack select (optional)
+
+Count-in toggle (0 / 2 / 4)
+
+Mode: Stability (default) / Speed
+
+Primary CTA: Start
+
+Screen 2 — Lyrics
+Purpose
+
+Create/import lyrics and structure them so alignment feels “smart”.
+
+Tabs
+Tab A: Write
+
+Large text editor
+
+Smart line breaks
+
+Quick insert buttons: Verse, Chorus, Bridge
+
+Tab B: Structure
+
+Section cards: Verse 1 / Chorus / Verse 2 / Bridge
+
+Drag to reorder
+
+Duplicate chorus toggle
+
+Tab C: Import
+
+Paste text
+
+Import file (txt/doc)
+
+Import from notes/cloud (future)
+
+Primary CTA: Use for Live
+
+Screen 3 — Session Review
+Purpose
+
+After singing: verify words, find problems, start practice loops.
+
+Layout
+Header
+
+Session title + date
+
+Duration
+
+Timeline + lyric replay
+
+Waveform (simple)
+
+Scrubber
+
+Lyrics beneath with marked segments
+
+Tap a word → plays ±1.5s around that word
+
+Insight cards
+
+Text accuracy %
+
+Pronunciation clarity %
+
+Timing consistency (Low/Med/High)
+
+“Top to fix” list
+
+5–10 words/phrases with reasons:
+
+tonight — final consonant dropped
+
+promise — stress shifted
+
+Primary CTA: Practice loop Secondary: Export / Share (future)
+
+Screen 3A — Practice Loop
+Purpose
+
+Train a specific line/phrase repeatedly.
+
+Controls
+
+Select region (line/phrase)
+
+Loop length (5s / 10s / 20s)
+
+Speed (0.8× / 1.0× / 1.1×)
+
+Feedback focus:
+
+Only show feedback for selected phrase
+
+Show 1 hint max per loop
+
+CTA: Start loop
+
+Screen 4 — Sessions
+Purpose
+
+Browse takes and return to practice.
+
+Features
+
+List with: title, date, score chips
+
+Tags: demo, practice, take 3
+
+Filters: Latest, Best, Flagged
+
+Swipe actions:
+
+Left: Delete
+
+Right: Favorite
+
+Screen 5 — Profile & Settings
+Essentials
+
+Language & accent goal (e.g., English US/UK)
+
+Feedback intensity: Low / Medium / High
+
+Live mode: Stability / Speed
+
+Privacy: local vs cloud processing (if offered)
+
+Core components (for handoff)
+
+LiveLyricsCanvas (multi-line, stateful word styling)
+
+CoachPill (single hint, throttled)
+
+QualityPill (recognition quality)
+
+TransportControls (Record/Pause/Marker)
+
+WaveformTimeline (review)
+
+PhraseLoopSelector (practice)
+
+Acceptance criteria (what “will work” means)
+
+User can go from pocket → recording in ≤ 2 taps.
+
+Live lyrics update without visible jitter (no rapid word flipping).
+
+Coach feedback appears ≤ 1 per 3 seconds and never blocks singing.
+
+Review screen clearly shows what to fix and enables practice loops in ≤ 1 tap.
+
+App is usable with one hand and readable in studio lighting.

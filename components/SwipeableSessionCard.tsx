@@ -27,6 +27,12 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
       extrapolate: 'clamp',
     });
 
+    const opacity = progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.5, 1],
+      extrapolate: 'clamp',
+    });
+
     return (
       <Pressable
         onPress={() => {
@@ -36,7 +42,7 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
         }}
         style={styles.deleteAction}
       >
-        <Animated.View style={[styles.deleteContent, { transform: [{ scale }] }]}>
+        <Animated.View style={[styles.deleteContent, { transform: [{ scale }], opacity }]}>
           <Ionicons name="trash-outline" size={22} color="#fff" />
           <Text style={styles.actionLabel}>Delete</Text>
         </Animated.View>
@@ -54,6 +60,12 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
       extrapolate: 'clamp',
     });
 
+    const opacity = progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.5, 1],
+      extrapolate: 'clamp',
+    });
+
     return (
       <Pressable
         onPress={() => {
@@ -63,7 +75,7 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
         }}
         style={styles.favoriteAction}
       >
-        <Animated.View style={[styles.favoriteContent, { transform: [{ scale }] }]}>
+        <Animated.View style={[styles.favoriteContent, { transform: [{ scale }], opacity }]}>
           <View>
             <Ionicons
               name={session.favorite ? 'heart-dislike' : 'heart'}

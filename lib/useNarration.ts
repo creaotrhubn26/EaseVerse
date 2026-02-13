@@ -1,36 +1,42 @@
-import { useRef, useState, useCallback } from 'react';
-import { Audio } from 'expo-av';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { getApiUrl } from '@/lib/query-client';
 
 export type NarrationState = 'idle' | 'loading' | 'playing' | 'error';
 
 export function useNarration() {
   const [state, setState] = useState<NarrationState>('idle');
-  const soundRef = useRef<Audio.Sound | null>(null);
   const abortRef = useRef(false);
+  const onDoneRef = useRef<(() => void) | undefined>(undefined);
 
-  const stop = useCallback(async () => {
-    abortRef.current = true;
-    if (soundRef.current) {
-      try {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-      } catch {}
-      soundRef.current = null;
+  const player = useAudioPlayer(null);
+  const status = useAudioPlayerStatus(player);
+
+  useEffect(() => {
+    if (state === 'playing' && !status.playing && status.currentTime > 0 && status.currentTime >= status.duration - 0.1) {
+      setState('idle');
+      const cb = onDoneRef.current;
+      onDoneRef.current = undefined;
+      cb?.();
     }
+  }, [state, status.playing, status.currentTime, status.duration]);
+
+  const stop = useCallback(() => {
+    abortRef.current = true;
+    onDoneRef.current = undefined;
+    try {
+      player.pause();
+    } catch {}
     setState('idle');
-  }, []);
+  }, [player]);
 
   const speak = useCallback(async (text: string, onDone?: () => void) => {
     abortRef.current = false;
+    onDoneRef.current = undefined;
 
-    if (soundRef.current) {
-      try {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-      } catch {}
-      soundRef.current = null;
-    }
+    try {
+      player.pause();
+    } catch {}
 
     setState('loading');
 
@@ -52,10 +58,9 @@ export function useNarration() {
 
       const blob = await response.blob();
       const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
+      const dataUri = await new Promise<string>((resolve, reject) => {
         reader.onloadend = () => {
-          const result = reader.result as string;
-          resolve(result);
+          resolve(reader.result as string);
         };
         reader.onerror = reject;
         reader.readAsDataURL(blob);
@@ -63,27 +68,16 @@ export function useNarration() {
 
       if (abortRef.current) return;
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: base64 },
-        { shouldPlay: true }
-      );
-
-      soundRef.current = sound;
+      onDoneRef.current = onDone;
+      player.replace(dataUri);
+      player.play();
       setState('playing');
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          soundRef.current = null;
-          setState('idle');
-          onDone?.();
-        }
-      });
     } catch (err) {
       console.error('Narration error:', err);
       setState('error');
       setTimeout(() => setState('idle'), 2000);
     }
-  }, []);
+  }, [player]);
 
   const speakSequence = useCallback(async (texts: string[], onAllDone?: () => void) => {
     abortRef.current = false;

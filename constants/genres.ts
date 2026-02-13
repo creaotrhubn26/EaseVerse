@@ -35,7 +35,7 @@ const genreProfiles: Record<GenreId, GenreProfile> = {
     id: 'pop',
     label: 'Pop',
     icon: 'musical-notes',
-    color: '#FF7A18',
+    color: Colors.gradientStart,
     accentColor: 'rgba(255,122,24,0.15)',
     description: 'Clean, bright, forward tone',
     vocalStyle: 'Clear enunciation, forward placement, bright vowels',

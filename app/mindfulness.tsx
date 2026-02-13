@@ -21,8 +21,8 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { useNarration, type NarrationState } from '@/lib/useNarration';
-import { Audio } from 'expo-av';
+import { useNarration } from '@/lib/useNarration';
+import AudioModule from 'expo-audio/build/AudioModule';
 import Colors from '@/constants/colors';
 import {
   moodOptions,
@@ -474,9 +474,8 @@ export default function MindfulnessScreen() {
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
 
   useEffect(() => {
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
+    AudioModule.setAudioModeAsync({
+      playsInSilentMode: true,
     });
     return () => { narration.stop(); };
   }, []);

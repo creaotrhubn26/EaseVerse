@@ -21,9 +21,9 @@ Whispered promises that never die
 Hold my hand and follow me along
 Every step becomes our favorite song`,
   sections: [
-    { id: 's1', type: 'verse', label: 'Verse 1', lines: ['Walking through the city lights tonight', 'Every shadow tells a story bright', 'I can feel the rhythm in my bones', 'Dancing on these cobblestones alone'] },
-    { id: 's2', type: 'chorus', label: 'Chorus', lines: ['The midnight glow is calling me', 'A melody that sets me free', 'I sing it loud I sing it clear', 'For everyone around to hear'] },
-    { id: 's3', type: 'verse', label: 'Verse 2', lines: ['Stars are painting lines across the sky', 'Whispered promises that never die', 'Hold my hand and follow me along', 'Every step becomes our favorite song'] },
+    { id: generateId(), type: 'verse', label: 'Verse 1', lines: ['Walking through the city lights tonight', 'Every shadow tells a story bright', 'I can feel the rhythm in my bones', 'Dancing on these cobblestones alone'] },
+    { id: generateId(), type: 'chorus', label: 'Chorus', lines: ['The midnight glow is calling me', 'A melody that sets me free', 'I sing it loud I sing it clear', 'For everyone around to hear'] },
+    { id: generateId(), type: 'verse', label: 'Verse 2', lines: ['Stars are painting lines across the sky', 'Whispered promises that never die', 'Hold my hand and follow me along', 'Every step becomes our favorite song'] },
   ],
   createdAt: Date.now() - 86400000 * 3,
   updatedAt: Date.now() - 86400000,

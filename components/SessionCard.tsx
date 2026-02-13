@@ -59,6 +59,15 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
               color={session.favorite ? Colors.dangerUnderline : Colors.textTertiary}
             />
           </Pressable>
+          <Pressable
+            onPress={() => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              onDelete();
+            }}
+            hitSlop={12}
+          >
+            <Ionicons name="trash-outline" size={18} color={Colors.textTertiary} />
+          </Pressable>
         </View>
         <View style={styles.meta}>
           <Text style={styles.metaText}>{formatDate(session.date)}</Text>

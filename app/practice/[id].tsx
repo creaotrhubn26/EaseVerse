@@ -115,8 +115,11 @@ export default function PracticeLoopScreen() {
   }));
 
   const progressTextStyle = useAnimatedStyle(() => {
-    const _pct = interpolate(progressAnim.value, [0, 1], [0, 100]);
-    return { opacity: progressAnim.value > 0 ? 1 : 0 };
+    const pct = interpolate(progressAnim.value, [0, 1], [0, 100]);
+    return { 
+      opacity: progressAnim.value > 0 ? 1 : 0,
+      transform: [{ scale: interpolate(pct, [0, 50, 100], [0.8, 1, 1.1]) }],
+    };
   });
 
   if (!session) {

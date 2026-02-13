@@ -26,6 +26,7 @@ export default function SectionCard({ section, index, onMoveUp, onMoveDown, isFi
   return (
     <View style={styles.card}>
       <View style={styles.header}>
+        <Text style={styles.sectionNumber}>{index + 1}</Text>
         <View style={[styles.typeBadge, { borderColor: color + '50' }]}>
           <View style={[styles.typeDot, { backgroundColor: color }]} />
           <Text style={[styles.typeLabel, { color }]}>{section.label}</Text>
@@ -95,5 +96,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
     lineHeight: 20,
+  },
+  sectionNumber: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    marginRight: 6,
   },
 });

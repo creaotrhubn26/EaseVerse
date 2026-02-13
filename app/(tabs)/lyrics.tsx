@@ -56,7 +56,7 @@ export default function LyricsScreen() {
         sections.push({
           id: generateId(),
           type,
-          label: type === 'verse' ? `Verse ${sections.filter(s => s.type === 'verse').length + 1}` : type === 'chorus' ? 'Chorus' : 'Bridge',
+          label: label,
           lines: [...currentLines],
         });
         currentLines = [];

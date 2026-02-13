@@ -6,6 +6,46 @@ import { randomUUID } from "crypto";
 import { tmpdir } from "os";
 import { join } from "path";
 
+interface AudioMessage {
+  content?: string | null;
+  audio?: {
+    data?: string;
+    transcript?: string;
+  };
+}
+
+interface AudioDelta {
+  content?: string | null;
+  audio?: {
+    data?: string;
+    transcript?: string;
+  };
+}
+
+function extractAudioMessage(message: unknown): AudioMessage {
+  const msg = message as Record<string, unknown>;
+  const audio = msg?.audio as Record<string, unknown> | undefined;
+  return {
+    content: typeof msg?.content === 'string' ? msg.content : undefined,
+    audio: audio ? {
+      data: typeof audio.data === 'string' ? audio.data : undefined,
+      transcript: typeof audio.transcript === 'string' ? audio.transcript : undefined,
+    } : undefined,
+  };
+}
+
+export function extractAudioDelta(delta: unknown): AudioDelta {
+  const d = delta as Record<string, unknown>;
+  const audio = d?.audio as Record<string, unknown> | undefined;
+  return {
+    content: typeof d?.content === 'string' ? d.content : undefined,
+    audio: audio ? {
+      data: typeof audio.data === 'string' ? audio.data : undefined,
+      transcript: typeof audio.transcript === 'string' ? audio.transcript : undefined,
+    } : undefined,
+  };
+}
+
 export const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -128,7 +168,7 @@ export async function voiceChat(
       ],
     }],
   });
-  const message = response.choices[0]?.message as any;
+  const message = extractAudioMessage(response.choices[0]?.message);
   const transcript = message?.audio?.transcript || message?.content || "";
   const audioData = message?.audio?.data ?? "";
   return {
@@ -168,7 +208,7 @@ export async function voiceChatStream(
 
   return (async function* () {
     for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta as any;
+      const delta = extractAudioDelta(chunk.choices?.[0]?.delta);
       if (!delta) continue;
       if (delta?.audio?.transcript) {
         yield { type: "transcript", data: delta.audio.transcript };
@@ -198,7 +238,7 @@ export async function textToSpeech(
       { role: "user", content: `Repeat the following text verbatim: ${text}` },
     ],
   });
-  const audioData = (response.choices[0]?.message as any)?.audio?.data ?? "";
+  const audioData = extractAudioMessage(response.choices[0]?.message)?.audio?.data ?? "";
   return Buffer.from(audioData, "base64");
 }
 
@@ -224,7 +264,7 @@ export async function textToSpeechStream(
 
   return (async function* () {
     for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta as any;
+      const delta = extractAudioDelta(chunk.choices?.[0]?.delta);
       if (!delta) continue;
       if (delta?.audio?.data) {
         yield delta.audio.data;

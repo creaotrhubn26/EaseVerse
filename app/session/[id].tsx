@@ -134,7 +134,10 @@ export default function SessionReviewScreen() {
             barCount={70}
             duration={session.duration}
             interactive
-            onSeek={(p) => {}}
+            onSeek={(seekPos) => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              console.log(`Seeked to ${Math.round(seekPos * 100)}%`);
+            }}
           />
         </View>
 

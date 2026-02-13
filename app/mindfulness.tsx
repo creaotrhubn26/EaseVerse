@@ -846,6 +846,7 @@ export default function MindfulnessScreen() {
         </View>
       )}
 
+      <View style={{ flex: 1 }}>
       {narration.state === 'loading' && (
         <View style={styles.narrationLoading}>
           <Ionicons name="mic" size={12} color={Colors.gradientStart} />
@@ -865,6 +866,7 @@ export default function MindfulnessScreen() {
         {currentPhase === 'affirmation' && renderAffirmation()}
         {currentPhase === 'complete' && renderComplete()}
       </ScrollView>
+      </View>
     </View>
   );
 }
@@ -1428,11 +1430,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
   },
   narrationLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
     paddingVertical: 4,
+    zIndex: 10,
   },
   narrationLoadingText: {
     color: Colors.gradientStart,

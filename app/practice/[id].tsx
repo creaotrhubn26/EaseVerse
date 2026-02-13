@@ -5,6 +5,7 @@ import {
   View,
   Pressable,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -23,6 +24,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import CoachPill from '@/components/CoachPill';
 import { useApp } from '@/lib/AppContext';
+import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
 
 const speedOptions = [0.8, 1.0, 1.1] as const;
 const loopLengthOptions = [5, 10, 20] as const;
@@ -41,6 +43,7 @@ export default function PracticeLoopScreen() {
   const [loopCount, setLoopCount] = useState(0);
   const [coachHint, setCoachHint] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const coach = usePronunciationCoach();
 
   const progressAnim = useSharedValue(0);
   const loopTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -181,6 +184,32 @@ export default function PracticeLoopScreen() {
           <Text style={styles.selectedPhraseText}>
             {lyricsLines[selectedLineIdx] || 'No phrase selected'}
           </Text>
+          <Pressable
+            style={styles.pronounceBtn}
+            onPress={() => {
+              const line = lyricsLines[selectedLineIdx];
+              if (!line) return;
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              const words = line.split(' ').filter((w: string) => w.trim());
+              const hardWord = words.reduce((longest: string, w: string) => w.length > longest.length ? w : longest, '');
+              coach.pronounce(hardWord, line);
+            }}
+          >
+            {coach.state === 'loading' ? (
+              <ActivityIndicator size="small" color={Colors.gradientStart} />
+            ) : (
+              <Ionicons name="volume-high-outline" size={18} color={Colors.gradientStart} />
+            )}
+            <Text style={styles.pronounceBtnText}>
+              {coach.state === 'playing' ? 'Speaking...' : 'Hear pronunciation'}
+            </Text>
+          </Pressable>
+          {coach.result && (
+            <View style={styles.pronounceResult}>
+              <Text style={styles.pronouncePhonetic}>{coach.result.phonetic}</Text>
+              <Text style={styles.pronounceTip}>{coach.result.tip}</Text>
+            </View>
+          )}
           <View style={styles.progressBarContainer}>
             <Animated.View style={[styles.progressBar, progressBarStyle]}>
               <LinearGradient
@@ -458,5 +487,37 @@ const styles = StyleSheet.create({
     color: Colors.gradientStart,
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
+  },
+  pronounceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: Colors.accentSubtle,
+    borderWidth: 1,
+    borderColor: Colors.accentBorder,
+  },
+  pronounceBtnText: {
+    color: Colors.gradientStart,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  pronounceResult: {
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+  },
+  pronouncePhonetic: {
+    color: Colors.gradientEnd,
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
+  },
+  pronounceTip: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    textAlign: 'center',
   },
 });

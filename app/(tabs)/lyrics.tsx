@@ -436,10 +436,7 @@ const styles = StyleSheet.create({
   savePressable: {
     borderRadius: 14,
     overflow: 'hidden',
-    shadowColor: Colors.gradientStart,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    boxShadow: `0px 4px 12px ${Colors.accentGlow}`,
     elevation: 6,
   },
   saveBtn: {

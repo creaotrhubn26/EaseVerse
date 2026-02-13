@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,13 +6,14 @@ import {
   FlatList,
   Pressable,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
-import SessionCard from '@/components/SessionCard';
+import SwipeableSessionCard from '@/components/SwipeableSessionCard';
 import { useApp } from '@/lib/AppContext';
 
 type FilterKey = 'latest' | 'best' | 'flagged';
@@ -21,6 +22,7 @@ export default function SessionsScreen() {
   const insets = useSafeAreaInsets();
   const { sessions, toggleFavorite, removeSession } = useApp();
   const [filter, setFilter] = useState<FilterKey>('latest');
+  const [refreshing, setRefreshing] = useState(false);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -40,17 +42,37 @@ export default function SessionsScreen() {
     return list;
   }, [sessions, filter]);
 
-  const filters: { key: FilterKey; label: string }[] = [
-    { key: 'latest', label: 'Latest' },
-    { key: 'best', label: 'Best' },
-    { key: 'flagged', label: 'Flagged' },
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 600);
+  }, []);
+
+  const filters: { key: FilterKey; label: string; icon: string }[] = [
+    { key: 'latest', label: 'Latest', icon: 'time-outline' },
+    { key: 'best', label: 'Best', icon: 'trophy-outline' },
+    { key: 'flagged', label: 'Flagged', icon: 'heart-outline' },
   ];
+
+  const bestScore = sessions.length > 0
+    ? Math.max(...sessions.map(s => s.insights.textAccuracy))
+    : 0;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Sessions</Text>
-        <Text style={styles.sessionCount}>{sessions.length} recordings</Text>
+        <View style={styles.headerStats}>
+          <View style={styles.statPill}>
+            <Text style={styles.statNumber}>{sessions.length}</Text>
+            <Text style={styles.statLabel}>recordings</Text>
+          </View>
+          {bestScore > 0 && (
+            <View style={styles.statPill}>
+              <Text style={[styles.statNumber, { color: Colors.successUnderline }]}>{bestScore}%</Text>
+              <Text style={styles.statLabel}>best</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       <View style={styles.filterRow}>
@@ -63,6 +85,11 @@ export default function SessionsScreen() {
               Haptics.selectionAsync();
             }}
           >
+            <Ionicons
+              name={f.icon as any}
+              size={14}
+              color={filter === f.key ? Colors.gradientStart : Colors.textTertiary}
+            />
             <Text
               style={[
                 styles.filterText,
@@ -85,8 +112,15 @@ export default function SessionsScreen() {
           gap: 10,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.gradientStart}
+          />
+        }
         renderItem={({ item }) => (
-          <SessionCard
+          <SwipeableSessionCard
             session={item}
             onPress={() => router.push({ pathname: '/session/[id]', params: { id: item.id } })}
             onFavorite={() => toggleFavorite(item.id)}
@@ -95,9 +129,15 @@ export default function SessionsScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Ionicons name="mic-off-outline" size={48} color={Colors.textTertiary} />
+            <View style={styles.emptyIconContainer}>
+              <Ionicons name="mic-off-outline" size={44} color={Colors.textTertiary} />
+            </View>
             <Text style={styles.emptyTitle}>No sessions yet</Text>
-            <Text style={styles.emptySubtext}>Start singing to create your first session</Text>
+            <Text style={styles.emptySubtext}>
+              {filter === 'flagged'
+                ? 'Swipe right on a session to flag it'
+                : 'Start singing to create your first session'}
+            </Text>
           </View>
         }
       />
@@ -113,17 +153,31 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingVertical: 12,
+    gap: 8,
   },
   headerTitle: {
     color: Colors.textPrimary,
     fontSize: 28,
     fontFamily: 'Inter_700Bold',
   },
-  sessionCount: {
+  headerStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statNumber: {
+    color: Colors.textPrimary,
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  statLabel: {
     color: Colors.textTertiary,
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Inter_400Regular',
-    marginTop: 2,
   },
   filterRow: {
     flexDirection: 'row',
@@ -132,7 +186,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   filterBtn: {
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
     backgroundColor: Colors.surfaceGlass,
@@ -157,6 +214,15 @@ const styles = StyleSheet.create({
     paddingVertical: 80,
     gap: 12,
   },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.surfaceGlass,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
   emptyTitle: {
     color: Colors.textSecondary,
     fontSize: 18,
@@ -167,5 +233,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
+    paddingHorizontal: 20,
   },
 });

@@ -63,12 +63,12 @@ export default function RecordButton({ isRecording, isPaused, onPress, size = 80
       <Animated.View
         style={[
           styles.pulseRing,
-          { width: size + 28, height: size + 28, borderRadius: (size + 28) / 2 },
+          { width: size + 28, height: size + 28, borderRadius: (size + 28) / 2, pointerEvents: 'none' as const },
           pulseStyle,
         ]}
       />
       <Animated.View style={buttonScale}>
-        <Pressable onPress={handlePress} style={styles.pressable}>
+        <Pressable onPress={handlePress} style={styles.pressable} testID="record-button">
           <LinearGradient
             colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
             start={{ x: 0, y: 0 }}
@@ -99,10 +99,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentGlow,
   },
   pressable: {
-    shadowColor: Colors.gradientStart,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
+    boxShadow: `0px 4px 16px ${Colors.accentGlow}`,
     elevation: 8,
   },
   button: {

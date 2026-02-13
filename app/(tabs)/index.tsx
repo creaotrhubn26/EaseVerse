@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -10,6 +10,8 @@ import RecordButton from '@/components/RecordButton';
 import CoachPill from '@/components/CoachPill';
 import QualityPill from '@/components/QualityPill';
 import LiveLyricsCanvas from '@/components/LiveLyricsCanvas';
+import VUMeter from '@/components/VUMeter';
+import SongPickerModal from '@/components/SongPickerModal';
 import { useApp } from '@/lib/AppContext';
 import { buildDemoLyricLines } from '@/lib/demo-data';
 import { generateId } from '@/lib/storage';
@@ -22,6 +24,8 @@ const coachHints = [
   'Slow down',
   'Hold the note',
   'Breathe here',
+  'Soften the S',
+  'Round the vowel',
 ];
 
 export default function SingScreen() {
@@ -35,7 +39,9 @@ export default function SingScreen() {
   const [coachHint, setCoachHint] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('Ready to sing');
   const [duration, setDuration] = useState(0);
+  const durationRef = useRef(0);
   const [lines, setLines] = useState<LyricLine[]>([]);
+  const [showSongPicker, setShowSongPicker] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const coachTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -51,7 +57,8 @@ export default function SingScreen() {
   useEffect(() => {
     if (isRecording && !isPaused) {
       intervalRef.current = setInterval(() => {
-        setDuration(d => d + 1);
+        durationRef.current += 1;
+        setDuration(durationRef.current);
         setActiveWordIndex(prev => {
           const currentLine = lyricsLines[activeLineIndex] || '';
           const wordCount = currentLine.split(' ').filter(w => w.trim()).length;
@@ -106,12 +113,13 @@ export default function SingScreen() {
   const handleStop = useCallback(() => {
     setIsRecording(false);
     setIsPaused(false);
-    if (duration > 3) {
+    const elapsed = durationRef.current;
+    if (elapsed > 3) {
       const session: Session = {
         id: generateId(),
         songId: activeSong?.id,
         title: `${activeSong?.title || 'Recording'} - Take`,
-        duration,
+        duration: elapsed,
         date: Date.now(),
         tags: ['practice'],
         favorite: false,
@@ -132,13 +140,15 @@ export default function SingScreen() {
     }
     setActiveLineIndex(0);
     setActiveWordIndex(0);
+    durationRef.current = 0;
     setDuration(0);
-  }, [duration, activeSong, lyricsText, addSession]);
+  }, [activeSong, lyricsText, addSession]);
 
   const handleRecordPress = () => {
     if (!isRecording) {
       setIsRecording(true);
       setIsPaused(false);
+      durationRef.current = 0;
       setDuration(0);
       setActiveLineIndex(0);
       setActiveWordIndex(0);
@@ -168,11 +178,8 @@ export default function SingScreen() {
         <Pressable
           style={styles.songSelector}
           onPress={() => {
-            if (songs.length > 1) {
-              const nextIdx = (songs.findIndex(s => s.id === activeSong?.id) + 1) % songs.length;
-              setActiveSong(songs[nextIdx]);
-              Haptics.selectionAsync();
-            }
+            Haptics.selectionAsync();
+            setShowSongPicker(true);
           }}
         >
           <Text style={styles.songTitle} numberOfLines={1}>
@@ -183,13 +190,10 @@ export default function SingScreen() {
 
         <View style={styles.topRight}>
           <QualityPill quality={quality} />
-          <Pressable hitSlop={12}>
-            <Ionicons name="settings-outline" size={22} color={Colors.textSecondary} />
-          </Pressable>
         </View>
       </View>
 
-      <View style={styles.lyricsArea}>
+      <View style={[styles.lyricsArea, { pointerEvents: 'box-none' as const }]}>
         <LiveLyricsCanvas lines={lines} activeLineIndex={activeLineIndex} />
       </View>
 
@@ -198,8 +202,16 @@ export default function SingScreen() {
       </View>
 
       <View style={[styles.controls, { paddingBottom: Math.max(insets.bottom, webBottomInset) + 90 }]}>
+        <VUMeter isActive={isRecording && !isPaused} />
+
         <View style={styles.statusRow}>
-          <View style={styles.statusDot} />
+          <View style={[styles.statusDot, {
+            backgroundColor: isRecording && !isPaused
+              ? Colors.successUnderline
+              : isPaused
+              ? Colors.warningUnderline
+              : Colors.textTertiary,
+          }]} />
           <Text style={styles.statusText}>{statusText}</Text>
           {isRecording && (
             <Text style={styles.timerText}>{formatTime(duration)}</Text>
@@ -233,6 +245,7 @@ export default function SingScreen() {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 handleStop();
               }}
+              testID="stop-button"
             >
               <Ionicons name="stop-circle" size={28} color={Colors.dangerUnderline} />
             </Pressable>
@@ -269,6 +282,14 @@ export default function SingScreen() {
           </View>
         </View>
       )}
+
+      <SongPickerModal
+        visible={showSongPicker}
+        songs={songs}
+        activeSongId={activeSong?.id}
+        onSelect={(song) => setActiveSong(song)}
+        onClose={() => setShowSongPicker(false)}
+      />
     </View>
   );
 }
@@ -284,6 +305,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 12,
+    zIndex: 10,
   },
   songSelector: {
     flexDirection: 'row',
@@ -311,11 +333,12 @@ const styles = StyleSheet.create({
   coachArea: {
     minHeight: 40,
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   controls: {
     paddingHorizontal: 20,
-    gap: 16,
+    gap: 10,
+    zIndex: 10,
   },
   statusRow: {
     flexDirection: 'row',
@@ -327,7 +350,6 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.successUnderline,
   },
   statusText: {
     color: Colors.textTertiary,

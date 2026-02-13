@@ -127,11 +127,13 @@ export default function SessionReviewScreen() {
         </View>
 
         <View style={styles.waveformSection}>
-          <WaveformTimeline progress={1} barCount={70} />
-          <View style={styles.timeLabels}>
-            <Text style={styles.timeLabel}>0:00</Text>
-            <Text style={styles.timeLabel}>{formatDuration(session.duration)}</Text>
-          </View>
+          <WaveformTimeline
+            progress={1}
+            barCount={70}
+            duration={session.duration}
+            interactive
+            onSeek={(p) => {}}
+          />
         </View>
 
         <View style={styles.insightsRow}>
@@ -254,15 +256,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     gap: 4,
   },
-  timeLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  timeLabel: {
-    color: Colors.textTertiary,
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-  },
   insightsRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -374,10 +367,7 @@ const styles = StyleSheet.create({
   practicePressable: {
     borderRadius: 14,
     overflow: 'hidden',
-    shadowColor: Colors.gradientStart,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    boxShadow: `0px 4px 12px ${Colors.accentGlow}`,
     elevation: 6,
   },
   practiceBtn: {

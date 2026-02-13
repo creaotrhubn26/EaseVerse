@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -16,6 +17,7 @@ import Colors from '@/constants/colors';
 import { getGenreProfile } from '@/constants/genres';
 import WaveformTimeline from '@/components/WaveformTimeline';
 import { useApp } from '@/lib/AppContext';
+import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
 
 function InsightCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -26,17 +28,63 @@ function InsightCard({ label, value, color }: { label: string; value: string; co
   );
 }
 
-function FixItem({ word, reason, index }: { word: string; reason: string; index: number }) {
+function FixItem({ word, reason, index, onPronounce, isActive, coachState, coachResult }: {
+  word: string;
+  reason: string;
+  index: number;
+  onPronounce: (word: string) => void;
+  isActive: boolean;
+  coachState: string;
+  coachResult: { phonetic: string; tip: string; slow: string } | null;
+}) {
   return (
-    <View style={styles.fixItem}>
-      <View style={styles.fixIndex}>
-        <Text style={styles.fixIndexText}>{index + 1}</Text>
-      </View>
-      <View style={styles.fixContent}>
-        <Text style={styles.fixWord}>{word}</Text>
-        <Text style={styles.fixReason}>{reason}</Text>
-      </View>
-      <Feather name="chevron-right" size={16} color={Colors.textTertiary} />
+    <View>
+      <Pressable
+        style={styles.fixItem}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onPronounce(word);
+        }}
+      >
+        <View style={styles.fixIndex}>
+          <Text style={styles.fixIndexText}>{index + 1}</Text>
+        </View>
+        <View style={styles.fixContent}>
+          <Text style={styles.fixWord}>{word}</Text>
+          <Text style={styles.fixReason}>{reason}</Text>
+        </View>
+        {isActive && coachState === 'loading' ? (
+          <ActivityIndicator size="small" color={Colors.gradientStart} />
+        ) : (
+          <Ionicons name="volume-high-outline" size={18} color={Colors.gradientStart} />
+        )}
+      </Pressable>
+      {isActive && coachResult && (
+        <View style={styles.coachPanel}>
+          <View style={styles.coachPhoneticRow}>
+            <Ionicons name="ear-outline" size={16} color={Colors.gradientEnd} />
+            <Text style={styles.coachPhonetic}>{coachResult.phonetic}</Text>
+            {coachState === 'playing' && (
+              <View style={styles.speakingIndicator}>
+                <View style={[styles.speakingBar, styles.speakingBar1]} />
+                <View style={[styles.speakingBar, styles.speakingBar2]} />
+                <View style={[styles.speakingBar, styles.speakingBar3]} />
+              </View>
+            )}
+          </View>
+          <Text style={styles.coachTip}>{coachResult.tip}</Text>
+          <Pressable
+            style={styles.replayBtn}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onPronounce(word);
+            }}
+          >
+            <Ionicons name="reload" size={14} color={Colors.gradientStart} />
+            <Text style={styles.replayText}>Replay</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -45,6 +93,13 @@ export default function SessionReviewScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { sessions } = useApp();
+  const coach = usePronunciationCoach();
+  const [activeFixWord, setActiveFixWord] = useState<string | null>(null);
+
+  const handlePronounce = (word: string) => {
+    setActiveFixWord(word);
+    coach.pronounce(word);
+  };
 
   const session = useMemo(() => sessions.find(s => s.id === id), [sessions, id]);
   const genreProfile = useMemo(() => session?.genre ? getGenreProfile(session.genre) : null, [session?.genre]);
@@ -211,10 +266,25 @@ export default function SessionReviewScreen() {
         )}
 
         <View style={styles.fixSection}>
-          <Text style={styles.fixSectionTitle}>Top to Fix</Text>
+          <View style={styles.fixSectionHeader}>
+            <Text style={styles.fixSectionTitle}>Top to Fix</Text>
+            <View style={styles.fixSectionHint}>
+              <Ionicons name="volume-high-outline" size={12} color={Colors.textTertiary} />
+              <Text style={styles.fixSectionHintText}>Tap to hear</Text>
+            </View>
+          </View>
           <View style={styles.fixList}>
             {session.insights.topToFix.map((item, i) => (
-              <FixItem key={i} word={item.word} reason={item.reason} index={i} />
+              <FixItem
+                key={i}
+                word={item.word}
+                reason={item.reason}
+                index={i}
+                onPronounce={handlePronounce}
+                isActive={activeFixWord === item.word}
+                coachState={activeFixWord === item.word ? coach.state : 'idle'}
+                coachResult={activeFixWord === item.word ? coach.result : null}
+              />
             ))}
           </View>
         </View>
@@ -433,12 +503,27 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 10,
   },
+  fixSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   fixSectionTitle: {
     color: Colors.textSecondary,
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
+  },
+  fixSectionHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  fixSectionHintText: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
   },
   fixList: {
     backgroundColor: Colors.surface,
@@ -528,5 +613,62 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
+  },
+  coachPanel: {
+    backgroundColor: Colors.accentSubtle,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderGlass,
+    gap: 8,
+  },
+  coachPhoneticRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  coachPhonetic: {
+    color: Colors.gradientEnd,
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
+    flex: 1,
+  },
+  coachTip: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 18,
+  },
+  replayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+  },
+  replayText: {
+    color: Colors.gradientStart,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  speakingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 2,
+    height: 14,
+  },
+  speakingBar: {
+    width: 3,
+    borderRadius: 1.5,
+    backgroundColor: Colors.gradientStart,
+  },
+  speakingBar1: {
+    height: 6,
+  },
+  speakingBar2: {
+    height: 12,
+  },
+  speakingBar3: {
+    height: 8,
   },
 });

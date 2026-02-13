@@ -19,11 +19,14 @@ export interface SongSection {
   lines: string[];
 }
 
+export type GenreId = 'pop' | 'jazz' | 'rnb' | 'rock' | 'classical' | 'hiphop' | 'country' | 'soul';
+
 export interface Song {
   id: string;
   title: string;
   lyrics: string;
   sections: SongSection[];
+  genre: GenreId;
   createdAt: number;
   updatedAt: number;
 }
@@ -38,6 +41,7 @@ export interface SessionInsight {
 export interface Session {
   id: string;
   songId?: string;
+  genre?: GenreId;
   title: string;
   duration: number;
   date: number;

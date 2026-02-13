@@ -4,6 +4,7 @@ import { generateId } from './storage';
 export const demoSong: Song = {
   id: 'demo-1',
   title: 'Midnight Glow',
+  genre: 'pop',
   lyrics: `Walking through the city lights tonight
 Every shadow tells a story bright
 I can feel the rhythm in my bones
@@ -31,6 +32,7 @@ export const demoSessions: Session[] = [
   {
     id: 'sess-1',
     songId: 'demo-1',
+    genre: 'pop',
     title: 'Midnight Glow - Take 3',
     duration: 187,
     date: Date.now() - 3600000,
@@ -51,6 +53,7 @@ export const demoSessions: Session[] = [
   {
     id: 'sess-2',
     songId: 'demo-1',
+    genre: 'pop',
     title: 'Midnight Glow - Take 2',
     duration: 195,
     date: Date.now() - 86400000,
@@ -72,6 +75,7 @@ export const demoSessions: Session[] = [
   {
     id: 'sess-3',
     songId: 'demo-1',
+    genre: 'pop',
     title: 'Midnight Glow - Take 1',
     duration: 210,
     date: Date.now() - 86400000 * 2,

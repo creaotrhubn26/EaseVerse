@@ -1,42 +1,39 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useRef, useState, useCallback } from 'react';
+import { Audio } from 'expo-av';
 import { getApiUrl } from '@/lib/query-client';
 
 export type NarrationState = 'idle' | 'loading' | 'playing' | 'error';
 
 export function useNarration() {
   const [state, setState] = useState<NarrationState>('idle');
-  const abortRef = useRef(false);
-  const onDoneRef = useRef<(() => void) | undefined>(undefined);
+  const requestIdRef = useRef(0);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const isSpeakingRef = useRef(false);
 
-  const player = useAudioPlayer(null);
-  const status = useAudioPlayerStatus(player);
-
-  useEffect(() => {
-    if (state === 'playing' && !status.playing && status.currentTime > 0 && status.currentTime >= status.duration - 0.1) {
-      setState('idle');
-      const cb = onDoneRef.current;
-      onDoneRef.current = undefined;
-      cb?.();
-    }
-  }, [state, status.playing, status.currentTime, status.duration]);
+  const cleanup = useCallback(async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.stopAsync().catch(() => {});
+        await soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
+    } catch {}
+  }, []);
 
   const stop = useCallback(() => {
-    abortRef.current = true;
-    onDoneRef.current = undefined;
-    try {
-      player.pause();
-    } catch {}
+    requestIdRef.current += 1;
+    isSpeakingRef.current = false;
+    cleanup();
     setState('idle');
-  }, [player]);
+  }, [cleanup]);
 
   const speak = useCallback(async (text: string, onDone?: () => void) => {
-    abortRef.current = false;
-    onDoneRef.current = undefined;
+    const thisRequestId = ++requestIdRef.current;
+    isSpeakingRef.current = true;
 
-    try {
-      player.pause();
-    } catch {}
+    await cleanup();
+
+    if (requestIdRef.current !== thisRequestId) return;
 
     setState('loading');
 
@@ -54,7 +51,7 @@ export function useNarration() {
         throw new Error(`TTS failed: ${response.status}`);
       }
 
-      if (abortRef.current) return;
+      if (requestIdRef.current !== thisRequestId) return;
 
       const blob = await response.blob();
       const reader = new FileReader();
@@ -66,24 +63,49 @@ export function useNarration() {
         reader.readAsDataURL(blob);
       });
 
-      if (abortRef.current) return;
+      if (requestIdRef.current !== thisRequestId) return;
 
-      onDoneRef.current = onDone;
-      player.replace(dataUri);
-      player.play();
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: dataUri },
+        { shouldPlay: true }
+      );
+
+      if (requestIdRef.current !== thisRequestId) {
+        await sound.unloadAsync().catch(() => {});
+        return;
+      }
+
+      soundRef.current = sound;
       setState('playing');
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) return;
+        if (status.didJustFinish && requestIdRef.current === thisRequestId) {
+          isSpeakingRef.current = false;
+          soundRef.current = null;
+          sound.unloadAsync().catch(() => {});
+          setState('idle');
+          onDone?.();
+        }
+      });
     } catch (err) {
+      if (requestIdRef.current !== thisRequestId) return;
       console.error('Narration error:', err);
+      isSpeakingRef.current = false;
       setState('error');
-      setTimeout(() => setState('idle'), 2000);
+      setTimeout(() => {
+        if (requestIdRef.current === thisRequestId) {
+          setState('idle');
+        }
+      }, 2000);
     }
-  }, [player]);
+  }, [cleanup]);
 
   const speakSequence = useCallback(async (texts: string[], onAllDone?: () => void) => {
-    abortRef.current = false;
+    const seqId = requestIdRef.current;
 
     for (let i = 0; i < texts.length; i++) {
-      if (abortRef.current) return;
+      if (requestIdRef.current !== seqId) return;
 
       await new Promise<void>((resolve) => {
         speak(texts[i], () => {
@@ -91,13 +113,13 @@ export function useNarration() {
         });
       });
 
-      if (abortRef.current) return;
+      if (requestIdRef.current !== seqId) return;
 
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 500));
     }
 
     onAllDone?.();
   }, [speak]);
 
-  return { state, speak, speakSequence, stop };
+  return { state, speak, speakSequence, stop, isSpeaking: isSpeakingRef };
 }

@@ -40,6 +40,7 @@ function ClassicTabLayout() {
         headerShown: false,
         tabBarActiveTintColor: Colors.tabActive,
         tabBarInactiveTintColor: Colors.tabInactive,
+        sceneStyle: { backgroundColor: Colors.background },
         tabBarStyle: {
           position: "absolute" as const,
           backgroundColor: isIOS ? "transparent" : Colors.background,

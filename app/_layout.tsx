@@ -2,12 +2,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
+import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AppProvider } from "@/lib/AppContext";
 import { StatusBar } from "expo-status-bar";
+import Colors from "@/constants/colors";
 import {
   useFonts,
   Inter_400Regular,
@@ -18,10 +20,22 @@ import {
 
 SplashScreen.preventAutoHideAsync();
 
+const darkContentStyle = { backgroundColor: Colors.background };
+
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back", headerShown: false }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <Stack
+      screenOptions={{
+        headerBackTitle: "Back",
+        headerShown: false,
+        contentStyle: darkContentStyle,
+        animation: "fade",
+      }}
+    >
+      <Stack.Screen
+        name="(tabs)"
+        options={{ headerShown: false, animation: "none" }}
+      />
       <Stack.Screen
         name="session/[id]"
         options={{
@@ -72,12 +86,16 @@ export default function RootLayout() {
     }
   }, [fontsLoaded]);
 
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded) {
+    return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
+  }
 
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <GestureHandlerRootView style={{ flex: 1 }}>
+        <GestureHandlerRootView
+          style={{ flex: 1, backgroundColor: Colors.background }}
+        >
           <KeyboardProvider>
             <AppProvider>
               <StatusBar style="light" />

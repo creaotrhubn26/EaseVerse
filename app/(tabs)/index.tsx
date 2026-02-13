@@ -213,7 +213,7 @@ export default function SingScreen() {
               router.push('/warmup');
             }}
           >
-            <Ionicons name="mic" size={16} color={Colors.gradientStart} />
+            <Image source={require('@/assets/images/warmup-icon.png')} style={styles.warmUpIcon} />
             <Text style={styles.warmUpBtnText}>Warm Up</Text>
           </Pressable>
           <Pressable
@@ -401,6 +401,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentSubtle,
     borderWidth: 1,
     borderColor: Colors.accentBorder,
+  },
+  warmUpIcon: {
+    width: 20,
+    height: 20,
   },
   warmUpBtnText: {
     color: Colors.gradientStart,

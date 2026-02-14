@@ -12,6 +12,14 @@ import {
   ensureCompatibleFormat,
 } from "./replit_integrations/audio/client";
 
+const supportedVoices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] as const;
+const voiceSchema = z.enum(supportedVoices);
+
+const ttsRequestSchema = z.object({
+  text: z.string().trim().min(1).max(500),
+  voice: voiceSchema.optional(),
+});
+
 const pronounceRequestSchema = z.object({
   word: z.string().trim().min(1).max(60),
   context: z.string().trim().max(280).optional(),
@@ -32,6 +40,20 @@ const sessionScoreRequestSchema = z.object({
 type RateWindowState = { count: number; windowStart: number };
 const pronounceRateWindow = new Map<string, RateWindowState>();
 const scoringRateWindow = new Map<string, RateWindowState>();
+
+function extractApiKey(req: Request): string | undefined {
+  const apiKey = req.header("x-api-key");
+  if (apiKey) {
+    return apiKey;
+  }
+
+  const authHeader = req.header("authorization");
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    return authHeader.slice(7).trim();
+  }
+
+  return undefined;
+}
 
 function getClientKey(req: Request): string {
   const forwardedFor = req.header("x-forwarded-for");
@@ -74,7 +96,7 @@ function enforceOptionalApiKey(
     return true;
   }
 
-  const providedKey = req.header("x-api-key");
+  const providedKey = extractApiKey(req);
   if (providedKey !== expectedKey) {
     res.status(401).json({ error: "Unauthorized" });
     return false;
@@ -83,25 +105,120 @@ function enforceOptionalApiKey(
   return true;
 }
 
+function getBaseUrl(req: Request): string {
+  const forwardedProto = req.header("x-forwarded-proto");
+  const protocol = forwardedProto || req.protocol || "http";
+  const forwardedHost = req.header("x-forwarded-host");
+  const host = forwardedHost || req.get("host") || "localhost:5000";
+  return `${protocol}://${host}`;
+}
+
+function getApiCatalog(req: Request) {
+  const baseUrl = getBaseUrl(req);
+  return {
+    service: "EaseVerse API",
+    version: "v1",
+    baseUrl,
+    docs: `${baseUrl}/api/v1/openapi.json`,
+    auth: {
+      header: "x-api-key or Authorization: Bearer <token>",
+      note:
+        "Set EXTERNAL_API_KEY on the server to require external API authentication.",
+    },
+    endpoints: [
+      { method: "GET", path: "/api/v1", description: "API discovery document" },
+      { method: "GET", path: "/api/v1/health", description: "Service health check" },
+      { method: "POST", path: "/api/v1/tts", description: "Text to speech (mp3 response)" },
+      {
+        method: "POST",
+        path: "/api/v1/pronounce",
+        description: "Pronunciation guidance + TTS audio in base64",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/session-score",
+        description: "STT-based lyric/session scoring",
+      },
+    ],
+  };
+}
+
+function getOpenApiSpec(req: Request) {
+  const baseUrl = getBaseUrl(req);
+  return {
+    openapi: "3.1.0",
+    info: {
+      title: "EaseVerse External API",
+      version: "1.0.0",
+      description: "Public integration endpoints for third-party systems.",
+    },
+    servers: [{ url: baseUrl }],
+    components: {
+      securitySchemes: {
+        ApiKeyAuth: {
+          type: "apiKey",
+          in: "header",
+          name: "x-api-key",
+        },
+        BearerAuth: {
+          type: "http",
+          scheme: "bearer",
+        },
+      },
+    },
+    security: [{ ApiKeyAuth: [] }, { BearerAuth: [] }],
+    paths: {
+      "/api/v1/health": {
+        get: {
+          summary: "Health check",
+          responses: {
+            "200": { description: "Healthy" },
+          },
+        },
+      },
+      "/api/v1/tts": {
+        post: {
+          summary: "Generate speech from text",
+          responses: { "200": { description: "MP3 audio stream" } },
+        },
+      },
+      "/api/v1/pronounce": {
+        post: {
+          summary: "Get pronunciation coaching for a word",
+          responses: { "200": { description: "Pronunciation JSON payload" } },
+        },
+      },
+      "/api/v1/session-score": {
+        post: {
+          summary: "Analyze recorded session against lyrics",
+          responses: { "200": { description: "Session scoring result" } },
+        },
+      },
+    },
+  };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   registerChatRoutes(app, "/api/chat");
   registerAudioRoutes(app, "/api/audio");
   registerImageRoutes(app, "/api/image");
 
-  app.post("/api/tts", async (req: Request, res: Response) => {
+  app.use("/api/v1", (req: Request, res: Response, next) => {
+    if (!enforceOptionalApiKey(req, res, "EXTERNAL_API_KEY")) {
+      return;
+    }
+    next();
+  });
+
+  const handleTts = async (req: Request, res: Response) => {
     try {
-      const { text, voice = "nova" } = req.body;
-
-      if (!text || typeof text !== "string") {
-        return res.status(400).json({ error: "Text is required" });
+      const parsedBody = ttsRequestSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: "Invalid request body" });
       }
 
-      if (text.length > 500) {
-        return res.status(400).json({ error: "Text too long (max 500 chars)" });
-      }
-
-      const validVoices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] as const;
-      const selectedVoice = validVoices.includes(voice) ? voice : "nova";
+      const { text, voice } = parsedBody.data;
+      const selectedVoice = voice || "nova";
 
       const audioBuffer = await textToSpeech(text, selectedVoice, "mp3");
 
@@ -112,11 +229,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("TTS error:", error);
       res.status(500).json({ error: "Failed to generate speech" });
     }
-  });
+  };
 
-  app.post("/api/pronounce", async (req: Request, res: Response) => {
+  const handlePronounce = async (
+    req: Request,
+    res: Response,
+    options?: { enforceServiceApiKey?: boolean }
+  ) => {
     try {
-      if (!enforceOptionalApiKey(req, res, "PRONOUNCE_API_KEY")) {
+      const enforceServiceApiKey = options?.enforceServiceApiKey ?? true;
+      if (
+        enforceServiceApiKey &&
+        !enforceOptionalApiKey(req, res, "PRONOUNCE_API_KEY")
+      ) {
         return;
       }
 
@@ -180,11 +305,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Pronounce error:", error);
       res.status(500).json({ error: "Failed to generate pronunciation" });
     }
-  });
+  };
 
-  app.post("/api/session-score", async (req: Request, res: Response) => {
+  const handleSessionScore = async (
+    req: Request,
+    res: Response,
+    options?: { enforceServiceApiKey?: boolean }
+  ) => {
     try {
-      if (!enforceOptionalApiKey(req, res, "SESSION_SCORING_API_KEY")) {
+      const enforceServiceApiKey = options?.enforceServiceApiKey ?? true;
+      if (
+        enforceServiceApiKey &&
+        !enforceOptionalApiKey(req, res, "SESSION_SCORING_API_KEY")
+      ) {
         return;
       }
 
@@ -217,7 +350,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Session scoring error:", error);
       return res.status(500).json({ error: "Failed to analyze session" });
     }
+  };
+
+  app.get("/api/health", (_req: Request, res: Response) => {
+    res.json({
+      ok: true,
+      service: "EaseVerse API",
+      timestamp: new Date().toISOString(),
+    });
   });
+
+  app.get("/api/v1", (req: Request, res: Response) => {
+    res.json(getApiCatalog(req));
+  });
+
+  app.get("/api/v1/health", (_req: Request, res: Response) => {
+    res.json({
+      ok: true,
+      version: "v1",
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  app.get("/api/v1/openapi.json", (req: Request, res: Response) => {
+    res.json(getOpenApiSpec(req));
+  });
+
+  app.post("/api/tts", handleTts);
+  app.post("/api/v1/tts", handleTts);
+
+  app.post("/api/pronounce", (req: Request, res: Response) =>
+    handlePronounce(req, res, { enforceServiceApiKey: true })
+  );
+  app.post("/api/v1/pronounce", (req: Request, res: Response) =>
+    handlePronounce(req, res, { enforceServiceApiKey: false })
+  );
+
+  app.post("/api/session-score", (req: Request, res: Response) =>
+    handleSessionScore(req, res, { enforceServiceApiKey: true })
+  );
+  app.post("/api/v1/session-score", (req: Request, res: Response) =>
+    handleSessionScore(req, res, { enforceServiceApiKey: false })
+  );
 
   const httpServer = createServer(app);
 

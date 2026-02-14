@@ -60,3 +60,39 @@ Move from thought to lyric seamlessly
 It is not an AI that writes for you.
 It is a system that helps you write better — with less resistance.
 
+## External API (For Other Systems)
+
+EaseVerse now exposes a versioned integration API at ` /api/v1 `.
+
+### Recommended Environment Variables
+
+- `EXTERNAL_API_KEY`: Optional global key for all `/api/v1/*` routes.
+- `CORS_ALLOW_ORIGINS`: Comma-separated list of allowed origins for browser clients.
+  - Example: `https://app.example.com,https://admin.example.com`
+- `CORS_ALLOW_ALL`: Set `true` only for trusted private environments.
+
+### Discovery and Health
+
+- `GET /api/v1` returns the API catalog.
+- `GET /api/v1/openapi.json` returns an OpenAPI-compatible spec.
+- `GET /api/v1/health` returns API health.
+
+### Main Integration Endpoints
+
+- `POST /api/v1/tts`
+- `POST /api/v1/pronounce`
+- `POST /api/v1/session-score`
+
+### Example
+
+```bash
+curl -X GET "https://YOUR_DOMAIN/api/v1/health" \
+  -H "x-api-key: YOUR_EXTERNAL_API_KEY"
+```
+
+```bash
+curl -X POST "https://YOUR_DOMAIN/api/v1/pronounce" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_EXTERNAL_API_KEY" \
+  -d '{"word":"melody","context":"A melody that sets me free"}'
+```

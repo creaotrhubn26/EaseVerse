@@ -16,6 +16,12 @@ declare module "http" {
 function setupCors(app: express.Application) {
   app.use((req, res, next) => {
     const origins = new Set<string>();
+    const externalOrigins = process.env.CORS_ALLOW_ORIGINS
+      ? process.env.CORS_ALLOW_ORIGINS.split(",")
+          .map((origin: string) => origin.trim())
+          .filter((origin: string) => Boolean(origin))
+      : [];
+    const allowAllOrigins = process.env.CORS_ALLOW_ALL === "true";
 
     if (process.env.REPLIT_DEV_DOMAIN) {
       origins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
@@ -27,6 +33,10 @@ function setupCors(app: express.Application) {
       });
     }
 
+    externalOrigins.forEach((origin: string) => {
+      origins.add(origin);
+    });
+
     const origin = req.header("origin");
 
     // Allow localhost origins for Expo web development (any port)
@@ -34,14 +44,19 @@ function setupCors(app: express.Application) {
       origin?.startsWith("http://localhost:") ||
       origin?.startsWith("http://127.0.0.1:");
 
-    if (origin && (origins.has(origin) || isLocalhost)) {
-      res.header("Access-Control-Allow-Origin", origin);
+    if (origin && (allowAllOrigins || origins.has(origin) || isLocalhost)) {
+      res.header("Access-Control-Allow-Origin", allowAllOrigins ? "*" : origin);
       res.header(
         "Access-Control-Allow-Methods",
         "GET, POST, PUT, DELETE, OPTIONS",
       );
-      res.header("Access-Control-Allow-Headers", "Content-Type");
-      res.header("Access-Control-Allow-Credentials", "true");
+      res.header(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization, X-API-Key",
+      );
+      if (!allowAllOrigins) {
+        res.header("Access-Control-Allow-Credentials", "true");
+      }
     }
 
     if (req.method === "OPTIONS") {

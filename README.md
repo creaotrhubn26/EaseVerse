@@ -1,5 +1,5 @@
 # EaseVerse
-EaseVerse - From thought to lyric.
+EaseVerse - Compose Your Thoughts
 🟡 WHY
 
 (Hvorfor eksisterer EaseVerse?)

@@ -26,7 +26,6 @@
     "drizzle-zod": "^0.7.1",
     "expo": "^55.0.0-preview.10",
     "expo-audio": "~55.0.5",
-    "expo-av": "^16.0.8",
     "expo-blur": "~55.0.5",
     "expo-constants": "~55.0.4",
     "expo-crypto": "~55.0.5",

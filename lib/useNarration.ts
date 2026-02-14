@@ -1,37 +1,53 @@
-import { useRef, useState, useCallback } from 'react';
-import { Audio } from 'expo-av';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { getApiUrl } from '@/lib/query-client';
 
 export type NarrationState = 'idle' | 'loading' | 'playing' | 'error';
 
 export function useNarration() {
   const [state, setState] = useState<NarrationState>('idle');
+  const [audioUri, setAudioUri] = useState<string | null>(null);
   const requestIdRef = useRef(0);
-  const soundRef = useRef<Audio.Sound | null>(null);
   const isSpeakingRef = useRef(false);
+  const onDoneRef = useRef<(() => void) | undefined>(undefined);
 
-  const cleanup = useCallback(async () => {
-    try {
-      if (soundRef.current) {
-        await soundRef.current.stopAsync().catch(() => {});
-        await soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
-    } catch {}
-  }, []);
+  const player = useAudioPlayer(audioUri ? { uri: audioUri } : null);
+  const status = useAudioPlayerStatus(player);
+
+  const wasPlayingRef = useRef(false);
+
+  useEffect(() => {
+    if (state === 'playing' && wasPlayingRef.current && !status.playing && status.currentTime > 0) {
+      isSpeakingRef.current = false;
+      setState('idle');
+      wasPlayingRef.current = false;
+      const cb = onDoneRef.current;
+      onDoneRef.current = undefined;
+      cb?.();
+    }
+    if (state === 'playing' && status.playing) {
+      wasPlayingRef.current = true;
+    }
+  }, [status.playing, status.currentTime, state]);
 
   const stop = useCallback(() => {
     requestIdRef.current += 1;
     isSpeakingRef.current = false;
-    cleanup();
+    wasPlayingRef.current = false;
+    onDoneRef.current = undefined;
+    try { player.pause(); } catch {}
+    setAudioUri(null);
     setState('idle');
-  }, [cleanup]);
+  }, [player]);
 
   const speak = useCallback(async (text: string, onDone?: () => void) => {
     const thisRequestId = ++requestIdRef.current;
     isSpeakingRef.current = true;
+    wasPlayingRef.current = false;
+    onDoneRef.current = onDone;
 
-    await cleanup();
+    try { player.pause(); } catch {}
+    setAudioUri(null);
 
     if (requestIdRef.current !== thisRequestId) return;
 
@@ -65,29 +81,12 @@ export function useNarration() {
 
       if (requestIdRef.current !== thisRequestId) return;
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: dataUri },
-        { shouldPlay: true }
-      );
-
-      if (requestIdRef.current !== thisRequestId) {
-        await sound.unloadAsync().catch(() => {});
-        return;
-      }
-
-      soundRef.current = sound;
+      setAudioUri(dataUri);
       setState('playing');
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (!status.isLoaded) return;
-        if (status.didJustFinish && requestIdRef.current === thisRequestId) {
-          isSpeakingRef.current = false;
-          soundRef.current = null;
-          sound.unloadAsync().catch(() => {});
-          setState('idle');
-          onDone?.();
-        }
-      });
+      setTimeout(() => {
+        if (requestIdRef.current !== thisRequestId) return;
+        try { player.play(); } catch {}
+      }, 200);
     } catch (err) {
       if (requestIdRef.current !== thisRequestId) return;
       console.error('Narration error:', err);
@@ -99,7 +98,7 @@ export function useNarration() {
         }
       }, 2000);
     }
-  }, [cleanup]);
+  }, [player]);
 
   const speakSequence = useCallback(async (texts: string[], onAllDone?: () => void) => {
     const seqId = requestIdRef.current;

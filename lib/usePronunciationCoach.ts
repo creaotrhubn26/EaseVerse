@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { Audio } from 'expo-av';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { getApiUrl } from '@/lib/query-client';
 
 export interface PronunciationResult {
@@ -14,20 +14,28 @@ export type CoachState = 'idle' | 'loading' | 'playing' | 'ready';
 export function usePronunciationCoach() {
   const [state, setState] = useState<CoachState>('idle');
   const [result, setResult] = useState<PronunciationResult | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const [audioUri, setAudioUri] = useState<string | null>(null);
 
-  const cleanup = useCallback(async () => {
-    if (soundRef.current) {
-      await soundRef.current.stopAsync().catch(() => {});
-      await soundRef.current.unloadAsync().catch(() => {});
-      soundRef.current = null;
+  const player = useAudioPlayer(audioUri ? { uri: audioUri } : null);
+  const status = useAudioPlayerStatus(player);
+
+  const wasPlayingRef = useRef(false);
+
+  useEffect(() => {
+    if (state === 'playing' && wasPlayingRef.current && !status.playing && status.currentTime > 0) {
+      setState('ready');
+      wasPlayingRef.current = false;
     }
-  }, []);
+    if (state === 'playing' && status.playing) {
+      wasPlayingRef.current = true;
+    }
+  }, [status.playing, status.currentTime, state]);
 
   const pronounce = useCallback(async (word: string, context?: string) => {
-    await cleanup();
     setState('loading');
     setResult(null);
+    setAudioUri(null);
+    wasPlayingRef.current = false;
 
     try {
       const baseUrl = getApiUrl();
@@ -53,21 +61,11 @@ export function usePronunciationCoach() {
       const audioBase64 = data.audioBase64;
       if (audioBase64) {
         const dataUri = `data:audio/mpeg;base64,${audioBase64}`;
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: dataUri },
-          { shouldPlay: true }
-        );
-        soundRef.current = sound;
+        setAudioUri(dataUri);
         setState('playing');
-
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (!status.isLoaded) return;
-          if (status.didJustFinish) {
-            setState('ready');
-            sound.unloadAsync().catch(() => {});
-            soundRef.current = null;
-          }
-        });
+        setTimeout(() => {
+          try { player.play(); } catch {}
+        }, 200);
       } else {
         setState('ready');
       }
@@ -75,18 +73,31 @@ export function usePronunciationCoach() {
       console.error('Pronunciation coach error:', err);
       setState('idle');
     }
-  }, [cleanup]);
+  }, [player]);
 
   const replay = useCallback(async () => {
     if (!result) return;
-    await pronounce(result.word);
-  }, [result, pronounce]);
+    if (audioUri) {
+      wasPlayingRef.current = false;
+      setState('playing');
+      try {
+        player.seekTo(0);
+        player.play();
+      } catch {
+        await pronounce(result.word);
+      }
+    } else {
+      await pronounce(result.word);
+    }
+  }, [result, audioUri, player, pronounce]);
 
   const dismiss = useCallback(() => {
-    cleanup();
+    try { player.pause(); } catch {}
+    setAudioUri(null);
     setState('idle');
     setResult(null);
-  }, [cleanup]);
+    wasPlayingRef.current = false;
+  }, [player]);
 
   return { state, result, pronounce, replay, dismiss };
 }

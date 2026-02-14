@@ -1,6 +1,12 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Audio } from 'expo-av';
+import {
+  useAudioRecorder,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  AudioModule,
+} from 'expo-audio';
 import { Platform } from 'react-native';
+import type { RecordingStatus } from 'expo-audio';
 
 export interface RecordingState {
   isRecording: boolean;
@@ -17,23 +23,37 @@ export function useRecording() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
   const meteringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const durationRef = useRef(0);
+  const recordingActiveRef = useRef(false);
+
+  const handleStatusUpdate = useCallback((status: RecordingStatus) => {
+    if (status.isFinished && status.url) {
+      recordingActiveRef.current = false;
+    }
+  }, []);
+
+  const recorder = useAudioRecorder(
+    {
+      ...RecordingPresets.HIGH_QUALITY,
+      isMeteringEnabled: true,
+    },
+    handleStatusUpdate
+  );
 
   useEffect(() => {
     return () => {
       stopMetering();
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => {});
-        recordingRef.current = null;
+      if (recordingActiveRef.current) {
+        try { recorder.stop(); } catch {}
+        recordingActiveRef.current = false;
       }
     };
   }, []);
 
   const requestPermission = useCallback(async () => {
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
+      const { granted } = await requestRecordingPermissionsAsync();
       setHasPermission(granted);
       return granted;
     } catch {
@@ -44,23 +64,23 @@ export function useRecording() {
 
   const startMetering = useCallback(() => {
     stopMetering();
-    meteringIntervalRef.current = setInterval(async () => {
-      if (!recordingRef.current) return;
+    meteringIntervalRef.current = setInterval(() => {
+      if (!recordingActiveRef.current) return;
       try {
-        const status = await recordingRef.current.getStatusAsync();
-        if (status.isRecording && status.metering !== undefined) {
-          const db = status.metering;
+        const state = recorder.getStatus();
+        if (state.isRecording && state.metering !== undefined) {
+          const db = state.metering;
           const normalized = Math.max(0, Math.min(1, (db + 60) / 60));
           setAudioLevel(normalized);
         }
-        if (status.isRecording) {
-          const secs = Math.floor(status.durationMillis / 1000);
+        if (state.isRecording) {
+          const secs = Math.floor(state.durationMillis / 1000);
           durationRef.current = secs;
           setDuration(secs);
         }
       } catch {}
     }, 100);
-  }, []);
+  }, [recorder]);
 
   const stopMetering = useCallback(() => {
     if (meteringIntervalRef.current) {
@@ -77,19 +97,14 @@ export function useRecording() {
     if (!permitted) return false;
 
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await AudioModule.setAudioModeAsync({
+        playsInSilentMode: true,
       });
 
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync({
-        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-        isMeteringEnabled: true,
-      });
-      await recording.startAsync();
+      await recorder.prepareToRecordAsync();
+      recorder.record();
 
-      recordingRef.current = recording;
+      recordingActiveRef.current = true;
       durationRef.current = 0;
       setDuration(0);
       setIsRecording(true);
@@ -100,13 +115,13 @@ export function useRecording() {
       console.error('Failed to start recording:', err);
       return false;
     }
-  }, [hasPermission, requestPermission, startMetering]);
+  }, [hasPermission, requestPermission, startMetering, recorder]);
 
   const pause = useCallback(async () => {
-    if (!recordingRef.current) return;
+    if (!recordingActiveRef.current) return;
     try {
       if (Platform.OS !== 'web') {
-        await recordingRef.current.pauseAsync();
+        recorder.pause();
       }
       setIsPaused(true);
       stopMetering();
@@ -114,55 +129,55 @@ export function useRecording() {
     } catch (err) {
       console.error('Failed to pause recording:', err);
     }
-  }, [stopMetering]);
+  }, [stopMetering, recorder]);
 
   const resume = useCallback(async () => {
-    if (!recordingRef.current) return;
+    if (!recordingActiveRef.current) return;
     try {
       if (Platform.OS !== 'web') {
-        await recordingRef.current.startAsync();
+        recorder.record();
       }
       setIsPaused(false);
       startMetering();
     } catch (err) {
       console.error('Failed to resume recording:', err);
     }
-  }, [startMetering]);
+  }, [startMetering, recorder]);
 
   const stop = useCallback(async (): Promise<{ uri: string | null; durationSeconds: number }> => {
     stopMetering();
     setAudioLevel(0);
     const elapsed = durationRef.current;
 
-    if (!recordingRef.current) {
+    if (!recordingActiveRef.current) {
       setIsRecording(false);
       setIsPaused(false);
       return { uri: null, durationSeconds: elapsed };
     }
 
     try {
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
+      recorder.stop();
+      const state = recorder.getStatus();
+      const uri = state.url;
+      recordingActiveRef.current = false;
       setIsRecording(false);
       setIsPaused(false);
       durationRef.current = 0;
       setDuration(0);
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
+      await AudioModule.setAudioModeAsync({
+        playsInSilentMode: true,
       });
 
       return { uri: uri || null, durationSeconds: elapsed };
     } catch (err) {
       console.error('Failed to stop recording:', err);
-      recordingRef.current = null;
+      recordingActiveRef.current = false;
       setIsRecording(false);
       setIsPaused(false);
       return { uri: null, durationSeconds: elapsed };
     }
-  }, [stopMetering]);
+  }, [stopMetering, recorder]);
 
   const togglePause = useCallback(async () => {
     if (isPaused) {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, ComponentProps } from 'react';
+import React, { useState, useCallback, useEffect, useRef, ComponentProps } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,19 +7,21 @@ import {
   Pressable,
   ScrollView,
   Platform,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { genreList, type GenreId } from '@/constants/genres';
 import { getGenreDemoLyrics } from '@/constants/genre-lyrics';
 import SectionCard from '@/components/SectionCard';
+import Toast from '@/components/Toast';
 import { useApp } from '@/lib/AppContext';
 import { generateId } from '@/lib/storage';
 import type { Song, SongSection } from '@/lib/types';
+
+const AUTOSAVE_DEBOUNCE_MS = 700;
+const TOAST_THROTTLE_MS = 15000;
 
 type TabKey = 'write' | 'structure' | 'import';
 
@@ -31,6 +33,13 @@ export default function LyricsScreen() {
   const [importText, setImportText] = useState('');
   const [songTitle, setSongTitle] = useState(activeSong?.title || '');
   const [selectedGenre, setSelectedGenre] = useState<GenreId>(activeSong?.genre || 'pop');
+  const [toast, setToast] = useState<{ visible: boolean; message: string; variant?: 'success' | 'error' }>({
+    visible: false,
+    message: '',
+  });
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialMount = useRef(true);
+  const lastToastTimeRef = useRef(0);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -65,17 +74,18 @@ export default function LyricsScreen() {
     return sections;
   }, []);
 
-  const handleSave = useCallback(() => {
-    if (!editText.trim()) {
-      Alert.alert('No Lyrics', 'Please write some lyrics before saving.');
-      return;
-    }
+  const performSave = useCallback(() => {
+    if (!editText.trim()) return;
+
     const duplicate = songs.find(s => s.title.toLowerCase() === (songTitle || 'Untitled').toLowerCase() && s.id !== activeSong?.id);
     if (duplicate) {
-      Alert.alert('Duplicate Title', `A song named "${duplicate.title}" already exists. Consider using a different title.`);
+      setToast({ visible: true, message: 'Duplicate title – choose a different name', variant: 'error' });
+      return;
     }
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const sections = parseSections(editText);
+
     if (activeSong) {
       const updated: Song = {
         ...activeSong,
@@ -100,7 +110,32 @@ export default function LyricsScreen() {
       addSong(newSong);
       setActiveSong(newSong);
     }
-  }, [editText, songTitle, activeSong, parseSections, selectedGenre, songs]);
+
+    const now = Date.now();
+    if (now - lastToastTimeRef.current >= TOAST_THROTTLE_MS) {
+      lastToastTimeRef.current = now;
+      setToast({ visible: true, message: 'Saved & ready for live' });
+    }
+  }, [editText, songTitle, activeSong, parseSections, selectedGenre, songs, updateSong, addSong, setActiveSong]);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    if (!editText.trim()) return;
+
+    autosaveTimerRef.current = setTimeout(() => {
+      performSave();
+      autosaveTimerRef.current = null;
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [editText, songTitle, selectedGenre, performSave]);
 
   const handleImport = useCallback(() => {
     if (!importText.trim()) return;
@@ -159,6 +194,15 @@ export default function LyricsScreen() {
           <Ionicons name="add-circle-outline" size={26} color={Colors.gradientStart} />
         </Pressable>
       </View>
+
+      {toast.visible && (
+        <Toast
+          visible={toast.visible}
+          message={toast.message}
+          variant={toast.variant ?? 'success'}
+          onHide={() => setToast(t => ({ ...t, visible: false }))}
+        />
+      )}
 
       <View style={styles.titleInput}>
         <TextInput
@@ -237,7 +281,7 @@ export default function LyricsScreen() {
 
       <ScrollView
         style={styles.content}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 24 }}
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
       >
@@ -315,20 +359,6 @@ export default function LyricsScreen() {
           </View>
         )}
       </ScrollView>
-
-      <View style={[styles.bottomAction, { paddingBottom: Math.max(insets.bottom, webBottomInset) + 90 }]}>
-        <Pressable onPress={handleSave} style={styles.savePressable}>
-          <LinearGradient
-            colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.saveBtn}
-          >
-            <Ionicons name="checkmark" size={20} color="#fff" />
-            <Text style={styles.saveBtnText}>Save & Use for Live</Text>
-          </LinearGradient>
-        </Pressable>
-      </View>
     </View>
   );
 }
@@ -507,33 +537,6 @@ const styles = StyleSheet.create({
   },
   importBtnText: {
     color: Colors.gradientStart,
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  bottomAction: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  savePressable: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    boxShadow: `0px 4px 12px ${Colors.accentGlow}`,
-    elevation: 6,
-  },
-  saveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 14,
-  },
-  saveBtnText: {
-    color: '#fff',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },

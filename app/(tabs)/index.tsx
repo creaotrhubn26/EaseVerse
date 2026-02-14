@@ -176,7 +176,7 @@ export default function SingScreen() {
         lyrics: lyricsText,
       };
       addSession(session);
-      router.push({ pathname: '/session/[id]', params: { id: session.id } });
+      router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
     }
     wordAudioLevelsRef.current = new Map();
     setActiveLineIndex(0);

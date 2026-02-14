@@ -1,8 +1,8 @@
-# LyricFlow - Replit Agent Guide
+# EaseVerse - Replit Agent Guide
 
 ## Overview
 
-LyricFlow is a mobile-first app for vocalists that captures singing, reveals lyrics in real time, and provides non-interruptive pronunciation coaching. It's built as an Expo (React Native) application with an Express backend server. The app follows a "CreatorHub" design system with a cinematic, dark-themed UI featuring glassmorphism and warm orange accent gradients.
+EaseVerse is a mobile-first app for vocalists that captures singing, reveals lyrics in real time, and provides non-interruptive pronunciation coaching. It's built as an Expo (React Native) application with an Express backend server. The app follows a "CreatorHub" design system with a cinematic, dark-themed UI featuring glassmorphism and warm orange accent gradients.
 
 The primary user flow is: **Sing → Review → Practice Loop**, with four bottom navigation tabs: Sing, Lyrics, Sessions, and Profile.
 

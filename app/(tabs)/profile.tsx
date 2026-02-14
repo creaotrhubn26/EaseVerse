@@ -6,6 +6,8 @@ import {
   ScrollView,
   Pressable,
   Platform,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -117,10 +119,13 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+      <View style={styles.logoHeader}>
+        <Image
+          source={require('@/assets/images/easeverse_logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </View>
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}
@@ -219,14 +224,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+  logoHeader: {
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  headerTitle: {
-    color: Colors.textPrimary,
-    fontSize: 28,
-    fontFamily: 'Inter_700Bold',
+  logo: {
+    width: Dimensions.get('window').width - 32,
+    height: Math.round((Dimensions.get('window').width - 32) / 3.2),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 4,
   },
   statsCard: {
     marginHorizontal: 20,

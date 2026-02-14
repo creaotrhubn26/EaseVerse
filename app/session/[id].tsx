@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { getGenreProfile } from '@/constants/genres';
 import WaveformTimeline from '@/components/WaveformTimeline';
+import Toast from '@/components/Toast';
 import { useApp } from '@/lib/AppContext';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
 
@@ -91,10 +92,17 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
 
 export default function SessionReviewScreen() {
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, fromRecording } = useLocalSearchParams<{ id: string; fromRecording?: string }>();
   const { sessions } = useApp();
   const coach = usePronunciationCoach();
   const [activeFixWord, setActiveFixWord] = useState<string | null>(null);
+  const [showAddedToast, setShowAddedToast] = useState(false);
+
+  useEffect(() => {
+    if (fromRecording === '1') {
+      setShowAddedToast(true);
+    }
+  }, [fromRecording]);
 
   const handlePronounce = (word: string) => {
     setActiveFixWord(word);
@@ -169,6 +177,15 @@ export default function SessionReviewScreen() {
         <Text style={styles.topBarTitle} numberOfLines={1}>Session Review</Text>
         <View style={{ width: 24 }} />
       </View>
+
+      {showAddedToast && (
+        <Toast
+          visible={showAddedToast}
+          message="Added to sessions"
+          variant="success"
+          onHide={() => setShowAddedToast(false)}
+        />
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}

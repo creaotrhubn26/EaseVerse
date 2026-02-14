@@ -41,15 +41,22 @@ export function useRecording() {
     handleStatusUpdate
   );
 
+  const stopMetering = useCallback(() => {
+    if (meteringIntervalRef.current) {
+      clearInterval(meteringIntervalRef.current);
+      meteringIntervalRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       stopMetering();
       if (recordingActiveRef.current) {
-        try { recorder.stop(); } catch {}
+        try { void recorder.stop(); } catch {}
         recordingActiveRef.current = false;
       }
     };
-  }, []);
+  }, [recorder, stopMetering]);
 
   const requestPermission = useCallback(async () => {
     try {
@@ -80,14 +87,7 @@ export function useRecording() {
         }
       } catch {}
     }, 100);
-  }, [recorder]);
-
-  const stopMetering = useCallback(() => {
-    if (meteringIntervalRef.current) {
-      clearInterval(meteringIntervalRef.current);
-      meteringIntervalRef.current = null;
-    }
-  }, []);
+  }, [recorder, stopMetering]);
 
   const start = useCallback(async () => {
     let permitted = hasPermission;
@@ -156,7 +156,7 @@ export function useRecording() {
     }
 
     try {
-      recorder.stop();
+      await recorder.stop();
       const state = recorder.getStatus();
       const uri = state.url;
       recordingActiveRef.current = false;

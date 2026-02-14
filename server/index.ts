@@ -13,6 +13,31 @@ declare module "http" {
   }
 }
 
+function configureTrustProxy(app: express.Application) {
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy === "true") {
+    app.set("trust proxy", true);
+    return;
+  }
+  if (trustProxy === "false") {
+    app.set("trust proxy", false);
+    return;
+  }
+
+  const trustProxyHops = process.env.TRUST_PROXY_HOPS;
+  if (trustProxyHops) {
+    const parsedHops = Number.parseInt(trustProxyHops, 10);
+    if (Number.isFinite(parsedHops) && parsedHops >= 0) {
+      app.set("trust proxy", parsedHops);
+      return;
+    }
+  }
+
+  if (process.env.REPLIT_DEV_DOMAIN || process.env.REPLIT_DOMAINS) {
+    app.set("trust proxy", 1);
+  }
+}
+
 function setupCors(app: express.Application) {
   app.use((req, res, next) => {
     const origins = new Set<string>();
@@ -242,6 +267,7 @@ function setupErrorHandler(app: express.Application) {
 }
 
 (async () => {
+  configureTrustProxy(app);
   setupCors(app);
   setupBodyParsing(app);
   setupRequestLogging(app);

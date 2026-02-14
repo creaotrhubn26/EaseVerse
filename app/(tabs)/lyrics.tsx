@@ -166,8 +166,15 @@ export default function LyricsScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Lyrics</Text>
-        <Pressable onPress={handleNewSong} hitSlop={12}>
+        <Text style={styles.headerTitle} accessibilityRole="header">Lyrics</Text>
+        <Pressable
+          onPress={handleNewSong}
+          hitSlop={12}
+          style={styles.newSongButton}
+          accessibilityRole="button"
+          accessibilityLabel="Create new song"
+          accessibilityHint="Clears the current draft and starts a new song"
+        >
           <Ionicons name="add-circle-outline" size={26} color={Colors.gradientStart} />
         </Pressable>
       </View>
@@ -188,6 +195,8 @@ export default function LyricsScreen() {
           placeholder="Song title"
           placeholderTextColor={Colors.textTertiary}
           style={styles.titleField}
+          accessibilityLabel="Song title"
+          accessibilityHint="Enter a title for your song"
         />
       </View>
 
@@ -218,6 +227,10 @@ export default function LyricsScreen() {
                   }
                   Haptics.selectionAsync();
                 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${g.label} genre`}
+                accessibilityHint="Applies coaching defaults and demo lyrics for this style"
+                accessibilityState={{ selected: isSelected }}
               >
                 <Ionicons name={g.icon} size={14} color={isSelected ? g.color : Colors.textTertiary} />
                 <Text style={[styles.genreChipText, isSelected && { color: g.color }]}>
@@ -238,6 +251,9 @@ export default function LyricsScreen() {
               setActiveTab(tab.key);
               Haptics.selectionAsync();
             }}
+            accessibilityRole="tab"
+            accessibilityLabel={`${tab.label} tab`}
+            accessibilityState={{ selected: activeTab === tab.key }}
           >
             <Feather
               name={tab.icon}
@@ -272,6 +288,8 @@ export default function LyricsScreen() {
               style={styles.lyricsEditor}
               multiline
               textAlignVertical="top"
+              accessibilityLabel="Lyrics editor"
+              accessibilityHint="Write song lyrics and section headers"
             />
             <View style={styles.insertRow}>
               {['verse', 'chorus', 'bridge'].map(type => (
@@ -279,6 +297,9 @@ export default function LyricsScreen() {
                   key={type}
                   style={styles.insertBtn}
                   onPress={() => handleInsertSection(type)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Insert ${type} section`}
+                  accessibilityHint="Adds a section header in the lyrics editor"
                 >
                   <Ionicons name="add" size={14} color={Colors.textSecondary} />
                   <Text style={styles.insertBtnText}>
@@ -325,11 +346,17 @@ export default function LyricsScreen() {
               style={styles.importEditor}
               multiline
               textAlignVertical="top"
+              accessibilityLabel="Import lyrics"
+              accessibilityHint="Paste lyrics text to use in your song"
             />
             <Pressable
               style={[styles.importBtn, !importText.trim() && styles.importBtnDisabled]}
               onPress={handleImport}
               disabled={!importText.trim()}
+              accessibilityRole="button"
+              accessibilityLabel="Use pasted lyrics"
+              accessibilityHint="Copies pasted text into the lyrics editor"
+              accessibilityState={{ disabled: !importText.trim() }}
             >
               <Text style={styles.importBtnText}>Use Pasted Lyrics</Text>
             </Pressable>
@@ -356,6 +383,12 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 28,
     fontFamily: 'Inter_700Bold',
+  },
+  newSongButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleInput: {
     paddingHorizontal: 20,

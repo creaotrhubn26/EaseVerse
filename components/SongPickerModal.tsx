@@ -32,14 +32,28 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
       animationType="slide"
       transparent
       onRequestClose={onClose}
+      accessibilityViewIsModal
     >
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable
+          style={styles.backdrop}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close song picker"
+          accessibilityHint="Dismisses the song selection sheet"
+        />
         <View style={styles.sheet}>
-          <View style={styles.handle} />
+          <View style={styles.handle} accessible={false} />
           <View style={styles.header}>
-            <Text style={styles.title}>Select Song</Text>
-            <Pressable onPress={onClose} hitSlop={12}>
+            <Text style={styles.title} accessibilityRole="header">Select Song</Text>
+            <Pressable
+              onPress={onClose}
+              hitSlop={12}
+              style={styles.closeButton}
+              accessibilityRole="button"
+              accessibilityLabel="Close song picker"
+              accessibilityHint="Dismisses the song selection sheet"
+            >
               <Ionicons name="close" size={24} color={Colors.textSecondary} />
             </Pressable>
           </View>
@@ -62,6 +76,10 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
                     onSelect(item);
                     onClose();
                   }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select song ${item.title}`}
+                  accessibilityHint={`${lineCount} lines. Updated ${formatDate(item.updatedAt)}.`}
+                  accessibilityState={{ selected: isActive }}
                 >
                   <View style={[styles.songIcon, gp && { backgroundColor: gp.accentColor }]}>
                     <Ionicons
@@ -86,7 +104,7 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
             }}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Ionicons name="musical-notes-outline" size={40} color={Colors.textTertiary} />
+                <Ionicons name="musical-notes-outline" size={40} color={Colors.textTertiary} accessible={false} />
                 <Text style={styles.emptyText}>No songs yet</Text>
               </View>
             }
@@ -130,6 +148,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderGlass,
+  },
+  closeButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     color: Colors.textPrimary,

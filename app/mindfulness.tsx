@@ -214,6 +214,9 @@ function BreathingGuide({ pattern, onComplete, speak }: { pattern: BreathingPatt
             setCurrentCycle(0);
             setPhase('inhale');
           }}
+          accessibilityRole="button"
+          accessibilityLabel={`Begin ${pattern.title}`}
+          accessibilityHint="Starts guided breathing cycles"
         >
           <LinearGradient
             colors={[pattern.color, pattern.color + '99']}
@@ -232,6 +235,9 @@ function BreathingGuide({ pattern, onComplete, speak }: { pattern: BreathingPatt
             setIsActive(false);
             onComplete();
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Skip breathing exercise"
+          accessibilityHint="Moves to the next mindfulness step"
         >
           <Text style={styles.skipBreathText}>Skip</Text>
         </Pressable>
@@ -342,6 +348,9 @@ function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTec
             setIsActive(true);
             setCurrentStep(0);
           }}
+          accessibilityRole="button"
+          accessibilityLabel={`Start ${technique.title}`}
+          accessibilityHint="Begins the guided energy technique"
         >
           <LinearGradient
             colors={[technique.color, technique.color + '99']}
@@ -360,6 +369,9 @@ function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTec
             setIsActive(false);
             onComplete();
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Skip technique"
+          accessibilityHint="Moves to the next mindfulness step"
         >
           <Text style={styles.skipBreathText}>Skip</Text>
         </Pressable>
@@ -460,6 +472,9 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
             setCurrentLine(0);
             lineOpacity.value = 0;
           }}
+          accessibilityRole="button"
+          accessibilityLabel={`Begin ${visualization.title}`}
+          accessibilityHint="Starts guided visualization narration"
         >
           <LinearGradient
             colors={[visualization.color, visualization.color + '99']}
@@ -478,6 +493,9 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
             setIsActive(false);
             onComplete();
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Skip visualization"
+          accessibilityHint="Moves to the next mindfulness step"
         >
           <Text style={styles.skipBreathText}>Skip</Text>
         </Pressable>
@@ -568,6 +586,10 @@ export default function MindfulnessScreen() {
             key={mood.id}
             style={[styles.moodCard, { borderColor: mood.color + '30' }]}
             onPress={() => handleMoodSelect(mood.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Choose mood ${mood.label}`}
+            accessibilityHint={mood.description}
+            accessibilityState={{ selected: selectedMood === mood.id }}
           >
             <View style={[styles.moodIconCircle, { backgroundColor: mood.color + '15' }]}>
               <Ionicons name={mood.icon} size={24} color={mood.color} />
@@ -596,7 +618,13 @@ export default function MindfulnessScreen() {
         </View>
 
         <View style={styles.planCards}>
-          <Pressable style={styles.planCard} onPress={() => goToPhase('breathing')}>
+          <Pressable
+            style={styles.planCard}
+            onPress={() => goToPhase('breathing')}
+            accessibilityRole="button"
+            accessibilityLabel="Open breathing"
+            accessibilityHint="Starts the breathing practice"
+          >
             <View style={[styles.planIconCircle, { backgroundColor: (selectedBreathing?.color || '#3B82F6') + '15' }]}>
               <Ionicons name={selectedBreathing?.icon || 'square-outline'} size={22} color={selectedBreathing?.color || '#3B82F6'} />
             </View>
@@ -607,7 +635,13 @@ export default function MindfulnessScreen() {
             <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
           </Pressable>
 
-          <Pressable style={styles.planCard} onPress={() => goToPhase('technique')}>
+          <Pressable
+            style={styles.planCard}
+            onPress={() => goToPhase('technique')}
+            accessibilityRole="button"
+            accessibilityLabel="Open energy technique"
+            accessibilityHint="Starts the grounding technique"
+          >
             <View style={[styles.planIconCircle, { backgroundColor: (selectedTechnique?.color || '#10B981') + '15' }]}>
               <Ionicons name={selectedTechnique?.icon || 'earth'} size={22} color={selectedTechnique?.color || '#10B981'} />
             </View>
@@ -618,7 +652,13 @@ export default function MindfulnessScreen() {
             <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
           </Pressable>
 
-          <Pressable style={styles.planCard} onPress={() => goToPhase('visualization')}>
+          <Pressable
+            style={styles.planCard}
+            onPress={() => goToPhase('visualization')}
+            accessibilityRole="button"
+            accessibilityLabel="Open visualization"
+            accessibilityHint="Starts guided visualization"
+          >
             <View style={[styles.planIconCircle, { backgroundColor: (selectedViz?.color || '#FF7A18') + '15' }]}>
               <Ionicons name={selectedViz?.icon || 'sunny'} size={22} color={selectedViz?.color || '#FF7A18'} />
             </View>
@@ -629,7 +669,13 @@ export default function MindfulnessScreen() {
             <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
           </Pressable>
 
-          <Pressable style={styles.planCard} onPress={() => goToPhase('affirmation')}>
+          <Pressable
+            style={styles.planCard}
+            onPress={() => goToPhase('affirmation')}
+            accessibilityRole="button"
+            accessibilityLabel="Open affirmation"
+            accessibilityHint="Starts affirmation practice"
+          >
             <View style={[styles.planIconCircle, { backgroundColor: '#F59E0B15' }]}>
               <Ionicons name="sparkles" size={22} color="#F59E0B" />
             </View>
@@ -644,6 +690,9 @@ export default function MindfulnessScreen() {
         <Pressable
           style={styles.allBreathingBtn}
           onPress={() => goToPhase('breathing')}
+          accessibilityRole="button"
+          accessibilityLabel="Start full mindfulness session"
+          accessibilityHint="Begins the guided sequence from breathing"
         >
           <LinearGradient
             colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
@@ -679,6 +728,9 @@ export default function MindfulnessScreen() {
               setSelectedBreathing(b);
               Haptics.selectionAsync();
             }}
+            accessibilityRole="button"
+            accessibilityLabel={`Select pattern ${b.title}`}
+            accessibilityState={{ selected: selectedBreathing?.id === b.id }}
           >
             <Ionicons name={b.icon} size={14} color={b.color} />
             <Text style={[styles.otherOptionText, { color: b.color }]}>{b.title}</Text>
@@ -708,6 +760,9 @@ export default function MindfulnessScreen() {
               setSelectedTechnique(t);
               Haptics.selectionAsync();
             }}
+            accessibilityRole="button"
+            accessibilityLabel={`Select technique ${t.title}`}
+            accessibilityState={{ selected: selectedTechnique?.id === t.id }}
           >
             <Ionicons name={t.icon} size={14} color={t.color} />
             <Text style={[styles.otherOptionText, { color: t.color }]}>{t.title}</Text>
@@ -737,6 +792,9 @@ export default function MindfulnessScreen() {
               setSelectedViz(v);
               Haptics.selectionAsync();
             }}
+            accessibilityRole="button"
+            accessibilityLabel={`Select visualization ${v.title}`}
+            accessibilityState={{ selected: selectedViz?.id === v.id }}
           >
             <Ionicons name={v.icon} size={14} color={v.color} />
             <Text style={[styles.otherOptionText, { color: v.color }]}>{v.title}</Text>
@@ -764,6 +822,9 @@ export default function MindfulnessScreen() {
             setCurrentAffirmation(next?.text || affirmations[0].text);
             Haptics.selectionAsync();
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Get another affirmation"
+          accessibilityHint="Shows a different affirmation for your mood"
         >
           <Ionicons name="refresh" size={18} color={Colors.gradientStart} />
           <Text style={styles.nextAffirmationText}>Another One</Text>
@@ -772,6 +833,9 @@ export default function MindfulnessScreen() {
         <Pressable
           style={styles.finishBtn}
           onPress={() => goToPhase('complete')}
+          accessibilityRole="button"
+          accessibilityLabel="Finish mindfulness"
+          accessibilityHint="Marks the session complete"
         >
           <LinearGradient
             colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
@@ -818,6 +882,9 @@ export default function MindfulnessScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           router.back();
         }}
+        accessibilityRole="button"
+        accessibilityLabel="Go sing"
+        accessibilityHint="Returns to singing"
       >
         <LinearGradient
           colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
@@ -840,16 +907,28 @@ export default function MindfulnessScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={styles.headerIconButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to the previous screen"
+        >
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Mindfulness</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">Mindfulness</Text>
         <Pressable
           onPress={() => {
             setNarrationEnabled(prev => !prev);
             if (narrationEnabled) stopNarration();
           }}
           hitSlop={12}
+          style={styles.headerIconButton}
+          accessibilityRole="button"
+          accessibilityLabel={narrationEnabled ? 'Turn narration off' : 'Turn narration on'}
+          accessibilityHint="Toggles voice guidance"
+          accessibilityState={{ selected: narrationEnabled }}
         >
           <Ionicons
             name={narrationEnabled ? "volume-high" : "volume-mute"}
@@ -916,6 +995,12 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 17,
     fontFamily: 'Inter_600SemiBold',
+  },
+  headerIconButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   progressDots: {
     flexDirection: 'row',
@@ -1169,7 +1254,9 @@ const styles = StyleSheet.create({
   otherOptionChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+    minHeight: 44,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
@@ -1364,6 +1451,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    minHeight: 44,
     paddingVertical: 12,
     marginBottom: 8,
   },

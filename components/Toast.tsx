@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
@@ -37,6 +37,8 @@ export default function Toast({
   useEffect(() => {
     if (!visible) return;
 
+    AccessibilityInfo.announceForAccessibility(message);
+
     Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
@@ -68,7 +70,7 @@ export default function Toast({
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [visible, duration, variant, opacity, translateY, onHide]);
+  }, [visible, duration, variant, message, opacity, translateY, onHide]);
 
   if (!visible) return null;
 
@@ -81,6 +83,10 @@ export default function Toast({
         { top: insets.top + 8, opacity, transform: [{ translateY }] },
       ]}
       pointerEvents="none"
+      accessible
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
+      accessibilityLabel={message}
     >
       <View style={styles.toast}>
         <Ionicons name={config.icon} size={20} color={config.color} />

@@ -32,10 +32,28 @@ export default function SectionCard({ section, index, onMoveUp, onMoveDown, isFi
           <Text style={[styles.typeLabel, { color }]}>{section.label}</Text>
         </View>
         <View style={styles.arrows}>
-          <Pressable onPress={onMoveUp} disabled={isFirst} hitSlop={8}>
+          <Pressable
+            onPress={onMoveUp}
+            disabled={isFirst}
+            hitSlop={8}
+            style={styles.arrowButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Move ${section.label} section up`}
+            accessibilityHint="Reorders this section earlier in the song"
+            accessibilityState={{ disabled: isFirst }}
+          >
             <Ionicons name="chevron-up" size={18} color={isFirst ? Colors.textTertiary : Colors.textSecondary} />
           </Pressable>
-          <Pressable onPress={onMoveDown} disabled={isLast} hitSlop={8}>
+          <Pressable
+            onPress={onMoveDown}
+            disabled={isLast}
+            hitSlop={8}
+            style={styles.arrowButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Move ${section.label} section down`}
+            accessibilityHint="Reorders this section later in the song"
+            accessibilityState={{ disabled: isLast }}
+          >
             <Ionicons name="chevron-down" size={18} color={isLast ? Colors.textTertiary : Colors.textSecondary} />
           </Pressable>
         </View>
@@ -87,6 +105,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
+  },
+  arrowButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   lines: {
     gap: 3,

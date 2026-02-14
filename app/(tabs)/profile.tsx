@@ -7,7 +7,6 @@ import {
   Pressable,
   Platform,
   Image,
-  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -22,16 +21,37 @@ function SettingRow({
   label,
   value,
   onPress,
+  accessibilityHint,
 }: {
   icon: ComponentProps<typeof Feather>['name'];
   label: string;
   value: string;
   onPress?: () => void;
+  accessibilityHint?: string;
 }) {
+  if (!onPress) {
+    return (
+      <View style={styles.settingRow}>
+        <View style={styles.settingLeft}>
+          <View style={styles.iconContainer}>
+            <Feather name={icon} size={18} color={Colors.gradientMid} />
+          </View>
+          <Text style={styles.settingLabel}>{label}</Text>
+        </View>
+        <View style={styles.settingRight}>
+          <Text style={styles.settingValue}>{value}</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <Pressable
-      style={({ pressed }) => [styles.settingRow, pressed && onPress && styles.settingRowPressed]}
+      style={({ pressed }) => [styles.settingRow, pressed && styles.settingRowPressed]}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value}`}
+      accessibilityHint={accessibilityHint}
     >
       <View style={styles.settingLeft}>
         <View style={styles.iconContainer}>
@@ -39,9 +59,9 @@ function SettingRow({
         </View>
         <Text style={styles.settingLabel}>{label}</Text>
       </View>
-      <View style={styles.settingRight}>
-        <Text style={styles.settingValue}>{value}</Text>
-        {onPress && <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />}
+        <View style={styles.settingRight}>
+          <Text style={styles.settingValue}>{value}</Text>
+          <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
       </View>
     </Pressable>
   );
@@ -66,6 +86,10 @@ function SegmentedControl<T extends string>({
             onChange(opt.key);
             Haptics.selectionAsync();
           }}
+          accessibilityRole="button"
+          accessibilityLabel={`${opt.label} option`}
+          accessibilityHint="Updates this setting"
+          accessibilityState={{ selected: value === opt.key }}
         >
           <Text
             style={[
@@ -124,6 +148,8 @@ export default function ProfileScreen() {
           source={require('@/assets/images/easeverse_logo.png')}
           style={styles.logo}
           resizeMode="contain"
+          accessibilityRole="image"
+          accessibilityLabel="EaseVerse logo"
         />
       </View>
       <ScrollView
@@ -155,16 +181,28 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Language & Accent</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Language & Accent</Text>
           <View style={styles.settingsCard}>
-            <SettingRow icon="globe" label="Language" value={settings.language} onPress={cycleLanguage} />
+            <SettingRow
+              icon="globe"
+              label="Language"
+              value={settings.language}
+              onPress={cycleLanguage}
+              accessibilityHint="Cycles to the next language"
+            />
             <View style={styles.divider} />
-            <SettingRow icon="mic" label="Accent Goal" value={settings.accentGoal} onPress={cycleAccent} />
+            <SettingRow
+              icon="mic"
+              label="Accent Goal"
+              value={settings.accentGoal}
+              onPress={cycleAccent}
+              accessibilityHint="Cycles to the next accent target"
+            />
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Feedback Intensity</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Feedback Intensity</Text>
           <SegmentedControl<FeedbackIntensity>
             options={[
               { key: 'low', label: 'Low' },
@@ -177,7 +215,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Live Mode</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Live Mode</Text>
           <SegmentedControl<LiveMode>
             options={[
               { key: 'stability', label: 'Stability' },
@@ -194,7 +232,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Count-In</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Count-In</Text>
           <SegmentedControl<string>
             options={[
               { key: '0', label: 'None' },
@@ -207,7 +245,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">About</Text>
           <View style={styles.settingsCard}>
             <SettingRow icon="info" label="Version" value="1.0.0" />
             <View style={styles.divider} />
@@ -226,12 +264,14 @@ const styles = StyleSheet.create({
   },
   logoHeader: {
     width: '100%',
+    paddingHorizontal: 0,
+    marginBottom: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   logo: {
-    width: Dimensions.get('window').width - 32,
-    height: Math.round((Dimensions.get('window').width - 32) / 3.2),
+    width: '100%',
+    aspectRatio: 3.2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,

@@ -40,6 +40,8 @@ const sessionScoreRequestSchema = z.object({
 type RateWindowState = { count: number; windowStart: number };
 const pronounceRateWindow = new Map<string, RateWindowState>();
 const scoringRateWindow = new Map<string, RateWindowState>();
+const rateLimiterCleanupState = new WeakMap<Map<string, RateWindowState>, number>();
+const RATE_LIMITER_CLEANUP_INTERVAL_MS = 5 * 60_000;
 
 function extractApiKey(req: Request): string | undefined {
   const apiKey = req.header("x-api-key");
@@ -56,11 +58,25 @@ function extractApiKey(req: Request): string | undefined {
 }
 
 function getClientKey(req: Request): string {
-  const forwardedFor = req.header("x-forwarded-for");
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0].trim();
+  return req.ip || req.socket.remoteAddress || "unknown";
+}
+
+function pruneRateWindow(
+  bucket: Map<string, RateWindowState>,
+  windowMs: number,
+  now: number
+) {
+  const lastCleanup = rateLimiterCleanupState.get(bucket) ?? 0;
+  if (now - lastCleanup < RATE_LIMITER_CLEANUP_INTERVAL_MS) {
+    return;
   }
-  return req.ip || "unknown";
+
+  for (const [key, state] of bucket.entries()) {
+    if (now - state.windowStart > windowMs) {
+      bucket.delete(key);
+    }
+  }
+  rateLimiterCleanupState.set(bucket, now);
 }
 
 function isRateLimited(
@@ -70,6 +86,7 @@ function isRateLimited(
   windowMs: number
 ): boolean {
   const now = Date.now();
+  pruneRateWindow(bucket, windowMs, now);
   const state = bucket.get(key);
 
   if (!state || now - state.windowStart > windowMs) {

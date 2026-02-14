@@ -46,6 +46,9 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onPronounce(word);
         }}
+        accessibilityRole="button"
+        accessibilityLabel={`Hear pronunciation for ${word}`}
+        accessibilityHint={reason}
       >
         <View style={styles.fixIndex}>
           <Text style={styles.fixIndexText}>{index + 1}</Text>
@@ -80,6 +83,9 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               onPronounce(word);
             }}
+            accessibilityRole="button"
+            accessibilityLabel={`Replay pronunciation for ${word}`}
+            accessibilityHint="Plays the pronunciation guidance again"
           >
             <Ionicons name="reload" size={14} color={Colors.gradientStart} />
             <Text style={styles.replayText}>Replay</Text>
@@ -119,7 +125,14 @@ export default function SessionReviewScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <View style={styles.topBar}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Returns to the previous screen"
+          >
             <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
           </Pressable>
         </View>
@@ -171,11 +184,18 @@ export default function SessionReviewScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to sessions"
+        >
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </Pressable>
-        <Text style={styles.topBarTitle} numberOfLines={1}>Session Review</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.topBarTitle} numberOfLines={1} accessibilityRole="header">Session Review</Text>
+        <View style={{ width: 44 }} />
       </View>
 
       {showAddedToast && (
@@ -322,6 +342,9 @@ export default function SessionReviewScreen() {
             router.push({ pathname: '/practice/[id]', params: { id: session.id } });
           }}
           style={styles.practicePressable}
+          accessibilityRole="button"
+          accessibilityLabel="Open practice loop"
+          accessibilityHint="Starts focused looping practice for this session"
         >
           <LinearGradient
             colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
@@ -349,6 +372,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 12,
+  },
+  backButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   topBarTitle: {
     color: Colors.textPrimary,
@@ -660,6 +689,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     alignSelf: 'flex-start',
+    minHeight: 36,
     paddingVertical: 4,
   },
   replayText: {

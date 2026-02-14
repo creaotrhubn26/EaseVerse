@@ -22,7 +22,7 @@ import type { LyricLine, SignalQuality, Session } from '@/lib/types';
 
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
-  const { activeSong, songs, setActiveSong, addSession, settings } = useApp();
+  const { activeSong, songs, setActiveSong, addSession, updateSession, settings } = useApp();
   const recording = useRecording();
   const [activeLineIndex, setActiveLineIndex] = useState(0);
   const [activeWordIndex, setActiveWordIndex] = useState(0);
@@ -38,13 +38,18 @@ export default function SingScreen() {
   const stabilityHoldTicksRef = useRef(0);
   const cancelCountInRef = useRef(false);
   const handleStopRef = useRef<(() => Promise<void>) | null>(null);
+  const recordingAudioLevelRef = useRef(0);
+  const coachHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isRecording = recording.isRecording;
   const isPaused = recording.isPaused;
   const duration = recording.duration;
 
   const lyricsText = activeSong?.lyrics || '';
-  const lyricsLines = lyricsText.split('\n').filter(l => l.trim());
+  const lyricsLines = useMemo(
+    () => lyricsText.split('\n').filter(l => l.trim()),
+    [lyricsText]
+  );
   const genre = activeSong?.genre || 'pop';
   const genreProfile = useMemo(() => getGenreProfile(genre), [genre]);
   const genreHints = useMemo(() => getGenreCoachHints(genre), [genre]);
@@ -80,6 +85,10 @@ export default function SingScreen() {
         : 4000;
 
   useEffect(() => {
+    recordingAudioLevelRef.current = recording.audioLevel;
+  }, [recording.audioLevel]);
+
+  useEffect(() => {
     if (lyricsText) {
       setLines(
         buildDemoLyricLines(
@@ -98,7 +107,7 @@ export default function SingScreen() {
   useEffect(() => {
     if (isRecording && !isPaused) {
       intervalRef.current = setInterval(() => {
-        const currentLevel = recording.audioLevel;
+        const currentLevel = recordingAudioLevelRef.current;
         setActiveWordIndex(prev => {
           const shouldHoldForStability =
             settings.liveMode === 'stability' &&
@@ -141,7 +150,6 @@ export default function SingScreen() {
     activeLineIndex,
     lyricsLines.length,
     lyricsLines,
-    recording.audioLevel,
     playbackCadenceMs,
     settings.liveMode,
     stabilityAdvanceThreshold,
@@ -162,13 +170,26 @@ export default function SingScreen() {
               ? baseHint.replace('! ', '')
               : baseHint;
         setCoachHint(hint);
-        setTimeout(() => setCoachHint(null), 2500);
+        if (coachHintTimeoutRef.current) {
+          clearTimeout(coachHintTimeoutRef.current);
+        }
+        coachHintTimeoutRef.current = setTimeout(() => setCoachHint(null), 2500);
       }, coachIntervalMs);
     } else {
       if (coachTimerRef.current) clearInterval(coachTimerRef.current);
+      if (coachHintTimeoutRef.current) {
+        clearTimeout(coachHintTimeoutRef.current);
+        coachHintTimeoutRef.current = null;
+      }
       setCoachHint(null);
     }
-    return () => { if (coachTimerRef.current) clearInterval(coachTimerRef.current); };
+    return () => {
+      if (coachTimerRef.current) clearInterval(coachTimerRef.current);
+      if (coachHintTimeoutRef.current) {
+        clearTimeout(coachHintTimeoutRef.current);
+        coachHintTimeoutRef.current = null;
+      }
+    };
   }, [
     isRecording,
     isPaused,
@@ -263,15 +284,36 @@ export default function SingScreen() {
         topToFix,
       };
 
-      let resolvedInsights = fallbackInsights;
-      if (result.uri) {
-        const scored = await analyzeSessionRecording({
-          recordingUri: result.uri,
-          lyrics: lyricsText,
-          durationSeconds: elapsed,
-        });
-        if (scored?.insights) {
-          resolvedInsights = {
+      const sessionId = generateId();
+
+      const session: Session = {
+        id: sessionId,
+        songId: activeSong?.id,
+        genre,
+        title: `${activeSong?.title || 'Recording'} - Take`,
+        duration: elapsed,
+        date: Date.now(),
+        tags: ['practice', genreProfile.label.toLowerCase()],
+        favorite: false,
+        insights: fallbackInsights,
+        lyrics: lyricsText,
+      };
+      addSession(session);
+      router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
+
+      const recordingUri = result.uri;
+      if (recordingUri) {
+        void (async () => {
+          const scored = await analyzeSessionRecording({
+            recordingUri,
+            lyrics: lyricsText,
+            durationSeconds: elapsed,
+          });
+          if (!scored?.insights) {
+            return;
+          }
+
+          const resolvedInsights: Session['insights'] = {
             textAccuracy: Math.max(0, Math.min(100, scored.insights.textAccuracy)),
             pronunciationClarity: Math.max(
               0,
@@ -283,29 +325,16 @@ export default function SingScreen() {
                 ? scored.insights.topToFix.slice(0, 5)
                 : fallbackInsights.topToFix,
           };
-        }
-      }
 
-      const session: Session = {
-        id: generateId(),
-        songId: activeSong?.id,
-        genre,
-        title: `${activeSong?.title || 'Recording'} - Take`,
-        duration: elapsed,
-        date: Date.now(),
-        tags: ['practice', genreProfile.label.toLowerCase()],
-        favorite: false,
-        insights: resolvedInsights,
-        lyrics: lyricsText,
-      };
-      addSession(session);
-      router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
+          updateSession(sessionId, { insights: resolvedInsights });
+        })();
+      }
     }
     wordAudioLevelsRef.current = new Map();
     setActiveLineIndex(0);
     setActiveWordIndex(0);
     setCountInRemaining(null);
-  }, [activeSong, lyricsText, addSession, genre, genreProfile, recording, feedbackThresholds]);
+  }, [activeSong, lyricsText, addSession, updateSession, genre, genreProfile, recording, feedbackThresholds]);
 
   useEffect(() => {
     handleStopRef.current = handleStop;
@@ -366,8 +395,11 @@ export default function SingScreen() {
             Haptics.selectionAsync();
             setShowSongPicker(true);
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Choose song"
+          accessibilityHint="Opens the song picker"
         >
-          <Text style={styles.songTitle} numberOfLines={1}>
+          <Text style={styles.songTitle} numberOfLines={1} accessibilityRole="header">
             {activeSong?.title || 'No Song'}
           </Text>
           <Ionicons name="chevron-down" size={16} color={Colors.textTertiary} />
@@ -398,8 +430,15 @@ export default function SingScreen() {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               router.push('/warmup');
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Open warm up"
+            accessibilityHint="Starts the vocal warm-up routine"
           >
-            <Image source={require('@/assets/images/warmup-icon.png')} style={styles.warmUpIcon} />
+            <Image
+              source={require('@/assets/images/warmup-icon.png')}
+              style={styles.warmUpIcon}
+              accessible={false}
+            />
             <Text style={styles.warmUpBtnText}>Warm Up</Text>
           </Pressable>
           <Pressable
@@ -408,8 +447,15 @@ export default function SingScreen() {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               router.push('/mindfulness');
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Open mindfulness"
+            accessibilityHint="Starts the breathing and focus routine"
           >
-            <Image source={require('@/assets/images/mindfulness-icon.png')} style={styles.mindfulIcon} />
+            <Image
+              source={require('@/assets/images/mindfulness-icon.png')}
+              style={styles.mindfulIcon}
+              accessible={false}
+            />
           </Pressable>
         </View>
       )}
@@ -433,7 +479,7 @@ export default function SingScreen() {
               ? Colors.warningUnderline
               : Colors.textTertiary,
           }]} />
-          <Text style={styles.statusText}>{statusText}</Text>
+          <Text style={styles.statusText} accessibilityLiveRegion="polite">{statusText}</Text>
           {isRecording && (
             <Text style={styles.timerText}>{formatTime(duration)}</Text>
           )}
@@ -444,6 +490,10 @@ export default function SingScreen() {
             style={styles.transportBtn}
             onPress={handleMarker}
             disabled={!isRecording}
+            accessibilityRole="button"
+            accessibilityLabel="Add marker"
+            accessibilityHint="Adds a marker at the current recording time"
+            accessibilityState={{ disabled: !isRecording }}
           >
             <Ionicons
               name="flag"
@@ -467,11 +517,22 @@ export default function SingScreen() {
                 handleStop();
               }}
               testID="stop-button"
+              accessibilityRole="button"
+              accessibilityLabel="Stop recording"
+              accessibilityHint="Stops recording and opens session review"
             >
               <Ionicons name="stop-circle" size={28} color={Colors.dangerUnderline} />
             </Pressable>
           ) : (
-            <Pressable style={styles.transportBtn} onPress={() => {}}>
+            <Pressable
+              style={styles.transportBtn}
+              onPress={() => {}}
+              disabled
+              accessibilityRole="button"
+              accessibilityLabel="Metronome"
+              accessibilityHint="Metronome is not available yet"
+              accessibilityState={{ disabled: true }}
+            >
               <MaterialCommunityIcons
                 name="metronome"
                 size={24}
@@ -490,6 +551,9 @@ export default function SingScreen() {
             <Pressable
               style={styles.emptyBtn}
               onPress={() => router.push('/(tabs)/lyrics')}
+              accessibilityRole="button"
+              accessibilityLabel="Add lyrics"
+              accessibilityHint="Navigates to the lyrics tab"
             >
               <LinearGradient
                 colors={[Colors.gradientStart, Colors.gradientEnd]}
@@ -534,6 +598,7 @@ const styles = StyleSheet.create({
     gap: 6,
     flex: 1,
     marginRight: 12,
+    minHeight: 44,
   },
   songTitle: {
     color: Colors.textPrimary,
@@ -583,6 +648,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    minHeight: 44,
     borderRadius: 10,
     backgroundColor: Colors.accentSubtle,
     borderWidth: 1,
@@ -600,14 +666,14 @@ const styles = StyleSheet.create({
   mindfulBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     overflow: 'hidden',
   },
   mindfulIcon: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: 10,
   },
   genreTipText: {

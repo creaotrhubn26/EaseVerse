@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback, useRef } from 'react';
 import type { Song, Session, UserSettings } from './types';
 import * as Storage from './storage';
 import { demoSong, demoSessions } from './demo-data';
@@ -16,6 +16,7 @@ interface AppContextValue {
   updateSong: (song: Song) => void;
   removeSong: (id: string) => void;
   addSession: (session: Session) => void;
+  updateSession: (id: string, patch: Partial<Session>) => void;
   toggleFavorite: (id: string) => void;
   removeSession: (id: string) => void;
   updateSettings: (settings: Partial<UserSettings>) => void;
@@ -36,8 +37,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const queuePersist = useCallback((task: () => Promise<void>) => {
+    persistQueueRef.current = persistQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          await task();
+        } catch (error) {
+          console.error('Failed to persist app data:', error);
+        }
+      });
+    return persistQueueRef.current;
+  }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
         let loadedSongs = await Storage.getSongs();
@@ -55,6 +72,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        if (cancelled) {
+          return;
+        }
         setSongs(loadedSongs);
         setSessions(loadedSessions);
         setSettings(loadedSettings);
@@ -62,52 +82,78 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.error('Failed to load data', e);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const addSong = useCallback(async (song: Song) => {
+  const addSong = useCallback((song: Song) => {
     setSongs(prev => [song, ...prev]);
-    await Storage.saveSong(song);
-  }, []);
+    void queuePersist(() => Storage.saveSong(song));
+  }, [queuePersist]);
 
-  const updateSong = useCallback(async (song: Song) => {
+  const updateSong = useCallback((song: Song) => {
     setSongs(prev => prev.map(s => s.id === song.id ? song : s));
-    await Storage.saveSong(song);
-  }, []);
+    void queuePersist(() => Storage.saveSong(song));
+  }, [queuePersist]);
 
-  const removeSong = useCallback(async (id: string) => {
+  const removeSong = useCallback((id: string) => {
     setSongs(prev => prev.filter(s => s.id !== id));
-    await Storage.deleteSong(id);
-  }, []);
+    void queuePersist(() => Storage.deleteSong(id));
+  }, [queuePersist]);
 
-  const addSession = useCallback(async (session: Session) => {
+  const addSession = useCallback((session: Session) => {
     setSessions(prev => [session, ...prev]);
-    await Storage.saveSession(session);
-  }, []);
+    void queuePersist(() => Storage.saveSession(session));
+  }, [queuePersist]);
 
-  const toggleFavorite = useCallback(async (id: string) => {
+  const updateSession = useCallback((id: string, patch: Partial<Session>) => {
+    let updatedSession: Session | undefined;
+    setSessions(prev => prev.map(session => {
+      if (session.id !== id) {
+        return session;
+      }
+      updatedSession = { ...session, ...patch };
+      return updatedSession;
+    }));
+    if (updatedSession) {
+      void queuePersist(() => Storage.saveSession(updatedSession as Session));
+    }
+  }, [queuePersist]);
+
+  const toggleFavorite = useCallback((id: string) => {
+    let updatedSession: Session | undefined;
     setSessions(prev => {
       const updated = prev.map(s => s.id === id ? { ...s, favorite: !s.favorite } : s);
-      const session = updated.find(s => s.id === id);
-      if (session) Storage.saveSession(session);
+      updatedSession = updated.find(s => s.id === id);
       return updated;
     });
-  }, []);
+    if (updatedSession) {
+      void queuePersist(() => Storage.saveSession(updatedSession as Session));
+    }
+  }, [queuePersist]);
 
-  const removeSession = useCallback(async (id: string) => {
+  const removeSession = useCallback((id: string) => {
     setSessions(prev => prev.filter(s => s.id !== id));
-    await Storage.deleteSession(id);
-  }, []);
+    void queuePersist(() => Storage.deleteSession(id));
+  }, [queuePersist]);
 
-  const updateSettingsCb = useCallback(async (partial: Partial<UserSettings>) => {
+  const updateSettingsCb = useCallback((partial: Partial<UserSettings>) => {
+    let updatedSettings: UserSettings | undefined;
     setSettings(prev => {
-      const updated = { ...prev, ...partial };
-      Storage.saveSettings(updated);
-      return updated;
+      updatedSettings = { ...prev, ...partial };
+      return updatedSettings;
     });
-  }, []);
+    if (updatedSettings) {
+      void queuePersist(() => Storage.saveSettings(updatedSettings as UserSettings));
+    }
+  }, [queuePersist]);
 
   const value = useMemo(() => ({
     songs,
@@ -122,11 +168,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateSong,
     removeSong,
     addSession,
+    updateSession,
     toggleFavorite,
     removeSession,
     updateSettings: updateSettingsCb,
     isLoading,
-  }), [songs, sessions, settings, activeSong, isLoading, addSong, updateSong, removeSong, addSession, toggleFavorite, removeSession, updateSettingsCb]);
+  }), [songs, sessions, settings, activeSong, isLoading, addSong, updateSong, removeSong, addSession, updateSession, toggleFavorite, removeSession, updateSettingsCb]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

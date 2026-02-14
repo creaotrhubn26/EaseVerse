@@ -24,6 +24,16 @@ interface RecordButtonProps {
 export default function RecordButton({ isRecording, isPaused, onPress, size = 80 }: RecordButtonProps) {
   const pulseAnim = useSharedValue(0);
   const pressScale = useSharedValue(1);
+  const accessibilityLabel = !isRecording
+    ? 'Start recording'
+    : isPaused
+      ? 'Resume recording'
+      : 'Pause recording';
+  const accessibilityHint = !isRecording
+    ? 'Starts live singing analysis'
+    : isPaused
+      ? 'Resumes recording and live analysis'
+      : 'Pauses recording and live analysis';
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -68,7 +78,15 @@ export default function RecordButton({ isRecording, isPaused, onPress, size = 80
         ]}
       />
       <Animated.View style={buttonScale}>
-        <Pressable onPress={handlePress} style={styles.pressable} testID="record-button">
+        <Pressable
+          onPress={handlePress}
+          style={styles.pressable}
+          testID="record-button"
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          accessibilityHint={accessibilityHint}
+          accessibilityState={{ busy: isRecording && !isPaused }}
+        >
           <LinearGradient
             colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
             start={{ x: 0, y: 0 }}

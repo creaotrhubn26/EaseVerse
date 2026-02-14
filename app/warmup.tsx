@@ -138,7 +138,13 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
 
       <View style={styles.timerButtons}>
         {timeLeft === 0 ? (
-          <Pressable onPress={onComplete} style={styles.timerMainBtn}>
+          <Pressable
+            onPress={onComplete}
+            style={styles.timerMainBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Next exercise"
+            accessibilityHint="Moves to the next warm-up exercise"
+          >
             <LinearGradient
               colors={[Colors.gradientStart, Colors.gradientMid]}
               start={{ x: 0, y: 0 }}
@@ -150,7 +156,13 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
             </LinearGradient>
           </Pressable>
         ) : (
-          <Pressable onPress={handleStartPause} style={styles.timerMainBtn}>
+          <Pressable
+            onPress={handleStartPause}
+            style={styles.timerMainBtn}
+            accessibilityRole="button"
+            accessibilityLabel={isRunning ? 'Pause timer' : 'Start timer'}
+            accessibilityHint="Controls the current warm-up exercise timer"
+          >
             <LinearGradient
               colors={isRunning ? ['#F87171', '#EF4444'] : [Colors.gradientStart, Colors.gradientMid]}
               start={{ x: 0, y: 0 }}
@@ -164,7 +176,13 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
             </LinearGradient>
           </Pressable>
         )}
-        <Pressable onPress={onSkip} style={styles.skipBtn}>
+        <Pressable
+          onPress={onSkip}
+          style={styles.skipBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Skip exercise"
+          accessibilityHint="Moves to the next warm-up exercise"
+        >
           <Feather name="skip-forward" size={18} color={Colors.textSecondary} />
           <Text style={styles.skipBtnText}>Skip</Text>
         </Pressable>
@@ -252,11 +270,18 @@ export default function WarmUpScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            style={styles.headerActionButton}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Returns to the previous screen"
+          >
             <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
           </Pressable>
-          <Text style={styles.headerTitle}>Vocal Warm-Up</Text>
-          <View style={{ width: 24 }} />
+          <Text style={styles.headerTitle} accessibilityRole="header">Vocal Warm-Up</Text>
+          <View style={{ width: 44 }} />
         </View>
 
         <ScrollView
@@ -331,7 +356,13 @@ export default function WarmUpScreen() {
         </ScrollView>
 
         <View style={[styles.bottomAction, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'web' ? 34 : 0) + 20 }]}>
-          <Pressable onPress={handleStart} style={styles.startPressable}>
+          <Pressable
+            onPress={handleStart}
+            style={styles.startPressable}
+            accessibilityRole="button"
+            accessibilityLabel="Begin warm-up"
+            accessibilityHint="Starts guided vocal warm-up exercises"
+          >
             <LinearGradient
               colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
               start={{ x: 0, y: 0 }}
@@ -351,9 +382,9 @@ export default function WarmUpScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <View style={styles.header}>
-          <View style={{ width: 24 }} />
-          <Text style={styles.headerTitle}>All Done</Text>
-          <View style={{ width: 24 }} />
+          <View style={{ width: 44 }} />
+          <Text style={styles.headerTitle} accessibilityRole="header">All Done</Text>
+          <View style={{ width: 44 }} />
         </View>
         <View style={styles.completeContainer}>
           <View style={styles.completeIconWrap}>
@@ -385,7 +416,13 @@ export default function WarmUpScreen() {
             </View>
           </View>
 
-          <Pressable onPress={() => router.back()} style={styles.donePresssable}>
+          <Pressable
+            onPress={() => router.back()}
+            style={styles.donePresssable}
+            accessibilityRole="button"
+            accessibilityLabel="Ready to sing"
+            accessibilityHint="Returns to singing after warm-up"
+          >
             <LinearGradient
               colors={[Colors.gradientStart, Colors.gradientMid]}
               start={{ x: 0, y: 0 }}
@@ -404,7 +441,14 @@ export default function WarmUpScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={12}>
+        <Pressable
+          onPress={handleBack}
+          hitSlop={12}
+          style={styles.headerActionButton}
+          accessibilityRole="button"
+          accessibilityLabel="Previous exercise"
+          accessibilityHint="Returns to the previous exercise or intro"
+        >
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </Pressable>
         <View style={styles.headerCenter}>
@@ -424,7 +468,14 @@ export default function WarmUpScreen() {
             ))}
           </View>
         </View>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={styles.headerActionButton}
+          accessibilityRole="button"
+          accessibilityLabel="Close warm-up"
+          accessibilityHint="Exits the warm-up flow"
+        >
           <Ionicons name="close" size={24} color={Colors.textSecondary} />
         </Pressable>
       </View>
@@ -491,6 +542,12 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 18,
     fontFamily: 'Inter_600SemiBold',
+  },
+  headerActionButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerCenter: {
     alignItems: 'center',
@@ -789,7 +846,9 @@ const styles = StyleSheet.create({
   skipBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+    minHeight: 44,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 14,

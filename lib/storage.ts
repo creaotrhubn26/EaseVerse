@@ -13,9 +13,25 @@ const defaultSettings: UserSettings = {
   countIn: 0,
 };
 
+function safeParseJson(raw: string): unknown | null {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export async function getSongs(): Promise<Song[]> {
   const data = await AsyncStorage.getItem(SONGS_KEY);
-  return data ? JSON.parse(data) : [];
+  if (!data) {
+    return [];
+  }
+  const parsed = safeParseJson(data);
+  if (!Array.isArray(parsed)) {
+    await AsyncStorage.removeItem(SONGS_KEY);
+    return [];
+  }
+  return parsed as Song[];
 }
 
 export async function saveSong(song: Song): Promise<void> {
@@ -36,7 +52,15 @@ export async function deleteSong(id: string): Promise<void> {
 
 export async function getSessions(): Promise<Session[]> {
   const data = await AsyncStorage.getItem(SESSIONS_KEY);
-  return data ? JSON.parse(data) : [];
+  if (!data) {
+    return [];
+  }
+  const parsed = safeParseJson(data);
+  if (!Array.isArray(parsed)) {
+    await AsyncStorage.removeItem(SESSIONS_KEY);
+    return [];
+  }
+  return parsed as Session[];
 }
 
 export async function saveSession(session: Session): Promise<void> {
@@ -57,7 +81,15 @@ export async function deleteSession(id: string): Promise<void> {
 
 export async function getSettings(): Promise<UserSettings> {
   const data = await AsyncStorage.getItem(SETTINGS_KEY);
-  return data ? { ...defaultSettings, ...JSON.parse(data) } : defaultSettings;
+  if (!data) {
+    return defaultSettings;
+  }
+  const parsed = safeParseJson(data);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    await AsyncStorage.removeItem(SETTINGS_KEY);
+    return defaultSettings;
+  }
+  return { ...defaultSettings, ...(parsed as Partial<UserSettings>) };
 }
 
 export async function saveSettings(settings: UserSettings): Promise<void> {

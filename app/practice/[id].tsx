@@ -47,6 +47,7 @@ export default function PracticeLoopScreen() {
 
   const progressAnim = useSharedValue(0);
   const loopTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const coachHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -78,18 +79,29 @@ export default function PracticeLoopScreen() {
           if (hints.length > 0) {
             const hint = hints[Math.floor(Math.random() * hints.length)];
             setCoachHint(hint.reason);
-            setTimeout(() => setCoachHint(null), 2500);
+            if (coachHintTimeoutRef.current) {
+              clearTimeout(coachHintTimeoutRef.current);
+            }
+            coachHintTimeoutRef.current = setTimeout(() => setCoachHint(null), 2500);
           }
         }
       }, interval);
     } else {
       if (loopTimerRef.current) clearInterval(loopTimerRef.current);
+      if (coachHintTimeoutRef.current) {
+        clearTimeout(coachHintTimeoutRef.current);
+        coachHintTimeoutRef.current = null;
+      }
       setProgress(0);
       progressAnim.value = 0;
     }
 
     return () => {
       if (loopTimerRef.current) clearInterval(loopTimerRef.current);
+      if (coachHintTimeoutRef.current) {
+        clearTimeout(coachHintTimeoutRef.current);
+        coachHintTimeoutRef.current = null;
+      }
     };
   }, [isLooping, loopLength, speed, progressAnim, session?.insights?.topToFix]);
 
@@ -130,7 +142,14 @@ export default function PracticeLoopScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <View style={styles.topBar}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Returns to the previous screen"
+          >
             <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
           </Pressable>
         </View>
@@ -144,11 +163,18 @@ export default function PracticeLoopScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to session review"
+        >
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </Pressable>
-        <Text style={styles.topBarTitle}>Practice Loop</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.topBarTitle} accessibilityRole="header">Practice Loop</Text>
+        <View style={{ width: 44 }} />
       </View>
 
       <View style={styles.body}>
@@ -166,6 +192,10 @@ export default function PracticeLoopScreen() {
                   setSelectedLineIdx(idx);
                   Haptics.selectionAsync();
                 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Select phrase ${idx + 1}`}
+                accessibilityHint={line}
+                accessibilityState={{ selected: selectedLineIdx === idx }}
               >
                 <Text
                   style={[
@@ -195,6 +225,9 @@ export default function PracticeLoopScreen() {
               const hardWord = words.reduce((longest: string, w: string) => w.length > longest.length ? w : longest, '');
               coach.pronounce(hardWord, line);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Hear pronunciation"
+            accessibilityHint="Plays pronunciation guidance for the selected phrase"
           >
             {coach.state === 'loading' ? (
               <ActivityIndicator size="small" color={Colors.gradientStart} />
@@ -245,6 +278,9 @@ export default function PracticeLoopScreen() {
                     setLoopLength(l);
                     Haptics.selectionAsync();
                   }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Set loop length to ${l} seconds`}
+                  accessibilityState={{ selected: loopLength === l }}
                 >
                   <Text style={[styles.optionText, loopLength === l && styles.optionTextActive]}>
                     {l}s
@@ -268,6 +304,9 @@ export default function PracticeLoopScreen() {
                     setSpeed(s);
                     Haptics.selectionAsync();
                   }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Set speed to ${s}x`}
+                  accessibilityState={{ selected: speed === s }}
                 >
                   <Text style={[styles.optionText, speed === s && styles.optionTextActive]}>
                     {s}x
@@ -287,6 +326,9 @@ export default function PracticeLoopScreen() {
             if (!isLooping) setLoopCount(0);
           }}
           style={styles.loopPressable}
+          accessibilityRole="button"
+          accessibilityLabel={isLooping ? 'Stop practice loop' : 'Start practice loop'}
+          accessibilityHint="Toggles repeated playback for the selected phrase"
         >
           <Animated.View style={isLooping ? pulseStyle : undefined}>
             <LinearGradient
@@ -321,6 +363,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 12,
+  },
+  backButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   topBarTitle: {
     color: Colors.textPrimary,
@@ -363,6 +411,7 @@ const styles = StyleSheet.create({
   phraseLine: {
     paddingHorizontal: 14,
     paddingVertical: 10,
+    minHeight: 44,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderGlass,
   },
@@ -437,6 +486,7 @@ const styles = StyleSheet.create({
   optionBtn: {
     flex: 1,
     paddingVertical: 10,
+    minHeight: 44,
     borderRadius: 10,
     alignItems: 'center',
     backgroundColor: Colors.surface,
@@ -492,7 +542,9 @@ const styles = StyleSheet.create({
   pronounceBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+    minHeight: 44,
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 20,

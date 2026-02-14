@@ -60,7 +60,7 @@ export default function SessionsScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Sessions</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">Sessions</Text>
         <View style={styles.headerStats}>
           <View style={styles.statPill}>
             <Text style={styles.statNumber}>{sessions.length}</Text>
@@ -84,6 +84,10 @@ export default function SessionsScreen() {
               setFilter(f.key);
               Haptics.selectionAsync();
             }}
+            accessibilityRole="button"
+            accessibilityLabel={`Filter by ${f.label}`}
+            accessibilityHint="Updates the sessions list"
+            accessibilityState={{ selected: filter === f.key }}
           >
             <Ionicons
               name={f.icon}
@@ -188,9 +192,11 @@ const styles = StyleSheet.create({
   filterBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
     paddingHorizontal: 14,
     paddingVertical: 8,
+    minHeight: 44,
     borderRadius: 10,
     backgroundColor: Colors.surfaceGlass,
     borderWidth: 1,

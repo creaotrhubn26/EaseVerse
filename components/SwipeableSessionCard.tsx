@@ -41,6 +41,9 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
           onDelete();
         }}
         style={styles.deleteAction}
+        accessibilityRole="button"
+        accessibilityLabel="Delete session"
+        accessibilityHint="Removes this recording from your sessions"
       >
         <Animated.View style={[styles.deleteContent, { transform: [{ scale }], opacity }]}>
           <Ionicons name="trash-outline" size={22} color="#fff" />
@@ -74,6 +77,10 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
           onFavorite();
         }}
         style={styles.favoriteAction}
+        accessibilityRole="button"
+        accessibilityLabel={session.favorite ? 'Remove favorite' : 'Mark as favorite'}
+        accessibilityHint="Adds or removes this session from flagged sessions"
+        accessibilityState={{ selected: session.favorite }}
       >
         <Animated.View style={[styles.favoriteContent, { transform: [{ scale }], opacity }]}>
           <View>

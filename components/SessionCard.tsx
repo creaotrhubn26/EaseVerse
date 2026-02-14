@@ -37,11 +37,16 @@ function getScoreColor(score: number): string {
 
 export default function SessionCard({ session, onPress, onFavorite, onDelete }: SessionCardProps) {
   const genreProfile = session.genre ? getGenreProfile(session.genre) : null;
+  const formattedDate = formatDate(session.date);
+  const formattedDuration = formatDuration(session.duration);
 
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`Open session ${session.title}`}
+      accessibilityHint={`Recorded ${formattedDate} for ${formattedDuration}. Accuracy ${session.insights.textAccuracy} percent.`}
     >
       <View style={styles.header}>
         <View style={styles.titleRow}>
@@ -52,6 +57,11 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
               onFavorite();
             }}
             hitSlop={12}
+            style={styles.iconActionButton}
+            accessibilityRole="button"
+            accessibilityLabel={session.favorite ? 'Remove favorite' : 'Mark as favorite'}
+            accessibilityHint="Saves this session to your flagged list"
+            accessibilityState={{ selected: session.favorite }}
           >
             <Ionicons
               name={session.favorite ? 'heart' : 'heart-outline'}
@@ -65,15 +75,19 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
               onDelete();
             }}
             hitSlop={12}
+            style={styles.iconActionButton}
+            accessibilityRole="button"
+            accessibilityLabel="Delete session"
+            accessibilityHint="Removes this recording from your sessions"
           >
             <Ionicons name="trash-outline" size={18} color={Colors.textTertiary} />
           </Pressable>
         </View>
         <View style={styles.meta}>
-          <Text style={styles.metaText}>{formatDate(session.date)}</Text>
+          <Text style={styles.metaText}>{formattedDate}</Text>
           <View style={styles.dot} />
           <Feather name="clock" size={12} color={Colors.textTertiary} />
-          <Text style={styles.metaText}>{formatDuration(session.duration)}</Text>
+          <Text style={styles.metaText}>{formattedDuration}</Text>
         </View>
       </View>
 
@@ -119,6 +133,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  iconActionButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     color: Colors.textPrimary,

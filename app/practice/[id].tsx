@@ -59,7 +59,8 @@ export default function PracticeLoopScreen() {
   useEffect(() => {
     if (isLooping) {
       const interval = 100;
-      const totalSteps = (loopLength * 1000) / interval;
+      const effectiveLoopLengthMs = (loopLength * 1000) / speed;
+      const totalSteps = effectiveLoopLengthMs / interval;
       let step = 0;
 
       loopTimerRef.current = setInterval(() => {
@@ -90,7 +91,7 @@ export default function PracticeLoopScreen() {
     return () => {
       if (loopTimerRef.current) clearInterval(loopTimerRef.current);
     };
-  }, [isLooping, loopLength]);
+  }, [isLooping, loopLength, speed, progressAnim, session?.insights?.topToFix]);
 
   const pulseOpacity = useSharedValue(1);
 
@@ -107,7 +108,7 @@ export default function PracticeLoopScreen() {
     } else {
       pulseOpacity.value = withTiming(1, { duration: 200 });
     }
-  }, [isLooping]);
+  }, [isLooping, pulseOpacity]);
 
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: pulseOpacity.value,

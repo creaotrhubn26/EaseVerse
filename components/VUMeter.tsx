@@ -29,7 +29,7 @@ function MeterBar({ index, isActive, audioLevel, totalBars }: { index: number; i
     } else {
       height.value = withTiming(4, { duration: 200 });
     }
-  }, [isActive, audioLevel]);
+  }, [isActive, audioLevel, height, index, totalBars]);
 
   const barStyle = useAnimatedStyle(() => ({
     height: height.value,

@@ -7,9 +7,9 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-export function registerChatRoutes(app: Express): void {
+export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
   // Get all conversations
-  app.get("/api/conversations", async (_req: Request, res: Response) => {
+  app.get(`${basePath}/conversations`, async (_req: Request, res: Response) => {
     try {
       const conversations = await chatStorage.getAllConversations();
       res.json(conversations);
@@ -20,7 +20,7 @@ export function registerChatRoutes(app: Express): void {
   });
 
   // Get single conversation with messages
-  app.get("/api/conversations/:id", async (req: Request, res: Response) => {
+  app.get(`${basePath}/conversations/:id`, async (req: Request, res: Response) => {
     try {
       const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const id = parseInt(idParam);
@@ -37,7 +37,7 @@ export function registerChatRoutes(app: Express): void {
   });
 
   // Create new conversation
-  app.post("/api/conversations", async (req: Request, res: Response) => {
+  app.post(`${basePath}/conversations`, async (req: Request, res: Response) => {
     try {
       const { title } = req.body;
       const conversation = await chatStorage.createConversation(title || "New Chat");
@@ -49,7 +49,7 @@ export function registerChatRoutes(app: Express): void {
   });
 
   // Delete conversation
-  app.delete("/api/conversations/:id", async (req: Request, res: Response) => {
+  app.delete(`${basePath}/conversations/:id`, async (req: Request, res: Response) => {
     try {
       const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const id = parseInt(idParam);
@@ -62,7 +62,7 @@ export function registerChatRoutes(app: Express): void {
   });
 
   // Send message and get AI response (streaming)
-  app.post("/api/conversations/:id/messages", async (req: Request, res: Response) => {
+  app.post(`${basePath}/conversations/:id/messages`, async (req: Request, res: Response) => {
     try {
       const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const conversationId = parseInt(idParam);
@@ -118,4 +118,3 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 }
-

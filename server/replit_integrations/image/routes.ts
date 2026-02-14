@@ -1,8 +1,8 @@
 import type { Express, Request, Response } from "express";
 import { openai } from "./client";
 
-export function registerImageRoutes(app: Express): void {
-  app.post("/api/generate-image", async (req: Request, res: Response) => {
+export function registerImageRoutes(app: Express, basePath = "/api/image"): void {
+  app.post(`${basePath}/generate`, async (req: Request, res: Response) => {
     try {
       const { prompt, size = "1024x1024" } = req.body;
 
@@ -31,4 +31,3 @@ export function registerImageRoutes(app: Express): void {
     }
   });
 }
-

@@ -26,7 +26,7 @@ export default function CoachPill({ hint, visible }: CoachPillProps) {
       opacity.value = withTiming(0, { duration: 150 });
       translateY.value = withTiming(8, { duration: 150 });
     }
-  }, [visible, hint]);
+  }, [visible, hint, opacity, translateY]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,

@@ -3,6 +3,7 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
+import type { ComponentProps } from 'react';
 
 type ToastVariant = 'success' | 'error' | 'info';
 
@@ -14,7 +15,9 @@ type ToastProps = {
   duration?: number;
 };
 
-const variantConfig: Record<ToastVariant, { icon: string; color: string }> = {
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
+
+const variantConfig: Record<ToastVariant, { icon: IoniconName; color: string }> = {
   success: { icon: 'checkmark-circle', color: '#4ADE80' },
   error: { icon: 'alert-circle', color: '#F87171' },
   info: { icon: 'information-circle', color: Colors.gradientStart },
@@ -33,8 +36,6 @@ export default function Toast({
 
   useEffect(() => {
     if (!visible) return;
-
-    const config = variantConfig[variant];
 
     Animated.parallel([
       Animated.timing(opacity, {

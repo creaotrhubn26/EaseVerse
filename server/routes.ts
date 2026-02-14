@@ -1,8 +1,93 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { textToSpeech, openai } from "./replit_integrations/audio/client";
+import { z } from "zod";
+import { buildSessionScoring } from "@shared/session-scoring";
+import { registerAudioRoutes } from "./replit_integrations/audio";
+import { registerChatRoutes } from "./replit_integrations/chat";
+import { registerImageRoutes } from "./replit_integrations/image";
+import {
+  textToSpeech,
+  openai,
+  speechToText,
+  ensureCompatibleFormat,
+} from "./replit_integrations/audio/client";
+
+const pronounceRequestSchema = z.object({
+  word: z.string().trim().min(1).max(60),
+  context: z.string().trim().max(280).optional(),
+});
+
+const pronounceResultSchema = z.object({
+  phonetic: z.string().trim().min(1).max(120),
+  tip: z.string().trim().min(1).max(160),
+  slow: z.string().trim().min(1).max(120),
+});
+
+const sessionScoreRequestSchema = z.object({
+  lyrics: z.string().trim().min(1).max(10000),
+  durationSeconds: z.number().int().min(1).max(3600).optional(),
+  audioBase64: z.string().min(50),
+});
+
+type RateWindowState = { count: number; windowStart: number };
+const pronounceRateWindow = new Map<string, RateWindowState>();
+const scoringRateWindow = new Map<string, RateWindowState>();
+
+function getClientKey(req: Request): string {
+  const forwardedFor = req.header("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0].trim();
+  }
+  return req.ip || "unknown";
+}
+
+function isRateLimited(
+  bucket: Map<string, RateWindowState>,
+  key: string,
+  maxPerWindow: number,
+  windowMs: number
+): boolean {
+  const now = Date.now();
+  const state = bucket.get(key);
+
+  if (!state || now - state.windowStart > windowMs) {
+    bucket.set(key, { count: 1, windowStart: now });
+    return false;
+  }
+
+  if (state.count >= maxPerWindow) {
+    return true;
+  }
+
+  state.count += 1;
+  bucket.set(key, state);
+  return false;
+}
+
+function enforceOptionalApiKey(
+  req: Request,
+  res: Response,
+  envVarName: string
+): boolean {
+  const expectedKey = process.env[envVarName];
+  if (!expectedKey) {
+    return true;
+  }
+
+  const providedKey = req.header("x-api-key");
+  if (providedKey !== expectedKey) {
+    res.status(401).json({ error: "Unauthorized" });
+    return false;
+  }
+
+  return true;
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  registerChatRoutes(app, "/api/chat");
+  registerAudioRoutes(app, "/api/audio");
+  registerImageRoutes(app, "/api/image");
+
   app.post("/api/tts", async (req: Request, res: Response) => {
     try {
       const { text, voice = "nova" } = req.body;
@@ -31,62 +116,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/pronounce", async (req: Request, res: Response) => {
     try {
-      const { word, context } = req.body;
-
-      if (!word || typeof word !== "string") {
-        return res.status(400).json({ error: "Word is required" });
+      if (!enforceOptionalApiKey(req, res, "PRONOUNCE_API_KEY")) {
+        return;
       }
 
-      const contextLine = typeof context === "string" ? context : "";
+      const clientKey = getClientKey(req);
+      if (isRateLimited(pronounceRateWindow, clientKey, 30, 60_000)) {
+        return res.status(429).json({ error: "Rate limit exceeded. Try again shortly." });
+      }
+
+      const parsedBody = pronounceRequestSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+
+      const { word, context } = parsedBody.data;
+      const contextLine = context || "";
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
-            content: `You are a vocal pronunciation coach for singers. Given a word (and optionally the lyric line it appears in), provide:
-1. phonetic: A simple phonetic spelling showing how to pronounce it clearly when singing (use easy-to-read phonetics like "ee-KWUHL" not IPA)
-2. tip: A short, practical singing tip (max 15 words) about how to pronounce this word clearly
-3. slow: The word broken into syllables with hyphens, written how it should sound when sung slowly
-
-Respond in JSON format only: {"phonetic":"...","tip":"...","slow":"..."}`
+            content:
+              "You are a vocal pronunciation coach for singers. Return strict JSON with keys: phonetic, tip, slow.",
           },
           {
             role: "user",
             content: contextLine
-              ? `Word: "${word}" in the line: "${contextLine}"`
-              : `Word: "${word}"`
-          }
+              ? `Word: "${word}" in lyric line: "${contextLine}". Keep tip under 15 words.`
+              : `Word: "${word}". Keep tip under 15 words.`,
+          },
         ],
-        temperature: 0.3,
+        temperature: 0.2,
         max_tokens: 150,
       });
 
-      const raw = completion.choices[0]?.message?.content || "";
-      let parsed: { phonetic: string; tip: string; slow: string };
-      try {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
-      } catch {
-        parsed = { phonetic: word, tip: "Enunciate clearly", slow: word };
+      const content = completion.choices[0]?.message?.content;
+      let resolved = { phonetic: word, tip: "Enunciate clearly", slow: word };
+      if (content) {
+        try {
+          const rawJson = JSON.parse(content);
+          const parsedResult = pronounceResultSchema.safeParse(rawJson);
+          if (parsedResult.success) {
+            resolved = parsedResult.data;
+          }
+        } catch {
+          // Keep fallback values when model output is malformed.
+        }
       }
 
-      const audioBuffer = await textToSpeech(
-        parsed.slow,
-        "nova",
-        "mp3"
-      );
+      const audioBuffer = await textToSpeech(resolved.slow, "nova", "mp3");
 
       res.json({
         word,
-        phonetic: parsed.phonetic,
-        tip: parsed.tip,
-        slow: parsed.slow,
+        phonetic: resolved.phonetic,
+        tip: resolved.tip,
+        slow: resolved.slow,
         audioBase64: audioBuffer.toString("base64"),
       });
     } catch (error) {
       console.error("Pronounce error:", error);
       res.status(500).json({ error: "Failed to generate pronunciation" });
+    }
+  });
+
+  app.post("/api/session-score", async (req: Request, res: Response) => {
+    try {
+      if (!enforceOptionalApiKey(req, res, "SESSION_SCORING_API_KEY")) {
+        return;
+      }
+
+      const clientKey = getClientKey(req);
+      if (isRateLimited(scoringRateWindow, clientKey, 12, 60_000)) {
+        return res.status(429).json({ error: "Rate limit exceeded. Try again shortly." });
+      }
+
+      const parsedBody = sessionScoreRequestSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+
+      const { lyrics, audioBase64, durationSeconds } = parsedBody.data;
+      const rawAudio = Buffer.from(audioBase64, "base64");
+      const { buffer: compatibleAudio, format } = await ensureCompatibleFormat(rawAudio);
+      const transcript = await speechToText(
+        compatibleAudio,
+        format === "wav" || format === "mp3" ? format : "wav"
+      );
+
+      const score = buildSessionScoring({
+        expectedLyrics: lyrics,
+        transcript,
+        durationSeconds,
+      });
+
+      return res.json(score);
+    } catch (error) {
+      console.error("Session scoring error:", error);
+      return res.status(500).json({ error: "Failed to analyze session" });
     }
   });
 

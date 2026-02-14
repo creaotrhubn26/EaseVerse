@@ -1,6 +1,6 @@
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
 import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,20 +11,20 @@ function NativeTabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "mic", selected: "mic.fill" }} />
-        <Label>Sing</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "mic", selected: "mic.fill" }} />
+        <NativeTabs.Trigger.Label>Sing</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="lyrics">
-        <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
-        <Label>Lyrics</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
+        <NativeTabs.Trigger.Label>Lyrics</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="sessions">
-        <Icon sf={{ default: "clock", selected: "clock.fill" }} />
-        <Label>Sessions</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "clock", selected: "clock.fill" }} />
+        <NativeTabs.Trigger.Label>Sessions</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
-        <Icon sf={{ default: "person", selected: "person.fill" }} />
-        <Label>Profile</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "person", selected: "person.fill" }} />
+        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );

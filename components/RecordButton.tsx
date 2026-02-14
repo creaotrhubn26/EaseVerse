@@ -38,7 +38,7 @@ export default function RecordButton({ isRecording, isPaused, onPress, size = 80
     } else {
       pulseAnim.value = withTiming(0, { duration: 300 });
     }
-  }, [isRecording, isPaused]);
+  }, [isRecording, isPaused, pulseAnim]);
 
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: interpolate(pulseAnim.value, [0, 1], [0.2, 0.6]),

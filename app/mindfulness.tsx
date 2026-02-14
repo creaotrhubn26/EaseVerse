@@ -488,7 +488,7 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
 
 export default function MindfulnessScreen() {
   const insets = useSafeAreaInsets();
-  const narration = useNarration();
+  const { speak: speakNarration, stop: stopNarration, state: narrationState } = useNarration();
   const [currentPhase, setCurrentPhase] = useState<MindfulnessPhase>('mood');
   const [selectedMood, setSelectedMood] = useState<MoodLevel | null>(null);
   const [selectedBreathing, setSelectedBreathing] = useState<BreathingPattern | null>(null);
@@ -506,16 +506,16 @@ export default function MindfulnessScreen() {
     AudioModule.setAudioModeAsync({
       playsInSilentMode: true,
     });
-    return () => { narration.stop(); };
-  }, []);
+    return () => { stopNarration(); };
+  }, [stopNarration]);
 
   const narrateIfEnabled = useCallback(async (text: string, onDone?: () => void) => {
     if (narrationEnabled) {
-      await narration.speak(text, onDone);
+      await speakNarration(text, onDone);
     } else {
       onDone?.();
     }
-  }, [narrationEnabled, narration]);
+  }, [narrationEnabled, speakNarration]);
 
   useEffect(() => {
     fadeIn.value = withTiming(1, { duration: 400 });
@@ -539,7 +539,7 @@ export default function MindfulnessScreen() {
   }, [fadeIn]);
 
   const goToPhase = useCallback((phase: MindfulnessPhase) => {
-    narration.stop();
+    stopNarration();
     fadeIn.value = 0;
     setCurrentPhase(phase);
     Haptics.selectionAsync();
@@ -552,7 +552,7 @@ export default function MindfulnessScreen() {
         narrateIfEnabled('You are ready. Go make something beautiful.').catch(() => {});
       }, 500);
     }
-  }, [fadeIn, narration, narrateIfEnabled, currentAffirmation]);
+  }, [fadeIn, stopNarration, narrateIfEnabled, currentAffirmation]);
 
   const renderMoodPicker = () => (
     <Animated.View style={[styles.phaseContent, fadeStyle]}>
@@ -847,7 +847,7 @@ export default function MindfulnessScreen() {
         <Pressable
           onPress={() => {
             setNarrationEnabled(prev => !prev);
-            if (narrationEnabled) narration.stop();
+            if (narrationEnabled) stopNarration();
           }}
           hitSlop={12}
         >
@@ -875,7 +875,7 @@ export default function MindfulnessScreen() {
       )}
 
       <View style={{ flex: 1 }}>
-      {narration.state === 'loading' && (
+      {narrationState === 'loading' && (
         <View style={styles.narrationLoading}>
           <Ionicons name="mic" size={12} color={Colors.gradientStart} />
           <Text style={styles.narrationLoadingText}>Generating voice...</Text>

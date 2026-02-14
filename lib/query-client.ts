@@ -6,15 +6,44 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
  * @returns {string} The API base URL
  */
 export function getApiUrl(): string {
-  let host = process.env.EXPO_PUBLIC_DOMAIN;
-
-  if (!host) {
-    throw new Error("EXPO_PUBLIC_DOMAIN is not set");
+  const explicitApiUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (explicitApiUrl) {
+    try {
+      return new URL(explicitApiUrl).href;
+    } catch {
+      // Fall through to domain/default resolution.
+    }
   }
 
-  let url = new URL(`https://${host}`);
+  const host = process.env.EXPO_PUBLIC_DOMAIN;
+  if (host) {
+    const hasProtocol = host.startsWith("http://") || host.startsWith("https://");
+    try {
+      if (hasProtocol) {
+        return new URL(host).href;
+      }
+      const protocol = host.includes("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
+      return new URL(`${protocol}://${host}`).href;
+    } catch {
+      // Fall through to runtime/default resolution.
+    }
+  }
 
-  return url.href;
+  const runtimeLocation = (globalThis as { location?: { origin?: string } }).location;
+  if (runtimeLocation?.origin) {
+    return new URL(runtimeLocation.origin).href;
+  }
+
+  return "http://localhost:5000/";
+}
+
+export function getApiHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  const apiKey = process.env.EXPO_PUBLIC_API_KEY;
+  if (apiKey) {
+    headers["x-api-key"] = apiKey;
+  }
+  return headers;
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -34,7 +63,7 @@ export async function apiRequest(
 
   const res = await fetch(url.toString(), {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: data ? getApiHeaders({ "Content-Type": "application/json" }) : getApiHeaders(),
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -53,6 +82,7 @@ export const getQueryFn: <T>(options: {
     const url = new URL(queryKey.join("/") as string, baseUrl);
 
     const res = await fetch(url.toString(), {
+      headers: getApiHeaders(),
       credentials: "include",
     });
 

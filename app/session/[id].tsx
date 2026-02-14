@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -208,7 +208,6 @@ export default function SessionReviewScreen() {
             interactive
             onSeek={(seekPos) => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              console.log(`Seeked to ${Math.round(seekPos * 100)}%`);
             }}
           />
         </View>

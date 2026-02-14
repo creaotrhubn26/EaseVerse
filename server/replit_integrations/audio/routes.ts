@@ -5,9 +5,9 @@ import { openai, speechToText, ensureCompatibleFormat, extractAudioDelta } from 
 // Body parser with 50MB limit for audio payloads
 const audioBodyParser = express.json({ limit: "50mb" });
 
-export function registerAudioRoutes(app: Express): void {
+export function registerAudioRoutes(app: Express, basePath = "/api/audio"): void {
   // Get all conversations
-  app.get("/api/conversations", async (_req: Request, res: Response) => {
+  app.get(`${basePath}/conversations`, async (_req: Request, res: Response) => {
     try {
       const conversations = await chatStorage.getAllConversations();
       res.json(conversations);
@@ -18,7 +18,7 @@ export function registerAudioRoutes(app: Express): void {
   });
 
   // Get single conversation with messages
-  app.get("/api/conversations/:id", async (req: Request, res: Response) => {
+  app.get(`${basePath}/conversations/:id`, async (req: Request, res: Response) => {
     try {
       const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const id = parseInt(idParam);
@@ -35,7 +35,7 @@ export function registerAudioRoutes(app: Express): void {
   });
 
   // Create new conversation
-  app.post("/api/conversations", async (req: Request, res: Response) => {
+  app.post(`${basePath}/conversations`, async (req: Request, res: Response) => {
     try {
       const { title } = req.body;
       const conversation = await chatStorage.createConversation(title || "New Chat");
@@ -47,7 +47,7 @@ export function registerAudioRoutes(app: Express): void {
   });
 
   // Delete conversation
-  app.delete("/api/conversations/:id", async (req: Request, res: Response) => {
+  app.delete(`${basePath}/conversations/:id`, async (req: Request, res: Response) => {
     try {
       const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const id = parseInt(idParam);
@@ -62,7 +62,7 @@ export function registerAudioRoutes(app: Express): void {
   // Send voice message and get streaming audio response
   // Auto-detects audio format and converts WebM/MP4/OGG to WAV
   // Uses gpt-4o-mini-transcribe for STT, gpt-audio for voice response
-  app.post("/api/conversations/:id/messages", audioBodyParser, async (req: Request, res: Response) => {
+  app.post(`${basePath}/conversations/:id/messages`, audioBodyParser, async (req: Request, res: Response) => {
     try {
       const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const conversationId = parseInt(idParam);

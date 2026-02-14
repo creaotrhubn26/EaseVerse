@@ -105,9 +105,12 @@ export function buildDemoLyricLines(
   genre?: GenreId,
   audioLevel?: number,
   wordAudioLevels?: Map<string, number>,
+  thresholds?: { confirmed: number; unclear: number }
 ): LyricLine[] {
   const lines = lyrics.split('\n').filter(l => l.trim());
   const level = audioLevel ?? 0;
+  const confirmedThreshold = thresholds?.confirmed ?? 0.35;
+  const unclearThreshold = thresholds?.unclear ?? 0.12;
 
   return lines.map((line, li) => {
     const words = line.split(' ').filter(w => w.trim());
@@ -119,9 +122,9 @@ export function buildDemoLyricLines(
 
         if (li < activeLineIndex || (li === activeLineIndex && wi < activeWordIndex)) {
           const savedLevel = wordAudioLevels?.get(wordKey) ?? 0;
-          if (savedLevel > 0.35) {
+          if (savedLevel > confirmedThreshold) {
             state = 'confirmed';
-          } else if (savedLevel > 0.12) {
+          } else if (savedLevel > unclearThreshold) {
             state = 'unclear';
           } else {
             state = 'mismatch';

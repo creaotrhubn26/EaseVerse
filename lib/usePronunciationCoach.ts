@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { getApiUrl } from '@/lib/query-client';
+import { getApiHeaders, getApiUrl } from '@/lib/query-client';
 
 export interface PronunciationResult {
   word: string;
@@ -43,7 +43,7 @@ export function usePronunciationCoach() {
 
       const response = await fetch(url.toString(), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ word, context }),
       });
 

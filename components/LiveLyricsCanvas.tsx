@@ -55,7 +55,7 @@ function AnimatedWord({ text, state }: { text: string; state: WordState }) {
       underlineOpacity.value = withTiming(0, { duration: 80 });
       underlineWidth.value = withTiming(0, { duration: 80 });
     }
-  }, [state, showUnderline, isDotted]);
+  }, [state, showUnderline, isDotted, underlineOpacity, underlineWidth]);
 
   const underlineAnim = useAnimatedStyle(() => ({
     opacity: underlineOpacity.value,
@@ -94,7 +94,7 @@ function AnimatedLine({ line, isActive }: { line: LyricLine; isActive: boolean }
   useEffect(() => {
     opacity.value = withTiming(isActive ? 1 : 0.7, { duration: 200 });
     scale.value = withTiming(isActive ? 1 : 0.96, { duration: 200 });
-  }, [isActive]);
+  }, [isActive, opacity, scale]);
 
   const lineAnim = useAnimatedStyle(() => ({
     opacity: opacity.value,

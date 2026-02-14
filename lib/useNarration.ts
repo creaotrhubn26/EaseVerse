@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { getApiUrl } from '@/lib/query-client';
+import { getApiHeaders, getApiUrl } from '@/lib/query-client';
 
 export type NarrationState = 'idle' | 'loading' | 'playing' | 'error';
 
@@ -59,7 +59,7 @@ export function useNarration() {
 
       const response = await fetch(url.toString(), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ text, voice: 'nova' }),
       });
 

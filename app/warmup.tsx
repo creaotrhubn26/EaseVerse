@@ -63,7 +63,7 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
     setIsRunning(false);
     setShowTips(true);
     if (intervalRef.current) clearInterval(intervalRef.current);
-  }, [exercise.id]);
+  }, [exercise.id, exercise.durationSeconds]);
 
   useEffect(() => {
     if (isRunning && timeLeft > 0) {
@@ -82,7 +82,7 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning]);
+  }, [isRunning, timeLeft]);
 
   useEffect(() => {
     if (isRunning) {
@@ -97,7 +97,7 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
     } else {
       pulseAnim.value = withTiming(1, { duration: 300 });
     }
-  }, [isRunning]);
+  }, [isRunning, pulseAnim]);
 
   const pulseStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulseAnim.value }],

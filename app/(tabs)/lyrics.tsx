@@ -18,7 +18,8 @@ import SectionCard from '@/components/SectionCard';
 import Toast from '@/components/Toast';
 import { useApp } from '@/lib/AppContext';
 import { generateId } from '@/lib/storage';
-import type { Song, SongSection } from '@/lib/types';
+import { parseSongSections } from '@/lib/lyrics-sections';
+import type { Song } from '@/lib/types';
 
 const AUTOSAVE_DEBOUNCE_MS = 700;
 const TOAST_THROTTLE_MS = 15000;
@@ -48,31 +49,7 @@ export default function LyricsScreen() {
     setEditText(activeSong?.lyrics || '');
     setSongTitle(activeSong?.title || '');
     setSelectedGenre(activeSong?.genre || 'pop');
-  }, [activeSong?.id]);
-
-  const parseSections = useCallback((text: string): SongSection[] => {
-    const lines = text.split('\n').filter(l => l.trim());
-    const sections: SongSection[] = [];
-    let currentLines: string[] = [];
-    let sectionCount = 0;
-
-    for (const line of lines) {
-      currentLines.push(line);
-      if (currentLines.length === 4 || lines.indexOf(line) === lines.length - 1) {
-        sectionCount++;
-        const type = sectionCount % 3 === 2 ? 'chorus' : sectionCount % 3 === 0 ? 'bridge' : 'verse';
-        const label = type === 'chorus' ? 'Chorus' : type === 'bridge' ? `Bridge` : `Verse ${Math.ceil(sectionCount / 3) + (sectionCount % 3 === 1 ? 0 : -1) + 1}`;
-        sections.push({
-          id: generateId(),
-          type,
-          label: label,
-          lines: [...currentLines],
-        });
-        currentLines = [];
-      }
-    }
-    return sections;
-  }, []);
+  }, [activeSong?.id, activeSong?.lyrics, activeSong?.title, activeSong?.genre]);
 
   const performSave = useCallback(() => {
     if (!editText.trim()) return;
@@ -84,7 +61,7 @@ export default function LyricsScreen() {
     }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const sections = parseSections(editText);
+    const sections = parseSongSections(editText);
 
     if (activeSong) {
       const updated: Song = {
@@ -116,7 +93,7 @@ export default function LyricsScreen() {
       lastToastTimeRef.current = now;
       setToast({ visible: true, message: 'Saved & ready for live' });
     }
-  }, [editText, songTitle, activeSong, parseSections, selectedGenre, songs, updateSong, addSong, setActiveSong]);
+  }, [editText, songTitle, activeSong, selectedGenre, songs, updateSong, addSong, setActiveSong]);
 
   useEffect(() => {
     if (isInitialMount.current) {

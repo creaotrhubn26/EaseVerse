@@ -17,22 +17,27 @@ import { useApp } from '@/lib/AppContext';
 import { buildDemoLyricLines } from '@/lib/demo-data';
 import { generateId } from '@/lib/storage';
 import { useRecording } from '@/lib/useRecording';
+import { analyzeSessionRecording } from '@/lib/session-scoring-client';
 import type { LyricLine, SignalQuality, Session } from '@/lib/types';
 
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
-  const { activeSong, songs, setActiveSong, addSession } = useApp();
+  const { activeSong, songs, setActiveSong, addSession, settings } = useApp();
   const recording = useRecording();
   const [activeLineIndex, setActiveLineIndex] = useState(0);
   const [activeWordIndex, setActiveWordIndex] = useState(0);
   const [quality, setQuality] = useState<SignalQuality>('good');
   const [coachHint, setCoachHint] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('Ready to sing');
+  const [countInRemaining, setCountInRemaining] = useState<number | null>(null);
   const [lines, setLines] = useState<LyricLine[]>([]);
   const [showSongPicker, setShowSongPicker] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const coachTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wordAudioLevelsRef = useRef<Map<string, number>>(new Map());
+  const stabilityHoldTicksRef = useRef(0);
+  const cancelCountInRef = useRef(false);
+  const handleStopRef = useRef<(() => Promise<void>) | null>(null);
 
   const isRecording = recording.isRecording;
   const isPaused = recording.isPaused;
@@ -44,24 +49,75 @@ export default function SingScreen() {
   const genreProfile = useMemo(() => getGenreProfile(genre), [genre]);
   const genreHints = useMemo(() => getGenreCoachHints(genre), [genre]);
 
+  const feedbackThresholds = useMemo(() => {
+    const baseConfirmed =
+      settings.feedbackIntensity === 'high'
+        ? 0.42
+        : settings.feedbackIntensity === 'low'
+          ? 0.28
+          : 0.35;
+    const baseUnclear =
+      settings.feedbackIntensity === 'high'
+        ? 0.2
+        : settings.feedbackIntensity === 'low'
+          ? 0.09
+          : 0.12;
+    const modeDelta = settings.liveMode === 'stability' ? 0.03 : -0.03;
+
+    return {
+      confirmed: Math.min(0.65, Math.max(0.2, baseConfirmed + modeDelta)),
+      unclear: Math.min(0.45, Math.max(0.04, baseUnclear + modeDelta / 2)),
+    };
+  }, [settings.feedbackIntensity, settings.liveMode]);
+
+  const playbackCadenceMs = settings.liveMode === 'speed' ? 600 : 900;
+  const stabilityAdvanceThreshold = settings.liveMode === 'speed' ? 0.08 : 0.16;
+  const coachIntervalMs =
+    settings.feedbackIntensity === 'high'
+      ? 2500
+      : settings.feedbackIntensity === 'low'
+        ? 6500
+        : 4000;
+
   useEffect(() => {
     if (lyricsText) {
-      setLines(buildDemoLyricLines(lyricsText, activeLineIndex, activeWordIndex, genre, recording.audioLevel, wordAudioLevelsRef.current));
+      setLines(
+        buildDemoLyricLines(
+          lyricsText,
+          activeLineIndex,
+          activeWordIndex,
+          genre,
+          recording.audioLevel,
+          wordAudioLevelsRef.current,
+          feedbackThresholds
+        )
+      );
     }
-  }, [lyricsText, activeLineIndex, activeWordIndex, genre, recording.audioLevel]);
+  }, [lyricsText, activeLineIndex, activeWordIndex, genre, recording.audioLevel, feedbackThresholds]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
       intervalRef.current = setInterval(() => {
         const currentLevel = recording.audioLevel;
         setActiveWordIndex(prev => {
+          const shouldHoldForStability =
+            settings.liveMode === 'stability' &&
+            currentLevel < stabilityAdvanceThreshold &&
+            stabilityHoldTicksRef.current < 2;
+
+          if (shouldHoldForStability) {
+            stabilityHoldTicksRef.current += 1;
+            return prev;
+          }
+
+          stabilityHoldTicksRef.current = 0;
           const currentLine = lyricsLines[activeLineIndex] || '';
           const wordCount = currentLine.split(' ').filter(w => w.trim()).length;
           wordAudioLevelsRef.current.set(`${activeLineIndex}-${prev}`, currentLevel);
           if (prev + 1 >= wordCount) {
             setActiveLineIndex(li => {
               if (li + 1 >= lyricsLines.length) {
-                handleStop();
+                void handleStopRef.current?.();
                 return li;
               }
               return li + 1;
@@ -70,12 +126,26 @@ export default function SingScreen() {
           }
           return prev + 1;
         });
-      }, 800);
+      }, playbackCadenceMs);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      stabilityHoldTicksRef.current = 0;
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isRecording, isPaused, activeLineIndex, lyricsLines.length, recording.audioLevel]);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      stabilityHoldTicksRef.current = 0;
+    };
+  }, [
+    isRecording,
+    isPaused,
+    activeLineIndex,
+    lyricsLines.length,
+    lyricsLines,
+    recording.audioLevel,
+    playbackCadenceMs,
+    settings.liveMode,
+    stabilityAdvanceThreshold,
+  ]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -84,39 +154,57 @@ export default function SingScreen() {
         const words = currentLine.split(' ').filter(w => w.trim());
         const currentWord = words[activeWordIndex] || '';
         const wordTip = currentWord ? getWordTipForGenre(currentWord, genre) : null;
-        const hint = wordTip || genreHints[Math.floor(Math.random() * genreHints.length)];
+        const baseHint = wordTip || genreHints[Math.floor(Math.random() * genreHints.length)];
+        const hint =
+          settings.feedbackIntensity === 'high'
+            ? `Focus: ${baseHint}`
+            : settings.feedbackIntensity === 'low'
+              ? baseHint.replace('! ', '')
+              : baseHint;
         setCoachHint(hint);
         setTimeout(() => setCoachHint(null), 2500);
-      }, 4000);
+      }, coachIntervalMs);
     } else {
       if (coachTimerRef.current) clearInterval(coachTimerRef.current);
       setCoachHint(null);
     }
     return () => { if (coachTimerRef.current) clearInterval(coachTimerRef.current); };
-  }, [isRecording, isPaused, genreHints, genre, activeLineIndex, activeWordIndex]);
+  }, [
+    isRecording,
+    isPaused,
+    genreHints,
+    genre,
+    activeLineIndex,
+    activeWordIndex,
+    lyricsLines,
+    coachIntervalMs,
+    settings.feedbackIntensity,
+  ]);
 
   useEffect(() => {
-    if (isRecording && !isPaused) {
+    if (countInRemaining !== null) {
+      setStatusText(`Starting in ${countInRemaining}...`);
+    } else if (isRecording && !isPaused) {
       setStatusText('Listening...');
     } else if (isPaused) {
       setStatusText('Paused');
     } else {
       setStatusText('Ready to sing');
     }
-  }, [isRecording, isPaused]);
+  }, [isRecording, isPaused, countInRemaining]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
       const level = recording.audioLevel;
-      if (level > 0.4) {
+      if (level > feedbackThresholds.confirmed) {
         setQuality('good');
-      } else if (level > 0.15) {
+      } else if (level > feedbackThresholds.unclear) {
         setQuality('ok');
       } else {
         setQuality('poor');
       }
     }
-  }, [isRecording, isPaused, recording.audioLevel]);
+  }, [isRecording, isPaused, recording.audioLevel, feedbackThresholds]);
 
   const handleStop = useCallback(async () => {
     const result = await recording.stop();
@@ -126,19 +214,25 @@ export default function SingScreen() {
       const allLevels = Array.from(levels.values());
       const totalWords = allLevels.length || 1;
 
-      const confirmedCount = allLevels.filter(l => l > 0.35).length;
-      const unclearCount = allLevels.filter(l => l > 0.12 && l <= 0.35).length;
-      const missedCount = allLevels.filter(l => l <= 0.12).length;
+      const confirmedCount = allLevels.filter(l => l > feedbackThresholds.confirmed).length;
+      const unclearCount = allLevels.filter(
+        l => l > feedbackThresholds.unclear && l <= feedbackThresholds.confirmed
+      ).length;
 
       const textAccuracy = Math.round((confirmedCount / totalWords) * 100);
       const pronunciationClarity = Math.round(((confirmedCount + unclearCount * 0.5) / totalWords) * 100);
       const avgLevel = allLevels.reduce((sum, l) => sum + l, 0) / totalWords;
-      const timingConsistency = avgLevel > 0.35 ? 'high' : avgLevel > 0.2 ? 'medium' : 'low';
+      const timingConsistency =
+        avgLevel > feedbackThresholds.confirmed
+          ? 'high'
+          : avgLevel > feedbackThresholds.unclear
+            ? 'medium'
+            : 'low';
 
       const allLines = lyricsText.split('\n').filter(l => l.trim());
       const fixWords: { word: string; reason: string }[] = [];
       levels.forEach((level, key) => {
-        if (level <= 0.35) {
+        if (level <= feedbackThresholds.confirmed) {
           const [li, wi] = key.split('-').map(Number);
           const lineWords = (allLines[li] || '').split(' ').filter(w => w.trim());
           const w = lineWords[wi];
@@ -146,7 +240,11 @@ export default function SingScreen() {
             const genreTip = getWordTipForGenre(w, genre);
             fixWords.push({
               word: w,
-              reason: genreTip || (level <= 0.12 ? 'Not heard clearly' : 'Needs more projection'),
+              reason:
+                genreTip ||
+                (level <= feedbackThresholds.unclear
+                  ? 'Not heard clearly'
+                  : 'Needs more projection'),
             });
           }
         }
@@ -158,6 +256,36 @@ export default function SingScreen() {
         topToFix.push(...genreFixes.slice(0, 3));
       }
 
+      const fallbackInsights: Session['insights'] = {
+        textAccuracy: Math.max(0, Math.min(100, textAccuracy)),
+        pronunciationClarity: Math.max(0, Math.min(100, pronunciationClarity)),
+        timingConsistency,
+        topToFix,
+      };
+
+      let resolvedInsights = fallbackInsights;
+      if (result.uri) {
+        const scored = await analyzeSessionRecording({
+          recordingUri: result.uri,
+          lyrics: lyricsText,
+          durationSeconds: elapsed,
+        });
+        if (scored?.insights) {
+          resolvedInsights = {
+            textAccuracy: Math.max(0, Math.min(100, scored.insights.textAccuracy)),
+            pronunciationClarity: Math.max(
+              0,
+              Math.min(100, scored.insights.pronunciationClarity)
+            ),
+            timingConsistency: scored.insights.timingConsistency,
+            topToFix:
+              scored.insights.topToFix?.length > 0
+                ? scored.insights.topToFix.slice(0, 5)
+                : fallbackInsights.topToFix,
+          };
+        }
+      }
+
       const session: Session = {
         id: generateId(),
         songId: activeSong?.id,
@@ -167,12 +295,7 @@ export default function SingScreen() {
         date: Date.now(),
         tags: ['practice', genreProfile.label.toLowerCase()],
         favorite: false,
-        insights: {
-          textAccuracy: Math.max(10, Math.min(100, textAccuracy)),
-          pronunciationClarity: Math.max(10, Math.min(100, pronunciationClarity)),
-          timingConsistency,
-          topToFix,
-        },
+        insights: resolvedInsights,
         lyrics: lyricsText,
       };
       addSession(session);
@@ -181,13 +304,40 @@ export default function SingScreen() {
     wordAudioLevelsRef.current = new Map();
     setActiveLineIndex(0);
     setActiveWordIndex(0);
-  }, [activeSong, lyricsText, addSession, genre, genreProfile, recording]);
+    setCountInRemaining(null);
+  }, [activeSong, lyricsText, addSession, genre, genreProfile, recording, feedbackThresholds]);
+
+  useEffect(() => {
+    handleStopRef.current = handleStop;
+  }, [handleStop]);
 
   const handleRecordPress = async () => {
+    if (countInRemaining !== null) {
+      cancelCountInRef.current = true;
+      setCountInRemaining(null);
+      return;
+    }
+
     if (!isRecording) {
       setActiveLineIndex(0);
       setActiveWordIndex(0);
       wordAudioLevelsRef.current = new Map();
+      stabilityHoldTicksRef.current = 0;
+
+      if (settings.countIn > 0) {
+        cancelCountInRef.current = false;
+        for (let beat = settings.countIn; beat > 0; beat -= 1) {
+          setCountInRemaining(beat);
+          Haptics.selectionAsync();
+          await new Promise((resolve) => setTimeout(resolve, 700));
+          if (cancelCountInRef.current) {
+            cancelCountInRef.current = false;
+            return;
+          }
+        }
+      }
+
+      setCountInRemaining(null);
       await recording.start();
     } else {
       await recording.togglePause();

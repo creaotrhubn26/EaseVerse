@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -85,6 +85,28 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || __DEV__) {
+      return;
+    }
+
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return;
+    }
+
+    if (!("serviceWorker" in navigator)) {
+      return;
+    }
+
+    const prefix = window.location.pathname.startsWith("/app") ? "/app" : "";
+    const swUrl = `${prefix}/sw.js`;
+    const scope = prefix ? `${prefix}/` : "/";
+
+    void navigator.serviceWorker.register(swUrl, { scope }).catch((error) => {
+      console.warn("Service worker registration failed:", error);
+    });
+  }, []);
 
   if (!fontsLoaded) {
     return <View style={{ flex: 1, backgroundColor: Colors.background }} />;

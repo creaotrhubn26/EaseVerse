@@ -242,6 +242,28 @@ function configureExpoAndLanding(app: express.Application) {
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
   app.use(express.static(path.resolve(process.cwd(), "static-build")));
 
+  const webBuildPath = path.resolve(process.cwd(), "web-build");
+  const webIndexPath = path.join(webBuildPath, "index.html");
+
+  if (fs.existsSync(webIndexPath)) {
+    app.use("/app", express.static(webBuildPath));
+
+    app.get("/app", (_req: Request, res: Response) => {
+      res.sendFile(webIndexPath);
+    });
+
+    app.get("/app/*", (req: Request, res: Response, next: NextFunction) => {
+      if (path.extname(req.path)) {
+        return next();
+      }
+      return res.sendFile(webIndexPath);
+    });
+
+    log('PWA web app available at "/app"');
+  } else {
+    log('PWA web app not built. Run "npm run web:build" to enable "/app".');
+  }
+
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }
 

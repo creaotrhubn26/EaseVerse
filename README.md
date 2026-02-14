@@ -60,6 +60,24 @@ Move from thought to lyric seamlessly
 It is not an AI that writes for you.
 It is a system that helps you write better — with less resistance.
 
+## PWA (Web Installable App)
+
+EaseVerse supports a Progressive Web App deployment under `/app`.
+
+### Build the PWA bundle
+
+```bash
+npm run web:build
+```
+
+### Serve it
+
+Start the server as usual. If `web-build/index.html` exists, the app is available at:
+
+- `GET /app` (SPA entry)
+
+The service worker, offline fallback, and manifest are served from the same `/app` scope.
+
 ## External API (For Other Systems)
 
 EaseVerse now exposes a versioned integration API at ` /api/v1 `.

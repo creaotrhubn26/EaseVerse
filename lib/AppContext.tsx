@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback, useRef } from 'react';
 import type { Song, Session, UserSettings } from './types';
 import * as Storage from './storage';
-import { demoSong, demoSessions } from './demo-data';
 
 interface AppContextValue {
   songs: Song[];
@@ -57,20 +56,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        let loadedSongs = await Storage.getSongs();
-        let loadedSessions = await Storage.getSessions();
+        const loadedSongs = await Storage.getSongs();
+        const loadedSessions = await Storage.getSessions();
         const loadedSettings = await Storage.getSettings();
-
-        if (loadedSongs.length === 0) {
-          loadedSongs = [demoSong];
-          await Storage.saveSong(demoSong);
-        }
-        if (loadedSessions.length === 0) {
-          loadedSessions = demoSessions;
-          for (const s of demoSessions) {
-            await Storage.saveSession(s);
-          }
-        }
 
         if (cancelled) {
           return;

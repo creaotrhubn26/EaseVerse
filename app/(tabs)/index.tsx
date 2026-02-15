@@ -14,32 +14,33 @@ import LiveLyricsCanvas from '@/components/LiveLyricsCanvas';
 import VUMeter from '@/components/VUMeter';
 import SongPickerModal from '@/components/SongPickerModal';
 import { useApp } from '@/lib/AppContext';
-import { buildDemoLyricLines } from '@/lib/demo-data';
+import { buildLiveLyricLines, getLiveLyricProgress } from '@/lib/live-lyrics';
 import { generateId } from '@/lib/storage';
 import { useRecording } from '@/lib/useRecording';
 import { analyzeSessionRecording } from '@/lib/session-scoring-client';
+import { buildSessionScoring } from '@shared/session-scoring';
 import type { LyricLine, SignalQuality, Session } from '@/lib/types';
 
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
-  const { activeSong, songs, setActiveSong, addSession, updateSession, settings } = useApp();
+  const { activeSong, songs, setActiveSong, addSession, settings } = useApp();
   const recording = useRecording();
-  const [activeLineIndex, setActiveLineIndex] = useState(0);
-  const [activeWordIndex, setActiveWordIndex] = useState(0);
   const [quality, setQuality] = useState<SignalQuality>('good');
   const [coachHint, setCoachHint] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('Ready to sing');
   const [countInRemaining, setCountInRemaining] = useState<number | null>(null);
   const [lines, setLines] = useState<LyricLine[]>([]);
   const [showSongPicker, setShowSongPicker] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [liveTrackingSupported, setLiveTrackingSupported] = useState(false);
   const coachTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const wordAudioLevelsRef = useRef<Map<string, number>>(new Map());
-  const stabilityHoldTicksRef = useRef(0);
   const cancelCountInRef = useRef(false);
-  const handleStopRef = useRef<(() => Promise<void>) | null>(null);
-  const recordingAudioLevelRef = useRef(0);
   const coachHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const coachHintIndexRef = useRef(0);
+  const liveRecognizerRef = useRef<any>(null);
+  const liveRecognizerActiveRef = useRef(false);
+  const liveRecognizerRestartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isRecording = recording.isRecording;
   const isPaused = recording.isPaused;
@@ -75,8 +76,6 @@ export default function SingScreen() {
     };
   }, [settings.feedbackIntensity, settings.liveMode]);
 
-  const playbackCadenceMs = settings.liveMode === 'speed' ? 600 : 900;
-  const stabilityAdvanceThreshold = settings.liveMode === 'speed' ? 0.08 : 0.16;
   const coachIntervalMs =
     settings.feedbackIntensity === 'high'
       ? 2500
@@ -84,76 +83,131 @@ export default function SingScreen() {
         ? 6500
         : 4000;
 
-  useEffect(() => {
-    recordingAudioLevelRef.current = recording.audioLevel;
-  }, [recording.audioLevel]);
+  const liveProgress = useMemo(
+    () => getLiveLyricProgress(lyricsText, liveTranscript, settings.liveMode),
+    [lyricsText, liveTranscript, settings.liveMode]
+  );
+  const activeLineIndex = liveProgress.activeLineIndex;
+  const activeWordIndex = liveProgress.activeWordIndex;
 
   useEffect(() => {
     if (lyricsText) {
       setLines(
-        buildDemoLyricLines(
-          lyricsText,
-          activeLineIndex,
-          activeWordIndex,
+        buildLiveLyricLines({
+          lyrics: lyricsText,
+          activeFlatIndex: liveProgress.activeFlatIndex,
+          confirmedIndices: liveProgress.confirmedIndices,
           genre,
-          recording.audioLevel,
-          wordAudioLevelsRef.current,
-          feedbackThresholds
-        )
+        })
       );
+    } else {
+      setLines([]);
     }
-  }, [lyricsText, activeLineIndex, activeWordIndex, genre, recording.audioLevel, feedbackThresholds]);
+  }, [genre, liveProgress.activeFlatIndex, liveProgress.confirmedIndices, lyricsText]);
 
   useEffect(() => {
-    if (isRecording && !isPaused) {
-      intervalRef.current = setInterval(() => {
-        const currentLevel = recordingAudioLevelRef.current;
-        setActiveWordIndex(prev => {
-          const shouldHoldForStability =
-            settings.liveMode === 'stability' &&
-            currentLevel < stabilityAdvanceThreshold &&
-            stabilityHoldTicksRef.current < 2;
-
-          if (shouldHoldForStability) {
-            stabilityHoldTicksRef.current += 1;
-            return prev;
-          }
-
-          stabilityHoldTicksRef.current = 0;
-          const currentLine = lyricsLines[activeLineIndex] || '';
-          const wordCount = currentLine.split(' ').filter(w => w.trim()).length;
-          wordAudioLevelsRef.current.set(`${activeLineIndex}-${prev}`, currentLevel);
-          if (prev + 1 >= wordCount) {
-            setActiveLineIndex(li => {
-              if (li + 1 >= lyricsLines.length) {
-                void handleStopRef.current?.();
-                return li;
-              }
-              return li + 1;
-            });
-            return 0;
-          }
-          return prev + 1;
-        });
-      }, playbackCadenceMs);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      stabilityHoldTicksRef.current = 0;
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      stabilityHoldTicksRef.current = 0;
+    const webGlobal = globalThis as {
+      SpeechRecognition?: new () => any;
+      webkitSpeechRecognition?: new () => any;
     };
-  }, [
-    isRecording,
-    isPaused,
-    activeLineIndex,
-    lyricsLines.length,
-    lyricsLines,
-    playbackCadenceMs,
-    settings.liveMode,
-    stabilityAdvanceThreshold,
-  ]);
+    const SpeechRecognitionCtor =
+      webGlobal.SpeechRecognition || webGlobal.webkitSpeechRecognition;
+    setLiveTrackingSupported(Boolean(Platform.OS === 'web' && SpeechRecognitionCtor));
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      return;
+    }
+
+    const webGlobal = globalThis as {
+      SpeechRecognition?: new () => any;
+      webkitSpeechRecognition?: new () => any;
+    };
+    const SpeechRecognitionCtor =
+      webGlobal.SpeechRecognition || webGlobal.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionCtor) {
+      return;
+    }
+
+    const shouldTrack = isRecording && !isPaused;
+    if (!shouldTrack) {
+      if (liveRecognizerRestartRef.current) {
+        clearTimeout(liveRecognizerRestartRef.current);
+        liveRecognizerRestartRef.current = null;
+      }
+      if (liveRecognizerRef.current && liveRecognizerActiveRef.current) {
+        try {
+          liveRecognizerRef.current.stop();
+        } catch {
+          // Ignore stop errors from browser speech APIs.
+        }
+      }
+      liveRecognizerActiveRef.current = false;
+      return;
+    }
+
+    const recognizer = liveRecognizerRef.current ?? new SpeechRecognitionCtor();
+    recognizer.continuous = true;
+    recognizer.interimResults = true;
+    recognizer.lang = 'en-US';
+    recognizer.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i += 1) {
+        const candidate = event.results[i]?.[0]?.transcript;
+        if (typeof candidate === 'string') {
+          transcript += `${candidate} `;
+        }
+      }
+      setLiveTranscript(transcript.trim());
+    };
+    recognizer.onerror = () => {
+      // Errors are expected in noisy environments and when permissions change.
+    };
+    recognizer.onend = () => {
+      liveRecognizerActiveRef.current = false;
+      if (!(isRecording && !isPaused)) {
+        return;
+      }
+      if (liveRecognizerRestartRef.current) {
+        clearTimeout(liveRecognizerRestartRef.current);
+      }
+      liveRecognizerRestartRef.current = setTimeout(() => {
+        try {
+          recognizer.start();
+          liveRecognizerActiveRef.current = true;
+        } catch {
+          // Ignore restarts blocked by browser speech recognition state.
+        }
+      }, 200);
+    };
+
+    liveRecognizerRef.current = recognizer;
+    if (!liveRecognizerActiveRef.current) {
+      try {
+        recognizer.start();
+        liveRecognizerActiveRef.current = true;
+      } catch {
+        // Ignore start errors when browser speech recognition is busy.
+      }
+    }
+
+    return () => {
+      if (liveRecognizerRestartRef.current) {
+        clearTimeout(liveRecognizerRestartRef.current);
+        liveRecognizerRestartRef.current = null;
+      }
+      if (liveRecognizerRef.current && liveRecognizerActiveRef.current) {
+        try {
+          liveRecognizerRef.current.stop();
+        } catch {
+          // Ignore stop errors from browser speech APIs.
+        }
+        liveRecognizerActiveRef.current = false;
+      }
+    };
+  }, [isPaused, isRecording]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -162,7 +216,12 @@ export default function SingScreen() {
         const words = currentLine.split(' ').filter(w => w.trim());
         const currentWord = words[activeWordIndex] || '';
         const wordTip = currentWord ? getWordTipForGenre(currentWord, genre) : null;
-        const baseHint = wordTip || genreHints[Math.floor(Math.random() * genreHints.length)];
+        const fallbackHint =
+          genreHints.length > 0
+            ? genreHints[coachHintIndexRef.current % genreHints.length]
+            : 'Keep airflow steady and diction clear';
+        coachHintIndexRef.current += 1;
+        const baseHint = wordTip || fallbackHint;
         const hint =
           settings.feedbackIntensity === 'high'
             ? `Focus: ${baseHint}`
@@ -205,14 +264,18 @@ export default function SingScreen() {
   useEffect(() => {
     if (countInRemaining !== null) {
       setStatusText(`Starting in ${countInRemaining}...`);
+    } else if (isAnalyzing) {
+      setStatusText('Analyzing take...');
     } else if (isRecording && !isPaused) {
-      setStatusText('Listening...');
+      setStatusText(
+        liveTrackingSupported ? 'Listening with live word tracking...' : 'Listening...'
+      );
     } else if (isPaused) {
       setStatusText('Paused');
     } else {
       setStatusText('Ready to sing');
     }
-  }, [isRecording, isPaused, countInRemaining]);
+  }, [countInRemaining, isAnalyzing, isPaused, isRecording, liveTrackingSupported]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -229,118 +292,100 @@ export default function SingScreen() {
 
   const handleStop = useCallback(async () => {
     const result = await recording.stop();
+    if (liveRecognizerRestartRef.current) {
+      clearTimeout(liveRecognizerRestartRef.current);
+      liveRecognizerRestartRef.current = null;
+    }
+    if (liveRecognizerRef.current && liveRecognizerActiveRef.current) {
+      try {
+        liveRecognizerRef.current.stop();
+      } catch {
+        // Ignore stop errors from browser speech APIs.
+      }
+      liveRecognizerActiveRef.current = false;
+    }
+
     const elapsed = result.durationSeconds;
     if (elapsed > 3) {
-      const levels = wordAudioLevelsRef.current;
-      const allLevels = Array.from(levels.values());
-      const totalWords = allLevels.length || 1;
+      try {
+        setIsAnalyzing(true);
+        const recordingUri = result.uri;
+        let resolvedInsights: Session['insights'] | null = null;
 
-      const confirmedCount = allLevels.filter(l => l > feedbackThresholds.confirmed).length;
-      const unclearCount = allLevels.filter(
-        l => l > feedbackThresholds.unclear && l <= feedbackThresholds.confirmed
-      ).length;
-
-      const textAccuracy = Math.round((confirmedCount / totalWords) * 100);
-      const pronunciationClarity = Math.round(((confirmedCount + unclearCount * 0.5) / totalWords) * 100);
-      const avgLevel = allLevels.reduce((sum, l) => sum + l, 0) / totalWords;
-      const timingConsistency =
-        avgLevel > feedbackThresholds.confirmed
-          ? 'high'
-          : avgLevel > feedbackThresholds.unclear
-            ? 'medium'
-            : 'low';
-
-      const allLines = lyricsText.split('\n').filter(l => l.trim());
-      const fixWords: { word: string; reason: string }[] = [];
-      levels.forEach((level, key) => {
-        if (level <= feedbackThresholds.confirmed) {
-          const [li, wi] = key.split('-').map(Number);
-          const lineWords = (allLines[li] || '').split(' ').filter(w => w.trim());
-          const w = lineWords[wi];
-          if (w && !fixWords.find(f => f.word === w)) {
-            const genreTip = getWordTipForGenre(w, genre);
-            fixWords.push({
-              word: w,
-              reason:
-                genreTip ||
-                (level <= feedbackThresholds.unclear
-                  ? 'Not heard clearly'
-                  : 'Needs more projection'),
-            });
-          }
-        }
-      });
-
-      const topToFix = fixWords.slice(0, 5);
-      if (topToFix.length === 0) {
-        const genreFixes = getGenreFixReasons(genre);
-        topToFix.push(...genreFixes.slice(0, 3));
-      }
-
-      const fallbackInsights: Session['insights'] = {
-        textAccuracy: Math.max(0, Math.min(100, textAccuracy)),
-        pronunciationClarity: Math.max(0, Math.min(100, pronunciationClarity)),
-        timingConsistency,
-        topToFix,
-      };
-
-      const sessionId = generateId();
-
-      const session: Session = {
-        id: sessionId,
-        songId: activeSong?.id,
-        genre,
-        title: `${activeSong?.title || 'Recording'} - Take`,
-        duration: elapsed,
-        date: Date.now(),
-        tags: ['practice', genreProfile.label.toLowerCase()],
-        favorite: false,
-        insights: fallbackInsights,
-        lyrics: lyricsText,
-      };
-      addSession(session);
-      router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
-
-      const recordingUri = result.uri;
-      if (recordingUri) {
-        void (async () => {
+        if (recordingUri) {
           const scored = await analyzeSessionRecording({
             recordingUri,
             lyrics: lyricsText,
             durationSeconds: elapsed,
           });
-          if (!scored?.insights) {
-            return;
+          if (scored?.insights) {
+            resolvedInsights = {
+              textAccuracy: Math.max(0, Math.min(100, scored.insights.textAccuracy)),
+              pronunciationClarity: Math.max(
+                0,
+                Math.min(100, scored.insights.pronunciationClarity)
+              ),
+              timingConsistency: scored.insights.timingConsistency,
+              topToFix: scored.insights.topToFix?.slice(0, 5) || [],
+            };
           }
+        }
 
-          const resolvedInsights: Session['insights'] = {
-            textAccuracy: Math.max(0, Math.min(100, scored.insights.textAccuracy)),
-            pronunciationClarity: Math.max(
-              0,
-              Math.min(100, scored.insights.pronunciationClarity)
-            ),
-            timingConsistency: scored.insights.timingConsistency,
-            topToFix:
-              scored.insights.topToFix?.length > 0
-                ? scored.insights.topToFix.slice(0, 5)
-                : fallbackInsights.topToFix,
+        if (!resolvedInsights && liveTranscript.trim()) {
+          const localScore = buildSessionScoring({
+            expectedLyrics: lyricsText,
+            transcript: liveTranscript,
+            durationSeconds: elapsed,
+          });
+          resolvedInsights = {
+            textAccuracy: localScore.insights.textAccuracy,
+            pronunciationClarity: localScore.insights.pronunciationClarity,
+            timingConsistency: localScore.insights.timingConsistency,
+            topToFix: localScore.insights.topToFix.slice(0, 5),
           };
+        }
 
-          updateSession(sessionId, { insights: resolvedInsights });
-        })();
+        if (!resolvedInsights) {
+          const genreFixes = getGenreFixReasons(genre).slice(0, 3);
+          resolvedInsights = {
+            textAccuracy: 0,
+            pronunciationClarity: 0,
+            timingConsistency: 'low',
+            topToFix:
+              genreFixes.length > 0
+                ? genreFixes
+                : [{ word: 'analysis', reason: 'Scoring unavailable. Check API connectivity.' }],
+          };
+        }
+
+        const session: Session = {
+          id: generateId(),
+          songId: activeSong?.id,
+          genre,
+          title: `${activeSong?.title || 'Recording'} - Take`,
+          duration: elapsed,
+          date: Date.now(),
+          tags: ['practice', genreProfile.label.toLowerCase()],
+          favorite: false,
+          insights: resolvedInsights,
+          lyrics: lyricsText,
+        };
+        addSession(session);
+        router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
+      } finally {
+        setIsAnalyzing(false);
       }
     }
-    wordAudioLevelsRef.current = new Map();
-    setActiveLineIndex(0);
-    setActiveWordIndex(0);
-    setCountInRemaining(null);
-  }, [activeSong, lyricsText, addSession, updateSession, genre, genreProfile, recording, feedbackThresholds]);
 
-  useEffect(() => {
-    handleStopRef.current = handleStop;
-  }, [handleStop]);
+    setLiveTranscript('');
+    setCountInRemaining(null);
+  }, [activeSong, addSession, genre, genreProfile.label, liveTranscript, lyricsText, recording]);
 
   const handleRecordPress = async () => {
+    if (isAnalyzing) {
+      return;
+    }
+
     if (countInRemaining !== null) {
       cancelCountInRef.current = true;
       setCountInRemaining(null);
@@ -348,10 +393,8 @@ export default function SingScreen() {
     }
 
     if (!isRecording) {
-      setActiveLineIndex(0);
-      setActiveWordIndex(0);
-      wordAudioLevelsRef.current = new Map();
-      stabilityHoldTicksRef.current = 0;
+      setLiveTranscript('');
+      coachHintIndexRef.current = 0;
 
       if (settings.countIn > 0) {
         cancelCountInRef.current = false;

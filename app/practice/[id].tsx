@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -25,9 +25,26 @@ import Colors from '@/constants/colors';
 import CoachPill from '@/components/CoachPill';
 import { useApp } from '@/lib/AppContext';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { getApiHeaders, getApiUrl } from '@/lib/query-client';
 
 const speedOptions = [0.8, 1.0, 1.1] as const;
 const loopLengthOptions = [5, 10, 20] as const;
+
+function blobToDataUri(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Failed to convert audio blob to data URI'));
+        return;
+      }
+      resolve(reader.result);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to read audio blob'));
+    reader.readAsDataURL(blob);
+  });
+}
 
 export default function PracticeLoopScreen() {
   const insets = useSafeAreaInsets();
@@ -43,11 +60,19 @@ export default function PracticeLoopScreen() {
   const [loopCount, setLoopCount] = useState(0);
   const [coachHint, setCoachHint] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [loopAudioUri, setLoopAudioUri] = useState<string | null>(null);
+  const [loopAudioLine, setLoopAudioLine] = useState('');
+  const [isLoopAudioLoading, setIsLoopAudioLoading] = useState(false);
+  const [loopAudioError, setLoopAudioError] = useState<string | null>(null);
   const coach = usePronunciationCoach();
+  const loopPlayer = useAudioPlayer(loopAudioUri ? { uri: loopAudioUri } : null);
+  const loopPlayerStatus = useAudioPlayerStatus(loopPlayer);
 
   const progressAnim = useSharedValue(0);
   const loopTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const coachHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loopEndAtRef = useRef<number | null>(null);
+  const loopHintIndexRef = useRef(0);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -58,52 +83,145 @@ export default function PracticeLoopScreen() {
   }, [session?.lyrics]);
 
   useEffect(() => {
-    if (isLooping) {
-      const interval = 100;
-      const effectiveLoopLengthMs = (loopLength * 1000) / speed;
-      const totalSteps = effectiveLoopLengthMs / interval;
-      let step = 0;
+    setIsLooping((current) => (current ? false : current));
+    setLoopAudioError(null);
+  }, [selectedLineIdx]);
 
-      loopTimerRef.current = setInterval(() => {
-        step++;
-        const p = step / totalSteps;
-        setProgress(p);
-        progressAnim.value = p;
+  const ensureLoopAudio = useCallback(async (): Promise<boolean> => {
+    const line = lyricsLines[selectedLineIdx];
+    if (!line) {
+      setLoopAudioError('Select a phrase to start looping.');
+      return false;
+    }
 
-        if (step >= totalSteps) {
-          step = 0;
-          setLoopCount(c => c + 1);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (loopAudioUri && loopAudioLine === line) {
+      return true;
+    }
 
-          const hints = session?.insights?.topToFix || [];
-          if (hints.length > 0) {
-            const hint = hints[Math.floor(Math.random() * hints.length)];
-            setCoachHint(hint.reason);
-            if (coachHintTimeoutRef.current) {
-              clearTimeout(coachHintTimeoutRef.current);
-            }
-            coachHintTimeoutRef.current = setTimeout(() => setCoachHint(null), 2500);
-          }
-        }
-      }, interval);
-    } else {
+    try {
+      setIsLoopAudioLoading(true);
+      setLoopAudioError(null);
+      const url = new URL('/api/tts', getApiUrl());
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+        headers: getApiHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ text: line, voice: 'nova' }),
+      });
+      if (!response.ok) {
+        throw new Error(`TTS request failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const dataUri = await blobToDataUri(blob);
+      setLoopAudioUri(dataUri);
+      setLoopAudioLine(line);
+      return true;
+    } catch (error) {
+      console.error('Failed to prepare practice loop audio:', error);
+      setLoopAudioError('Unable to generate loop audio. Check TTS API configuration.');
+      return false;
+    } finally {
+      setIsLoopAudioLoading(false);
+    }
+  }, [loopAudioLine, loopAudioUri, lyricsLines, selectedLineIdx]);
+
+  useEffect(() => {
+    if (!isLooping) {
       if (loopTimerRef.current) clearInterval(loopTimerRef.current);
+      loopEndAtRef.current = null;
       if (coachHintTimeoutRef.current) {
         clearTimeout(coachHintTimeoutRef.current);
         coachHintTimeoutRef.current = null;
       }
+      setCoachHint(null);
+      try {
+        loopPlayer.pause();
+        loopPlayer.seekTo(0);
+      } catch {
+        // Ignore pause/seek errors when player is not ready.
+      }
       setProgress(0);
       progressAnim.value = 0;
+      return;
     }
 
+    const totalMs = loopLength * 1000;
+    loopEndAtRef.current = Date.now() + totalMs;
+    loopTimerRef.current = setInterval(() => {
+      const endAt = loopEndAtRef.current;
+      if (!endAt) {
+        return;
+      }
+      const remainingMs = Math.max(0, endAt - Date.now());
+      const nextProgress = 1 - remainingMs / totalMs;
+      setProgress(nextProgress);
+      progressAnim.value = nextProgress;
+      if (remainingMs <= 0) {
+        setIsLooping(false);
+      }
+    }, 80);
+
+    return () => {
+      if (loopTimerRef.current) clearInterval(loopTimerRef.current);
+    };
+  }, [isLooping, loopLength, loopPlayer, progressAnim]);
+
+  useEffect(() => {
+    if (!isLooping) {
+      return;
+    }
+
+    if (loopPlayerStatus.didJustFinish) {
+      const endAt = loopEndAtRef.current;
+      if (endAt && Date.now() < endAt) {
+        setLoopCount((count) => count + 1);
+        const hints = session?.insights?.topToFix || [];
+        if (hints.length > 0) {
+          const hint = hints[loopHintIndexRef.current % hints.length];
+          loopHintIndexRef.current += 1;
+          setCoachHint(hint.reason);
+          if (coachHintTimeoutRef.current) {
+            clearTimeout(coachHintTimeoutRef.current);
+          }
+          coachHintTimeoutRef.current = setTimeout(() => setCoachHint(null), 2500);
+        }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        try {
+          loopPlayer.seekTo(0);
+          loopPlayer.play();
+        } catch {
+          setIsLooping(false);
+        }
+      } else {
+        setIsLooping(false);
+      }
+    }
+  }, [isLooping, loopPlayer, loopPlayerStatus.didJustFinish, session?.insights?.topToFix]);
+
+  useEffect(() => {
+    if (!isLoopAudioLoading && loopAudioUri) {
+      try {
+        loopPlayer.setPlaybackRate(speed, 'medium');
+      } catch {
+        // Ignore playback-rate errors on unsupported platforms.
+      }
+    }
+  }, [isLoopAudioLoading, loopAudioUri, loopPlayer, speed]);
+
+  useEffect(() => {
     return () => {
       if (loopTimerRef.current) clearInterval(loopTimerRef.current);
       if (coachHintTimeoutRef.current) {
         clearTimeout(coachHintTimeoutRef.current);
         coachHintTimeoutRef.current = null;
       }
+      try {
+        loopPlayer.pause();
+      } catch {
+        // Ignore pause errors on unmount.
+      }
     };
-  }, [isLooping, loopLength, speed, progressAnim, session?.insights?.topToFix]);
+  }, [loopPlayer]);
 
   const pulseOpacity = useSharedValue(1);
 
@@ -320,19 +438,48 @@ export default function PracticeLoopScreen() {
 
       <View style={[styles.bottomAction, { paddingBottom: Math.max(insets.bottom, webBottomInset) + 16 }]}>
         <Pressable
-          onPress={() => {
+          onPress={async () => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setIsLooping(!isLooping);
-            if (!isLooping) setLoopCount(0);
+            if (isLoopAudioLoading) {
+              return;
+            }
+
+            if (isLooping) {
+              setIsLooping(false);
+              return;
+            }
+
+            const ready = await ensureLoopAudio();
+            if (!ready) {
+              return;
+            }
+
+            setLoopAudioError(null);
+            setLoopCount(0);
+            loopHintIndexRef.current = 0;
+            setCoachHint(null);
+            setIsLooping(true);
+            try {
+              loopPlayer.seekTo(0);
+              loopPlayer.setPlaybackRate(speed, 'medium');
+              loopPlayer.play();
+            } catch {
+              setIsLooping(false);
+              setLoopAudioError('Unable to start loop playback on this device.');
+            }
           }}
           style={styles.loopPressable}
+          disabled={isLoopAudioLoading}
           accessibilityRole="button"
-          accessibilityLabel={isLooping ? 'Stop practice loop' : 'Start practice loop'}
+          accessibilityLabel={isLooping ? 'Stop practice loop' : isLoopAudioLoading ? 'Preparing practice loop audio' : 'Start practice loop'}
           accessibilityHint="Toggles repeated playback for the selected phrase"
+          accessibilityState={{ disabled: isLoopAudioLoading }}
         >
           <Animated.View style={isLooping ? pulseStyle : undefined}>
             <LinearGradient
-              colors={isLooping
+              colors={isLoopAudioLoading
+                ? [Colors.surface, Colors.surface]
+                : isLooping
                 ? [Colors.dangerUnderline, '#cc5858']
                 : [Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]
               }
@@ -340,13 +487,20 @@ export default function PracticeLoopScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.loopBtn}
             >
-              <Ionicons name={isLooping ? 'stop' : 'repeat'} size={20} color="#fff" />
+              {isLoopAudioLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Ionicons name={isLooping ? 'stop' : 'repeat'} size={20} color="#fff" />
+              )}
               <Text style={styles.loopBtnText}>
-                {isLooping ? 'Stop Loop' : 'Start Loop'}
+                {isLoopAudioLoading ? 'Preparing Audio...' : isLooping ? 'Stop Loop' : 'Start Loop'}
               </Text>
             </LinearGradient>
           </Animated.View>
         </Pressable>
+        {loopAudioError && (
+          <Text style={styles.loopErrorText}>{loopAudioError}</Text>
+        )}
       </View>
     </View>
   );
@@ -509,6 +663,7 @@ const styles = StyleSheet.create({
   bottomAction: {
     paddingHorizontal: 20,
     paddingTop: 12,
+    gap: 8,
   },
   loopPressable: {
     borderRadius: 14,
@@ -528,6 +683,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
+  },
+  loopErrorText: {
+    color: Colors.dangerUnderline,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    fontFamily: 'Inter_500Medium',
   },
   controlLabelRow: {
     flexDirection: 'row' as const,

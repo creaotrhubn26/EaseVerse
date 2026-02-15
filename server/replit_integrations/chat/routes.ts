@@ -26,8 +26,10 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
   // Get single conversation with messages
   app.get(`${basePath}/conversations/:id`, async (req: Request, res: Response) => {
     try {
-      const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const id = parseInt(idParam);
+      const id = String(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id || "").trim();
+      if (!id) {
+        return res.status(400).json({ error: "Conversation id is required" });
+      }
       const conversation = await chatStorage.getConversation(id);
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
@@ -55,8 +57,10 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
   // Delete conversation
   app.delete(`${basePath}/conversations/:id`, async (req: Request, res: Response) => {
     try {
-      const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const id = parseInt(idParam);
+      const id = String(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id || "").trim();
+      if (!id) {
+        return res.status(400).json({ error: "Conversation id is required" });
+      }
       await chatStorage.deleteConversation(id);
       res.status(204).send();
     } catch (error) {
@@ -75,8 +79,12 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
         });
       }
 
-      const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const conversationId = parseInt(idParam);
+      const conversationId = String(
+        Array.isArray(req.params.id) ? req.params.id[0] : req.params.id || ""
+      ).trim();
+      if (!conversationId) {
+        return res.status(400).json({ error: "Conversation id is required" });
+      }
       const { content } = req.body;
 
       // Save user message

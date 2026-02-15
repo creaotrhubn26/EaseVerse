@@ -22,8 +22,7 @@ function MeterBar({ index, isActive, audioLevel, totalBars }: { index: number; i
       const center = totalBars / 2;
       const distFromCenter = Math.abs(index - center) / center;
       const falloff = 1 - distFromCenter * 0.6;
-      const jitter = 0.85 + Math.random() * 0.3;
-      const barLevel = audioLevel * falloff * jitter;
+      const barLevel = audioLevel * falloff;
       const targetH = 4 + barLevel * 28;
       height.value = withTiming(targetH, { duration: 80, easing: Easing.out(Easing.ease) });
     } else {

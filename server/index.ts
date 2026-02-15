@@ -4,6 +4,60 @@ import { registerRoutes } from "./routes";
 import * as fs from "fs";
 import * as path from "path";
 
+function normalizeEnvValue(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    const unquoted = trimmed.slice(1, -1);
+    return unquoted.replace(/\\n/g, "\n");
+  }
+  return trimmed.replace(/\s+#.*$/, "").trim();
+}
+
+function loadEnvFile(filePath: string) {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const content = fs.readFileSync(filePath, "utf-8");
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const normalizedLine = line.startsWith("export ")
+      ? line.slice("export ".length).trim()
+      : line;
+    const separatorIndex = normalizedLine.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = normalizedLine.slice(0, separatorIndex).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      continue;
+    }
+
+    if (process.env[key] !== undefined) {
+      continue;
+    }
+
+    const value = normalizeEnvValue(normalizedLine.slice(separatorIndex + 1));
+    process.env[key] = value;
+  }
+}
+
+function loadLocalEnv() {
+  const cwd = process.cwd();
+  loadEnvFile(path.resolve(cwd, ".env"));
+  loadEnvFile(path.resolve(cwd, ".env.local"));
+}
+
+loadLocalEnv();
+
 const app = express();
 const log = console.log;
 
@@ -252,7 +306,7 @@ function configureExpoAndLanding(app: express.Application) {
       res.sendFile(webIndexPath);
     });
 
-    app.get("/app/*", (req: Request, res: Response, next: NextFunction) => {
+    app.get("/app/*path", (req: Request, res: Response, next: NextFunction) => {
       if (path.extname(req.path)) {
         return next();
       }
@@ -305,7 +359,6 @@ function setupErrorHandler(app: express.Application) {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`express server serving on port ${port}`);

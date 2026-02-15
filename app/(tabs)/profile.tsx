@@ -719,11 +719,10 @@ export default function ProfileScreen() {
             <View style={styles.sectionTitleRow}>
               <Image
                 source={require('@/assets/images/icon-set/howto-icon.png')}
-                style={styles.sectionTitleIcon}
+                style={styles.sectionHeaderIcon}
                 resizeMode="cover"
                 accessible={false}
               />
-              <Text style={styles.sectionTitle}>How To Use</Text>
             </View>
             <Ionicons
               name={howToExpanded ? 'chevron-up' : 'chevron-down'}
@@ -749,9 +748,9 @@ export default function ProfileScreen() {
               source={require('@/assets/images/icon-set/Language_accent.png')}
               style={styles.sectionTitleIcon}
               resizeMode="cover"
-              accessible={false}
+              accessibilityRole="header"
+              accessibilityLabel="Language & Accent"
             />
-            <Text style={styles.sectionTitle} accessibilityRole="header">Language & Accent</Text>
           </View>
           <View style={styles.settingsCard}>
             <SettingRow
@@ -778,9 +777,9 @@ export default function ProfileScreen() {
               source={require('@/assets/images/icon-set/Feedback_intensity_high.png')}
               style={styles.sectionTitleIcon}
               resizeMode="cover"
-              accessible={false}
+              accessibilityRole="header"
+              accessibilityLabel="Feedback Intensity"
             />
-            <Text style={styles.sectionTitle} accessibilityRole="header">Feedback Intensity</Text>
           </View>
           <SegmentedControl<FeedbackIntensity>
             options={[
@@ -799,9 +798,9 @@ export default function ProfileScreen() {
               source={require('@/assets/images/icon-set/Live_mode.png')}
               style={styles.sectionTitleIcon}
               resizeMode="cover"
-              accessible={false}
+              accessibilityRole="header"
+              accessibilityLabel="Live Mode"
             />
-            <Text style={styles.sectionTitle} accessibilityRole="header">Live Mode</Text>
           </View>
           <SegmentedControl<LiveMode>
             options={[
@@ -853,9 +852,9 @@ export default function ProfileScreen() {
               source={require('@/assets/images/icon-set/Mindfullness_voice.png')}
               style={styles.sectionTitleIcon}
               resizeMode="cover"
-              accessible={false}
+              accessibilityRole="header"
+              accessibilityLabel="Mindfulness Voice"
             />
-            <Text style={styles.sectionTitle} accessibilityRole="header">Mindfulness Voice</Text>
           </View>
           <SegmentedControl<NarrationVoice>
             options={[
@@ -876,9 +875,9 @@ export default function ProfileScreen() {
               source={require('@/assets/images/icon-set/Lyrics_sync.png')}
               style={styles.sectionTitleIcon}
               resizeMode="cover"
-              accessible={false}
+              accessibilityRole="header"
+              accessibilityLabel="Lyrics Sync"
             />
-            <Text style={styles.sectionTitle} accessibilityRole="header">Lyrics Sync</Text>
           </View>
           <View style={styles.settingsCard}>
             <SettingRow
@@ -1083,10 +1082,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  sectionHeaderIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+  },
   sectionTitleIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
+    width: 54,
+    height: 54,
+    borderRadius: 16,
   },
   sectionHeader: {
     flexDirection: 'row',

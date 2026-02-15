@@ -248,7 +248,6 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                 ) : (
                   <Image source={item.image} style={styles.tabPillImage} resizeMode="cover" accessible={false} />
                 )}
-                <Text style={styles.tabPillText}>{item.label}</Text>
               </Pressable>
             ))}
           </View>

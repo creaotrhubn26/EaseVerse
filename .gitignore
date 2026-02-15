@@ -38,6 +38,10 @@ yarn-error.*
 # local nested clones / accidental submodules
 EaseVerse/
 
+# Playwright
+test-results/
+playwright-report/
+
 # typescript
 *.tsbuildinfo
 .vercel

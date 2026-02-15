@@ -42,7 +42,10 @@ function ClassicTabLayout() {
         tabBarInactiveTintColor: Colors.tabInactive,
         sceneStyle: { backgroundColor: Colors.background },
         tabBarStyle: {
-          position: "absolute" as const,
+          // On web, an absolute tab bar can overlap and intercept clicks on content near
+          // the bottom of a ScrollView. Keep it in-flow so it's always clickable without
+          // blocking content.
+          position: isWeb ? ("relative" as const) : ("absolute" as const),
           backgroundColor: isIOS ? "transparent" : Colors.background,
           borderTopWidth: isWeb ? 1 : 0,
           borderTopColor: Colors.borderGlass,

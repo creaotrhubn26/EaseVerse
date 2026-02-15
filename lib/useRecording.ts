@@ -26,6 +26,9 @@ export function useRecording() {
   const meteringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const durationRef = useRef(0);
   const recordingActiveRef = useRef(false);
+  const engineRef = useRef<'expo' | 'fallback' | null>(null);
+  const startEpochMsRef = useRef<number | null>(null);
+  const elapsedMsRef = useRef(0);
 
   const handleStatusUpdate = useCallback((status: RecordingStatus) => {
     if (status.isFinished && status.url) {
@@ -48,11 +51,21 @@ export function useRecording() {
     }
   }, []);
 
+  const getElapsedSecondsNow = useCallback((): number => {
+    const elapsedMs =
+      startEpochMsRef.current !== null
+        ? Date.now() - startEpochMsRef.current
+        : elapsedMsRef.current;
+    return Math.max(0, Math.floor(elapsedMs / 1000));
+  }, []);
+
   useEffect(() => {
     return () => {
       stopMetering();
       if (recordingActiveRef.current) {
-        try { void recorder.stop(); } catch {}
+        if (engineRef.current === 'expo') {
+          try { void recorder.stop(); } catch {}
+        }
         recordingActiveRef.current = false;
       }
     };
@@ -73,6 +86,13 @@ export function useRecording() {
     stopMetering();
     meteringIntervalRef.current = setInterval(() => {
       if (!recordingActiveRef.current) return;
+
+      const secsFromClock = getElapsedSecondsNow();
+      if (secsFromClock >= durationRef.current) {
+        durationRef.current = secsFromClock;
+        setDuration(secsFromClock);
+      }
+
       try {
         const state = recorder.getStatus();
         if (state.isRecording && state.metering !== undefined) {
@@ -81,13 +101,18 @@ export function useRecording() {
           setAudioLevel(normalized);
         }
         if (state.isRecording) {
-          const secs = Math.floor(state.durationMillis / 1000);
-          durationRef.current = secs;
-          setDuration(secs);
+          const secsFromStatus = Math.floor(state.durationMillis / 1000);
+          const secs = Math.max(secsFromStatus, secsFromClock);
+          if (secs >= durationRef.current) {
+            durationRef.current = secs;
+            setDuration(secs);
+          }
         }
-      } catch {}
+      } catch {
+        // Ignore recorder status errors; clock-based duration still updates.
+      }
     }, 100);
-  }, [recorder, stopMetering]);
+  }, [getElapsedSecondsNow, recorder, stopMetering]);
 
   const start = useCallback(async () => {
     let permitted = hasPermission;
@@ -104,7 +129,10 @@ export function useRecording() {
       await recorder.prepareToRecordAsync();
       recorder.record();
 
+      engineRef.current = 'expo';
       recordingActiveRef.current = true;
+      elapsedMsRef.current = 0;
+      startEpochMsRef.current = Date.now();
       durationRef.current = 0;
       setDuration(0);
       setIsRecording(true);
@@ -113,6 +141,21 @@ export function useRecording() {
       return true;
     } catch (err) {
       console.error('Failed to start recording:', err);
+      if (Platform.OS === 'web') {
+        // Web fallback: allow transcript-only practice (SpeechRecognition) + timer even when
+        // the audio recorder is unavailable.
+        engineRef.current = 'fallback';
+        recordingActiveRef.current = true;
+        elapsedMsRef.current = 0;
+        startEpochMsRef.current = Date.now();
+        durationRef.current = 0;
+        setDuration(0);
+        setAudioLevel(0);
+        setIsRecording(true);
+        setIsPaused(false);
+        startMetering();
+        return true;
+      }
       return false;
     }
   }, [hasPermission, requestPermission, startMetering, recorder]);
@@ -120,7 +163,12 @@ export function useRecording() {
   const pause = useCallback(async () => {
     if (!recordingActiveRef.current) return;
     try {
-      if (Platform.OS !== 'web') {
+      if (startEpochMsRef.current !== null) {
+        elapsedMsRef.current = Date.now() - startEpochMsRef.current;
+        startEpochMsRef.current = null;
+      }
+
+      if (engineRef.current === 'expo' && Platform.OS !== 'web') {
         recorder.pause();
       }
       setIsPaused(true);
@@ -134,7 +182,11 @@ export function useRecording() {
   const resume = useCallback(async () => {
     if (!recordingActiveRef.current) return;
     try {
-      if (Platform.OS !== 'web') {
+      if (startEpochMsRef.current === null) {
+        startEpochMsRef.current = Date.now() - elapsedMsRef.current;
+      }
+
+      if (engineRef.current === 'expo' && Platform.OS !== 'web') {
         recorder.record();
       }
       setIsPaused(false);
@@ -147,7 +199,7 @@ export function useRecording() {
   const stop = useCallback(async (): Promise<{ uri: string | null; durationSeconds: number }> => {
     stopMetering();
     setAudioLevel(0);
-    const elapsed = durationRef.current;
+    const elapsed = Math.max(durationRef.current, getElapsedSecondsNow());
 
     if (!recordingActiveRef.current) {
       setIsRecording(false);
@@ -156,12 +208,18 @@ export function useRecording() {
     }
 
     try {
-      await recorder.stop();
-      const state = recorder.getStatus();
-      const uri = state.url;
+      let uri: string | null = null;
+      if (engineRef.current === 'expo') {
+        await recorder.stop();
+        const state = recorder.getStatus();
+        uri = state.url || null;
+      }
       recordingActiveRef.current = false;
       setIsRecording(false);
       setIsPaused(false);
+      engineRef.current = null;
+      startEpochMsRef.current = null;
+      elapsedMsRef.current = 0;
       durationRef.current = 0;
       setDuration(0);
 
@@ -169,15 +227,18 @@ export function useRecording() {
         playsInSilentMode: true,
       });
 
-      return { uri: uri || null, durationSeconds: elapsed };
+      return { uri, durationSeconds: elapsed };
     } catch (err) {
       console.error('Failed to stop recording:', err);
       recordingActiveRef.current = false;
       setIsRecording(false);
       setIsPaused(false);
+      engineRef.current = null;
+      startEpochMsRef.current = null;
+      elapsedMsRef.current = 0;
       return { uri: null, durationSeconds: elapsed };
     }
-  }, [stopMetering, recorder]);
+  }, [getElapsedSecondsNow, stopMetering, recorder]);
 
   const togglePause = useCallback(async () => {
     if (isPaused) {

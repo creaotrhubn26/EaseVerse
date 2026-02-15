@@ -74,6 +74,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@expo/ngrok": "^4.1.0",
+    "@playwright/test": "^1.58.2",
     "@types/express": "^5.0.0",
     "@types/pg": "^8.16.0",
     "@types/react": "~19.2.2",

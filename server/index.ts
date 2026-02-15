@@ -266,6 +266,26 @@ function configureExpoAndLanding(app: express.Application) {
 
   log("Serving static Expo files with dynamic manifest routing");
 
+  const webBuildPath = path.resolve(process.cwd(), "web-build");
+  const webIndexPath = path.join(webBuildPath, "index.html");
+  const hasWebBuild = fs.existsSync(webIndexPath);
+
+  if (hasWebBuild) {
+    // Serve exported web build assets from the server root. The exported `index.html`
+    // references `/_expo/*` and `/assets/*` as absolute paths.
+    app.use(express.static(webBuildPath, { index: false }));
+
+    // Legacy compatibility: keep "/app" working by redirecting into the root SPA.
+    app.get("/app", (req: Request, res: Response) => {
+      const target = req.originalUrl.slice("/app".length) || "/";
+      return res.redirect(302, target);
+    });
+    app.get("/app/*path", (req: Request, res: Response) => {
+      const target = req.originalUrl.slice("/app".length) || "/";
+      return res.redirect(302, target);
+    });
+  }
+
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith("/api")) {
       return next();
@@ -281,6 +301,9 @@ function configureExpoAndLanding(app: express.Application) {
     }
 
     if (req.path === "/") {
+      if (hasWebBuild) {
+        return res.sendFile(webIndexPath);
+      }
       return serveLandingPage({
         req,
         res,
@@ -292,29 +315,29 @@ function configureExpoAndLanding(app: express.Application) {
     next();
   });
 
-  app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
   app.use(express.static(path.resolve(process.cwd(), "static-build")));
 
-  const webBuildPath = path.resolve(process.cwd(), "web-build");
-  const webIndexPath = path.join(webBuildPath, "index.html");
+  // Keep source assets available (used by native builds and non-exported paths).
+  app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
 
-  if (fs.existsSync(webIndexPath)) {
-    app.use("/app", express.static(webBuildPath));
-
-    app.get("/app", (_req: Request, res: Response) => {
-      res.sendFile(webIndexPath);
-    });
-
-    app.get("/app/*path", (req: Request, res: Response, next: NextFunction) => {
+  if (hasWebBuild) {
+    app.get("/*path", (req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith("/api")) {
+        return next();
+      }
       if (path.extname(req.path)) {
+        return next();
+      }
+      const platform = req.header("expo-platform");
+      if (platform && (platform === "ios" || platform === "android")) {
         return next();
       }
       return res.sendFile(webIndexPath);
     });
 
-    log('PWA web app available at "/app"');
+    log('PWA web app available at "/"');
   } else {
-    log('PWA web app not built. Run "npm run web:build" to enable "/app".');
+    log('PWA web app not built. Run "npm run web:build" to enable web routes.');
   }
 
   log("Expo routing: Checking expo-platform header on / and /manifest");

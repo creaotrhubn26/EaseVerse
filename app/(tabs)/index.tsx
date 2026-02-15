@@ -13,6 +13,7 @@ import QualityPill from '@/components/QualityPill';
 import LiveLyricsCanvas from '@/components/LiveLyricsCanvas';
 import VUMeter from '@/components/VUMeter';
 import SongPickerModal from '@/components/SongPickerModal';
+import LogoHeader from '@/components/LogoHeader';
 import { useApp } from '@/lib/AppContext';
 import { buildLiveLyricLines, getLiveLyricProgress } from '@/lib/live-lyrics';
 import { generateId } from '@/lib/storage';
@@ -431,6 +432,7 @@ export default function SingScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
+      <LogoHeader />
       <View style={styles.topBar}>
         <Pressable
           style={styles.songSelector}

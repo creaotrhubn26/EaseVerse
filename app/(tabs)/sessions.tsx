@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import SwipeableSessionCard from '@/components/SwipeableSessionCard';
+import LogoHeader from '@/components/LogoHeader';
 import { useApp } from '@/lib/AppContext';
 
 type FilterKey = 'latest' | 'best' | 'flagged';
@@ -59,6 +60,7 @@ export default function SessionsScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
+      <LogoHeader />
       <View style={styles.header}>
         <Text style={styles.headerTitle} accessibilityRole="header">Sessions</Text>
         <View style={styles.headerStats}>

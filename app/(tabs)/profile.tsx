@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useApp } from '@/lib/AppContext';
 import Toast from '@/components/Toast';
+import LogoHeader from '@/components/LogoHeader';
 import { apiRequest } from '@/lib/query-client';
 import { parseSongSections } from '@/lib/lyrics-sections';
 import * as Storage from '@/lib/storage';
@@ -577,15 +578,7 @@ export default function ProfileScreen() {
         variant={toast.variant ?? 'info'}
         onHide={() => setToast((current) => ({ ...current, visible: false }))}
       />
-      <View style={styles.logoHeader}>
-        <Image
-          source={require('@/assets/images/easeverse_logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-          accessibilityRole="image"
-          accessibilityLabel="EaseVerse logo"
-        />
-      </View>
+      <LogoHeader />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}
@@ -792,22 +785,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-  },
-  logoHeader: {
-    width: '100%',
-    paddingHorizontal: 0,
-    marginBottom: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logo: {
-    width: '100%',
-    aspectRatio: 3.2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 4,
   },
   statsCard: {
     marginHorizontal: 20,

@@ -15,6 +15,7 @@ import Colors from '@/constants/colors';
 import { genreList, type GenreId } from '@/constants/genres';
 import SectionCard from '@/components/SectionCard';
 import Toast from '@/components/Toast';
+import LogoHeader from '@/components/LogoHeader';
 import { useApp } from '@/lib/AppContext';
 import { generateId } from '@/lib/storage';
 import { parseSongSections } from '@/lib/lyrics-sections';
@@ -164,6 +165,7 @@ export default function LyricsScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
+      <LogoHeader />
       <View style={styles.header}>
         <Text style={styles.headerTitle} accessibilityRole="header">Lyrics</Text>
         <Pressable

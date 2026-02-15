@@ -87,12 +87,13 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
       {
         id: 'sing',
         title: 'Sing',
-        summary: 'Record a take and get live lyric guidance.',
+        summary: 'Record a take with live lyric guidance (and optional metronome).',
         route: '/',
         accent: Colors.gradientStart,
         icon: 'mic',
         bullets: [
           'Pick a song (tap the title at the top).',
+          'Set Tempo (BPM) in Lyrics to sync count-in and the metronome.',
           'Tap Record, sing, then tap Stop.',
           'Review your session and open the Practice Loop.',
         ],
@@ -100,23 +101,29 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
           { icon: 'mic', label: 'Record', description: 'Starts a new take.' },
           { icon: 'stop-circle', label: 'Stop', description: 'Ends the take and opens Session Review.' },
           { icon: 'chevron-down', label: 'Song picker', description: 'Switch the active song/lyrics.' },
+          { icon: 'timer-outline', label: 'Metronome', description: 'Toggles a click track at the song BPM.' },
+          { icon: 'flag', label: 'Marker', description: 'Adds a marker while recording.' },
         ],
         showWarmupIcons: true,
       },
       {
         id: 'lyrics',
         title: 'Lyrics',
-        summary: 'Write lyrics, structure sections, and keep them live-ready.',
+        summary: 'Write lyrics, set BPM, structure sections, and keep them live-ready.',
         route: '/lyrics',
         accent: Colors.successUnderline,
         icon: 'document-text',
         bullets: [
           'Write or import lyrics for your song.',
+          'Set Tempo (BPM) or Tap to detect BPM quickly.',
           'Auto-save keeps the Sing screen ready.',
+          'BPM drives count-in and the metronome while you record.',
           'Use Genre to tune coaching defaults for the style.',
         ],
         legend: [
           { icon: 'add-circle-outline', label: 'New song', description: 'Clears the current draft and starts fresh.' },
+          { icon: 'speedometer-outline', label: 'Tempo (BPM)', description: 'Syncs count-in + metronome while recording.' },
+          { icon: 'pulse-outline', label: 'Tap', description: 'Tap repeatedly to detect BPM.' },
           { icon: 'layers-outline', label: 'Structure', description: 'Helps you see sections like Verse/Chorus.' },
           { icon: 'download-outline', label: 'Import', description: 'Paste in lyrics from another source.' },
         ],
@@ -124,37 +131,43 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
       {
         id: 'sessions',
         title: 'Sessions',
-        summary: 'Track takes over time and find your best performances.',
+        summary: 'Track takes over time and drill tough lines with Practice Loop.',
         route: '/sessions',
         accent: Colors.warningUnderline,
         icon: 'time',
         bullets: [
           'Browse recordings and open Session Review.',
           'Filter by Latest, Best, or Flagged.',
-          'Flag your best takes for quick recall.',
+          'Swipe right to favorite, swipe left to delete.',
+          'Tap Practice Loop in Session Review to drill a phrase and adjust speed.',
         ],
         legend: [
           { icon: 'time-outline', label: 'Latest', description: 'Most recent recordings first.' },
           { icon: 'trophy-outline', label: 'Best', description: 'Sort by your top score.' },
           { icon: 'heart-outline', label: 'Flagged', description: 'Your saved favorites.' },
+          { icon: 'repeat', label: 'Practice Loop', description: 'Drill a line and slow it down if needed.' },
+          { icon: 'trash-outline', label: 'Delete', description: 'Swipe left on a session to remove it.' },
         ],
       },
       {
         id: 'profile',
         title: 'Profile',
-        summary: 'Tune the coaching to your voice, language, and workflow.',
+        summary: 'Tune coaching, live tracking speed, voice, and sync settings.',
         route: '/profile',
         accent: Colors.gradientMid,
         icon: 'person',
         bullets: [
           'Set Language and Accent Goal for coaching tone.',
-          'Adjust Feedback Intensity and Live Mode.',
-          'Use Lyrics Sync to pull the latest collab drafts.',
+          'Adjust Live Mode and Lyrics Follow Speed for live tracking.',
+          'Choose Mindfulness Voice (Female/Male) for spoken guidance.',
+          'Use Lyrics Sync to pull the latest collab drafts (including BPM) and see differences.',
         ],
         legend: [
-          { icon: 'language', label: 'Language', description: 'Affects live recognition and pronunciation coaching.' },
-          { icon: 'pulse', label: 'Feedback', description: 'How frequently coaching prompts appear.' },
-          { icon: 'git-merge', label: 'Lyrics sync', description: 'See what changed since your last session.' },
+          { icon: 'globe-outline', label: 'Language', description: 'Affects live recognition and pronunciation coaching.' },
+          { icon: 'flash-outline', label: 'Live mode', description: 'Stability vs Speed tracking.' },
+          { icon: 'speedometer-outline', label: 'Lyrics speed', description: 'How fast the highlighted word advances.' },
+          { icon: 'volume-high-outline', label: 'Mindfulness voice', description: 'Select a male/female voice for narration.' },
+          { icon: 'sync-outline', label: 'Lyrics sync', description: 'Pulls latest lyrics + BPM and shows what changed.' },
         ],
       },
     ],
@@ -178,7 +191,8 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
           <View style={styles.introCopy}>
             <Text style={styles.introTitle}>Quick Tour</Text>
             <Text style={styles.introText}>
-              Tap an icon to jump, or expand a card to learn what each button means.
+              Tap an icon to jump, or expand a card to learn what each button means. Pro tip: set a
+              song Tempo (BPM) in Lyrics to sync count-in and the metronome.
             </Text>
           </View>
         </View>

@@ -38,6 +38,14 @@ function normalizeEnvString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function getElevenLabsBaseUrl(): string {
+  // Treat ELEVENLABS_BASE_URL as an API base path (defaults to v1).
+  // Ensure it ends with "/" so relative URL resolution keeps the path segment.
+  const configured =
+    normalizeEnvString(process.env.ELEVENLABS_BASE_URL) ?? "https://api.elevenlabs.io/v1/";
+  return configured.endsWith("/") ? configured : `${configured}/`;
+}
+
 function getCacheDir(): string {
   const configured = normalizeEnvString(process.env.ELEVENLABS_TTS_CACHE_DIR);
   return configured ?? path.join(process.cwd(), "server_cache", "elevenlabs_tts");
@@ -80,8 +88,7 @@ function resolveVoiceNameFromEnv(voice: ElevenLabsVoice): string {
 }
 
 async function fetchVoices(apiKey: string): Promise<ElevenLabsVoiceListResponse> {
-  const baseUrl = normalizeEnvString(process.env.ELEVENLABS_BASE_URL) ?? "https://api.elevenlabs.io/v1";
-  const url = new URL("/voices", baseUrl);
+  const url = new URL("voices", getElevenLabsBaseUrl());
 
   const res = await fetch(url.toString(), {
     method: "GET",
@@ -146,8 +153,7 @@ async function elevenLabsRequestTts(params: {
   modelId: string;
   voiceSettings: ElevenLabsVoiceSettings;
 }): Promise<Buffer> {
-  const baseUrl = normalizeEnvString(process.env.ELEVENLABS_BASE_URL) ?? "https://api.elevenlabs.io/v1";
-  const url = new URL(`/text-to-speech/${params.voiceId}`, baseUrl);
+  const url = new URL(`text-to-speech/${params.voiceId}`, getElevenLabsBaseUrl());
 
   const body: Record<string, unknown> = {
     text: params.text,
@@ -250,4 +256,3 @@ export async function elevenLabsTextToSpeech(params: ElevenLabsTtsParams): Promi
     inFlightByCacheKey.delete(cacheKey);
   }
 }
-

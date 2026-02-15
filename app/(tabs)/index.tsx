@@ -711,6 +711,45 @@ export default function SingScreen() {
           <View style={styles.emptyCard}>
             <Ionicons name="musical-notes" size={48} color={Colors.textTertiary} />
             <Text style={styles.emptyTitle}>No lyrics loaded</Text>
+            <Text style={styles.emptySubtitle}>
+              Before you start, do you want to warm up or do a quick mindfulness reset?
+            </Text>
+            <View style={styles.emptyQuickRow}>
+              <Pressable
+                style={({ pressed }) => [styles.emptyQuickBtn, pressed && styles.emptyQuickBtnPressed]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  router.push('/warmup');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Warm up"
+                accessibilityHint="Opens the vocal warm-up routine"
+              >
+                <Image
+                  source={require('@/assets/images/warmup-icon.png')}
+                  style={styles.emptyQuickIcon}
+                  accessible={false}
+                />
+                <Text style={styles.emptyQuickText}>Warm Up</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.emptyQuickBtn, pressed && styles.emptyQuickBtnPressed]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  router.push('/mindfulness');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Mindfulness"
+                accessibilityHint="Opens the breathing and focus routine"
+              >
+                <Image
+                  source={require('@/assets/images/mindfulness-icon.png')}
+                  style={styles.emptyQuickIcon}
+                  accessible={false}
+                />
+                <Text style={styles.emptyQuickText}>Mindfulness</Text>
+              </Pressable>
+            </View>
             <Pressable
               style={styles.emptyBtn}
               onPress={() => router.push('/(tabs)/lyrics')}
@@ -908,6 +947,48 @@ const styles = StyleSheet.create({
   emptyTitle: {
     color: Colors.textSecondary,
     fontSize: 18,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  emptySubtitle: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Inter_400Regular',
+    textAlign: 'center',
+    maxWidth: 360,
+    marginTop: -8,
+  },
+  emptyQuickRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    maxWidth: 420,
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  emptyQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    minHeight: 44,
+  },
+  emptyQuickBtnPressed: {
+    opacity: 0.9,
+  },
+  emptyQuickIcon: {
+    width: 20,
+    height: 20,
+    resizeMode: 'contain',
+  },
+  emptyQuickText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
   },
   emptyBtn: {

@@ -33,6 +33,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     feedbackIntensity: 'medium',
     liveMode: 'stability',
     countIn: 0,
+    narrationVoice: 'female',
   });
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [isLoading, setIsLoading] = useState(true);

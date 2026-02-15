@@ -6,6 +6,7 @@ import { buildSessionScoring } from "@shared/session-scoring";
 import { registerAudioRoutes } from "./replit_integrations/audio";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
+import { elevenLabsTextToSpeech } from "./elevenlabs";
 import {
   textToSpeech,
   openai,
@@ -20,6 +21,13 @@ const voiceSchema = z.enum(supportedVoices);
 const ttsRequestSchema = z.object({
   text: z.string().trim().min(1).max(500),
   voice: voiceSchema.optional(),
+});
+
+const elevenLabsVoiceSchema = z.enum(["female", "male"]);
+
+const elevenLabsTtsRequestSchema = z.object({
+  text: z.string().trim().min(1).max(2000),
+  voice: elevenLabsVoiceSchema.optional(),
 });
 
 const pronounceRequestSchema = z.object({
@@ -435,6 +443,11 @@ function getApiCatalog(req: Request) {
       { method: "POST", path: "/api/v1/tts", description: "Text to speech (mp3 response)" },
       {
         method: "POST",
+        path: "/api/v1/tts/elevenlabs",
+        description: "Text to speech via ElevenLabs (mp3 response)",
+      },
+      {
+        method: "POST",
         path: "/api/v1/pronounce",
         description: "Pronunciation guidance + TTS audio in base64",
       },
@@ -493,6 +506,12 @@ function getOpenApiSpec(req: Request) {
       "/api/v1/tts": {
         post: {
           summary: "Generate speech from text",
+          responses: { "200": { description: "MP3 audio stream" } },
+        },
+      },
+      "/api/v1/tts/elevenlabs": {
+        post: {
+          summary: "Generate speech from text (ElevenLabs)",
           responses: { "200": { description: "MP3 audio stream" } },
         },
       },
@@ -576,6 +595,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(audioBuffer);
     } catch (error) {
       console.error("TTS error:", error);
+      res.status(500).json({ error: "Failed to generate speech" });
+    }
+  };
+
+  const handleElevenLabsTts = async (req: Request, res: Response) => {
+    try {
+      const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+      if (!apiKey) {
+        return res.status(503).json({
+          error: "ElevenLabs is not configured. Set ELEVENLABS_API_KEY.",
+        });
+      }
+
+      const parsedBody = elevenLabsTtsRequestSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+
+      const { text, voice } = parsedBody.data;
+      const resolvedVoice = voice ?? "female";
+      const modelId = process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2";
+
+      const result = await elevenLabsTextToSpeech({
+        apiKey,
+        text,
+        voice: resolvedVoice,
+        modelId,
+      });
+
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Content-Length", result.audio.length.toString());
+      res.setHeader("X-TTS-Cache", result.cache);
+      res.send(result.audio);
+    } catch (error) {
+      console.error("ElevenLabs TTS error:", error);
       res.status(500).json({ error: "Failed to generate speech" });
     }
   };
@@ -818,6 +872,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tts", handleTts);
   app.post("/api/v1/tts", handleTts);
+  app.post("/api/tts/elevenlabs", handleElevenLabsTts);
+  app.post("/api/v1/tts/elevenlabs", handleElevenLabsTts);
 
   app.post("/api/pronounce", (req: Request, res: Response) =>
     handlePronounce(req, res, { enforceServiceApiKey: true })

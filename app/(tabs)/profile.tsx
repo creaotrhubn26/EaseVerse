@@ -23,7 +23,7 @@ import HowToUseEaseVerse from '@/components/HowToUseEaseVerse';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { parseSongSections } from '@/lib/lyrics-sections';
 import * as Storage from '@/lib/storage';
-import type { FeedbackIntensity, LiveMode, Song } from '@/lib/types';
+import type { FeedbackIntensity, LiveMode, NarrationVoice, Song } from '@/lib/types';
 
 type CollabLyricsItem = {
   externalTrackId: string;
@@ -390,8 +390,8 @@ export default function ProfileScreen() {
     ? Math.round(sessions.reduce((acc, s) => acc + s.insights.textAccuracy, 0) / sessions.length)
     : 0;
 
-  const languages = ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Japanese', 'Korean'];
-  const accents = ['US', 'UK', 'AU', 'Standard'];
+	const languages = ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Japanese', 'Korean'];
+	const accents = ['US', 'UK', 'AU', 'Standard'];
 
   const cycleLanguage = () => {
     const idx = languages.indexOf(settings.language);
@@ -718,6 +718,21 @@ export default function ProfileScreen() {
             value={String(settings.countIn)}
             onChange={v => updateSettings({ countIn: Number(v) as 0 | 2 | 4 })}
           />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Mindfulness Voice</Text>
+          <SegmentedControl<NarrationVoice>
+            options={[
+              { key: 'female', label: 'Female' },
+              { key: 'male', label: 'Male' },
+            ]}
+            value={settings.narrationVoice}
+            onChange={(v) => updateSettings({ narrationVoice: v })}
+          />
+          <Text style={styles.modeHint}>
+            Used for mindfulness narration (and other spoken guidance).
+          </Text>
         </View>
 
         <View style={styles.section}>

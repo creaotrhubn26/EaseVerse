@@ -54,6 +54,7 @@ export interface Session {
 export type SignalQuality = 'good' | 'ok' | 'poor';
 export type FeedbackIntensity = 'low' | 'medium' | 'high';
 export type LiveMode = 'stability' | 'speed';
+export type NarrationVoice = 'female' | 'male';
 
 export interface UserSettings {
   language: string;
@@ -61,4 +62,5 @@ export interface UserSettings {
   feedbackIntensity: FeedbackIntensity;
   liveMode: LiveMode;
   countIn: 0 | 2 | 4;
+  narrationVoice: NarrationVoice;
 }

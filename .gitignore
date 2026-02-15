@@ -9,6 +9,7 @@ dist/
 web-build/
 server_dist/
 expo-env.d.ts
+server_cache/
 
 # Native
 ios/

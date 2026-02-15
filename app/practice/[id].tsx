@@ -49,7 +49,7 @@ function blobToDataUri(blob: Blob): Promise<string> {
 export default function PracticeLoopScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { sessions } = useApp();
+  const { sessions, settings } = useApp();
 
   const session = useMemo(() => sessions.find(s => s.id === id), [sessions, id]);
 
@@ -101,12 +101,28 @@ export default function PracticeLoopScreen() {
     try {
       setIsLoopAudioLoading(true);
       setLoopAudioError(null);
-      const url = new URL('/api/tts', getApiUrl());
-      const response = await fetch(url.toString(), {
-        method: 'POST',
-        headers: getApiHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ text: line, voice: 'nova' }),
-      });
+      const baseUrl = getApiUrl();
+      const elevenUrl = new URL('/api/tts/elevenlabs', baseUrl);
+      const fallbackUrl = new URL('/api/tts', baseUrl);
+
+      let response: Response | null = null;
+      try {
+        response = await fetch(elevenUrl.toString(), {
+          method: 'POST',
+          headers: getApiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ text: line, voice: settings.narrationVoice }),
+        });
+      } catch {
+        response = null;
+      }
+
+      if (!response || !response.ok) {
+        response = await fetch(fallbackUrl.toString(), {
+          method: 'POST',
+          headers: getApiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ text: line, voice: 'nova' }),
+        });
+      }
       if (!response.ok) {
         throw new Error(`TTS request failed: ${response.status}`);
       }

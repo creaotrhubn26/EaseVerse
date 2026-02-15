@@ -21,6 +21,7 @@ const defaultSettings: UserSettings = {
   feedbackIntensity: 'medium',
   liveMode: 'stability',
   countIn: 0,
+  narrationVoice: 'female',
 };
 
 function safeParseJson(raw: string): unknown | null {

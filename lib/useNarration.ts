@@ -1,10 +1,12 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useApp } from '@/lib/AppContext';
 import { getApiHeaders, getApiUrl } from '@/lib/query-client';
 
 export type NarrationState = 'idle' | 'loading' | 'playing' | 'error';
 
 export function useNarration() {
+  const { settings } = useApp();
   const [state, setState] = useState<NarrationState>('idle');
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -55,13 +57,27 @@ export function useNarration() {
 
     try {
       const baseUrl = getApiUrl();
-      const url = new URL('/api/tts', baseUrl);
+      const elevenUrl = new URL('/api/tts/elevenlabs', baseUrl);
+      const fallbackUrl = new URL('/api/tts', baseUrl);
 
-      const response = await fetch(url.toString(), {
-        method: 'POST',
-        headers: getApiHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ text, voice: 'nova' }),
-      });
+      let response: Response | null = null;
+      try {
+        response = await fetch(elevenUrl.toString(), {
+          method: 'POST',
+          headers: getApiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ text, voice: settings.narrationVoice }),
+        });
+      } catch {
+        response = null;
+      }
+
+      if (!response || !response.ok) {
+        response = await fetch(fallbackUrl.toString(), {
+          method: 'POST',
+          headers: getApiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ text, voice: 'nova' }),
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`TTS failed: ${response.status}`);
@@ -98,7 +114,7 @@ export function useNarration() {
         }
       }, 2000);
     }
-  }, [player]);
+  }, [player, settings.narrationVoice]);
 
   const speakSequence = useCallback(async (texts: string[], onAllDone?: () => void) => {
     const seqId = requestIdRef.current;

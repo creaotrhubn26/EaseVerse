@@ -2,8 +2,12 @@ import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { chatStorage } from "./storage";
 
+const resolvedOpenAiApiKey =
+  process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+const hasChatAiCredentials = Boolean(resolvedOpenAiApiKey);
+
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  apiKey: resolvedOpenAiApiKey ?? "missing-openai-key",
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
@@ -64,6 +68,13 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
   // Send message and get AI response (streaming)
   app.post(`${basePath}/conversations/:id/messages`, async (req: Request, res: Response) => {
     try {
+      if (!hasChatAiCredentials) {
+        return res.status(503).json({
+          error:
+            "AI chat service is not configured. Set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY.",
+        });
+      }
+
       const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const conversationId = parseInt(idParam);
       const { content } = req.body;

@@ -1,9 +1,16 @@
 import type { Express, Request, Response } from "express";
-import { openai } from "./client";
+import { hasImageAiCredentials, openai } from "./client";
 
 export function registerImageRoutes(app: Express, basePath = "/api/image"): void {
   app.post(`${basePath}/generate`, async (req: Request, res: Response) => {
     try {
+      if (!hasImageAiCredentials) {
+        return res.status(503).json({
+          error:
+            "AI image service is not configured. Set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY.",
+        });
+      }
+
       const { prompt, size = "1024x1024" } = req.body;
 
       if (!prompt) {

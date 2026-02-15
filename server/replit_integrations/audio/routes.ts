@@ -1,6 +1,12 @@
 import express, { type Express, type Request, type Response } from "express";
 import { chatStorage } from "../chat/storage";
-import { openai, speechToText, ensureCompatibleFormat, extractAudioDelta } from "./client";
+import {
+  openai,
+  speechToText,
+  ensureCompatibleFormat,
+  extractAudioDelta,
+  hasOpenAiCredentials,
+} from "./client";
 
 // Body parser with 50MB limit for audio payloads
 const audioBodyParser = express.json({ limit: "50mb" });
@@ -64,6 +70,13 @@ export function registerAudioRoutes(app: Express, basePath = "/api/audio"): void
   // Uses gpt-4o-mini-transcribe for STT, gpt-audio for voice response
   app.post(`${basePath}/conversations/:id/messages`, audioBodyParser, async (req: Request, res: Response) => {
     try {
+      if (!hasOpenAiCredentials) {
+        return res.status(503).json({
+          error:
+            "AI audio service is not configured. Set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY.",
+        });
+      }
+
       const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const conversationId = parseInt(idParam);
       const { audio, voice = "alloy" } = req.body;

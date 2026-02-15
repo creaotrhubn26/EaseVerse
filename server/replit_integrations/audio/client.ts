@@ -46,8 +46,13 @@ export function extractAudioDelta(delta: unknown): AudioDelta {
   };
 }
 
+const resolvedOpenAiApiKey =
+  process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+
+export const hasOpenAiCredentials = Boolean(resolvedOpenAiApiKey);
+
 export const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  apiKey: resolvedOpenAiApiKey ?? "missing-openai-key",
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 

@@ -4,6 +4,16 @@ import type { Song, Session, UserSettings } from './types';
 const SONGS_KEY = '@lyricflow_songs';
 const SESSIONS_KEY = '@lyricflow_sessions';
 const SETTINGS_KEY = '@lyricflow_settings';
+const LYRICS_SNAPSHOTS_KEY = '@easeverse_lyrics_snapshots';
+
+export type LyricsSnapshotRecord = {
+  lyrics: string;
+  syncedAt: number;
+  remoteUpdatedAt?: string;
+  sourceTrackId?: string;
+};
+
+export type LyricsSnapshotMap = Record<string, LyricsSnapshotRecord>;
 
 const defaultSettings: UserSettings = {
   language: 'English',
@@ -94,6 +104,53 @@ export async function getSettings(): Promise<UserSettings> {
 
 export async function saveSettings(settings: UserSettings): Promise<void> {
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+export async function getLyricsSnapshots(): Promise<LyricsSnapshotMap> {
+  const data = await AsyncStorage.getItem(LYRICS_SNAPSHOTS_KEY);
+  if (!data) {
+    return {};
+  }
+
+  const parsed = safeParseJson(data);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    await AsyncStorage.removeItem(LYRICS_SNAPSHOTS_KEY);
+    return {};
+  }
+
+  const snapshots = parsed as Record<string, unknown>;
+  const normalized: LyricsSnapshotMap = {};
+
+  for (const [songId, snapshot] of Object.entries(snapshots)) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      continue;
+    }
+
+    const candidate = snapshot as Record<string, unknown>;
+    if (typeof candidate.lyrics !== 'string') {
+      continue;
+    }
+
+    normalized[songId] = {
+      lyrics: candidate.lyrics,
+      syncedAt:
+        typeof candidate.syncedAt === 'number' && Number.isFinite(candidate.syncedAt)
+          ? candidate.syncedAt
+          : Date.now(),
+      remoteUpdatedAt:
+        typeof candidate.remoteUpdatedAt === 'string' ? candidate.remoteUpdatedAt : undefined,
+      sourceTrackId:
+        typeof candidate.sourceTrackId === 'string' ? candidate.sourceTrackId : undefined,
+    };
+  }
+
+  return normalized;
+}
+
+export async function saveLyricsSnapshots(
+  snapshots: LyricsSnapshotMap
+): Promise<void> {
+  await AsyncStorage.setItem(LYRICS_SNAPSHOTS_KEY, JSON.stringify(snapshots));
 }
 
 export function generateId(): string {

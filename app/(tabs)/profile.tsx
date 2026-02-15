@@ -1,4 +1,4 @@
-import React, { ComponentProps } from 'react';
+import React, { ComponentProps, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,6 +7,7 @@ import {
   Pressable,
   Platform,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -14,7 +15,212 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useApp } from '@/lib/AppContext';
-import type { FeedbackIntensity, LiveMode } from '@/lib/types';
+import Toast from '@/components/Toast';
+import { apiRequest } from '@/lib/query-client';
+import { parseSongSections } from '@/lib/lyrics-sections';
+import * as Storage from '@/lib/storage';
+import type { FeedbackIntensity, LiveMode, Song } from '@/lib/types';
+
+type CollabLyricsItem = {
+  externalTrackId: string;
+  title: string;
+  lyrics: string;
+  updatedAt?: string;
+};
+
+type DiffLine = {
+  type: 'added' | 'removed' | 'context';
+  text: string;
+};
+
+type LyricsSyncChange = {
+  songId: string;
+  title: string;
+  externalTrackId: string;
+  updatedAt?: string;
+  addedLines: number;
+  removedLines: number;
+  lines: DiffLine[];
+  isTruncated: boolean;
+};
+
+type AmbiguousLyricsMatch = {
+  externalTrackId: string;
+  title: string;
+  candidateCount: number;
+};
+
+const DIFF_PREVIEW_LIMIT = 18;
+
+function normalizeTitle(value: string): string {
+  return value.trim().toLocaleLowerCase();
+}
+
+function parseIsoTimestampMs(value?: string): number {
+  if (!value) {
+    return 0;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildLyricsSyncRoute(): string {
+  const params = new URLSearchParams();
+  const source = process.env.EXPO_PUBLIC_LYRICS_SYNC_SOURCE?.trim();
+  const projectId = process.env.EXPO_PUBLIC_LYRICS_SYNC_PROJECT_ID?.trim();
+
+  if (source) {
+    params.set('source', source);
+  }
+  if (projectId) {
+    params.set('projectId', projectId);
+  }
+
+  const query = params.toString();
+  return query ? `/api/v1/collab/lyrics?${query}` : '/api/v1/collab/lyrics';
+}
+
+function parseCollabItem(input: unknown): CollabLyricsItem | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return null;
+  }
+
+  const raw = input as Record<string, unknown>;
+  if (
+    typeof raw.externalTrackId !== 'string' ||
+    typeof raw.title !== 'string' ||
+    typeof raw.lyrics !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    externalTrackId: raw.externalTrackId,
+    title: raw.title,
+    lyrics: raw.lyrics,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+  };
+}
+
+function dedupeCollabItems(items: CollabLyricsItem[]): CollabLyricsItem[] {
+  const byTrackId = new Map<string, CollabLyricsItem>();
+  for (const item of items) {
+    const current = byTrackId.get(item.externalTrackId);
+    if (!current) {
+      byTrackId.set(item.externalTrackId, item);
+      continue;
+    }
+    const currentTime = parseIsoTimestampMs(current.updatedAt);
+    const incomingTime = parseIsoTimestampMs(item.updatedAt);
+    if (incomingTime >= currentTime) {
+      byTrackId.set(item.externalTrackId, item);
+    }
+  }
+  return Array.from(byTrackId.values());
+}
+
+function buildSongTitleCandidatesMap(songs: Song[]): Map<string, Song[]> {
+  const candidates = new Map<string, Song[]>();
+  for (const song of songs) {
+    const key = normalizeTitle(song.title);
+    if (!key) {
+      continue;
+    }
+    const existing = candidates.get(key) ?? [];
+    existing.push(song);
+    candidates.set(key, existing);
+  }
+  return candidates;
+}
+
+function buildLineDiff(
+  previousLyrics: string,
+  nextLyrics: string,
+  maxPreviewLines = DIFF_PREVIEW_LIMIT
+): { lines: DiffLine[]; addedLines: number; removedLines: number; isTruncated: boolean } {
+  const previousLines = previousLyrics.replace(/\r\n/g, '\n').split('\n');
+  const nextLines = nextLyrics.replace(/\r\n/g, '\n').split('\n');
+  const n = previousLines.length;
+  const m = nextLines.length;
+
+  const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      if (previousLines[i] === nextLines[j]) {
+        dp[i][j] = 1 + dp[i + 1][j + 1];
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+  }
+
+  const rawLines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  let addedLines = 0;
+  let removedLines = 0;
+
+  while (i < n && j < m) {
+    if (previousLines[i] === nextLines[j]) {
+      rawLines.push({ type: 'context', text: previousLines[i] });
+      i += 1;
+      j += 1;
+      continue;
+    }
+
+    if (dp[i + 1][j] >= dp[i][j + 1]) {
+      rawLines.push({ type: 'removed', text: previousLines[i] });
+      removedLines += 1;
+      i += 1;
+    } else {
+      rawLines.push({ type: 'added', text: nextLines[j] });
+      addedLines += 1;
+      j += 1;
+    }
+  }
+
+  while (i < n) {
+    rawLines.push({ type: 'removed', text: previousLines[i] });
+    removedLines += 1;
+    i += 1;
+  }
+  while (j < m) {
+    rawLines.push({ type: 'added', text: nextLines[j] });
+    addedLines += 1;
+    j += 1;
+  }
+
+  const changedIndices = rawLines
+    .map((line, index) => (line.type === 'context' ? -1 : index))
+    .filter((index) => index >= 0);
+
+  if (changedIndices.length === 0) {
+    return {
+      lines: rawLines.slice(0, maxPreviewLines),
+      addedLines,
+      removedLines,
+      isTruncated: rawLines.length > maxPreviewLines,
+    };
+  }
+
+  const selectedIndices = new Set<number>();
+  for (const index of changedIndices) {
+    selectedIndices.add(index);
+    if (index > 0) selectedIndices.add(index - 1);
+    if (index + 1 < rawLines.length) selectedIndices.add(index + 1);
+  }
+
+  const previewIndices = Array.from(selectedIndices)
+    .sort((a, b) => a - b)
+    .slice(0, maxPreviewLines);
+
+  return {
+    lines: previewIndices.map((index) => rawLines[index]),
+    addedLines,
+    removedLines,
+    isTruncated: previewIndices.length < selectedIndices.size || previewIndices.length < rawLines.length,
+  };
+}
 
 function SettingRow({
   icon,
@@ -107,7 +313,34 @@ function SegmentedControl<T extends string>({
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings, sessions } = useApp();
+  const {
+    settings,
+    updateSettings,
+    sessions,
+    songs,
+    activeSong,
+    updateSong,
+    setActiveSong,
+  } = useApp();
+  const [syncingLyrics, setSyncingLyrics] = useState(false);
+  const [syncChanges, setSyncChanges] = useState<LyricsSyncChange[]>([]);
+  const [lastLyricsSyncAt, setLastLyricsSyncAt] = useState<number | null>(null);
+  const [syncSummary, setSyncSummary] = useState({
+    changed: 0,
+    unchanged: 0,
+    unmatched: 0,
+    ambiguous: 0,
+  });
+  const [ambiguousMatches, setAmbiguousMatches] = useState<AmbiguousLyricsMatch[]>([]);
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    variant?: 'success' | 'error' | 'info';
+  }>({
+    visible: false,
+    message: '',
+    variant: 'info',
+  });
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -141,8 +374,209 @@ export default function ProfileScreen() {
     return `${m}m`;
   };
 
+  const formatSyncTime = useCallback((timestamp: number | null) => {
+    if (!timestamp || !Number.isFinite(timestamp)) {
+      return 'Never';
+    }
+    return new Date(timestamp).toLocaleString();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const snapshots = await Storage.getLyricsSnapshots();
+      const snapshotValues = Object.values(snapshots);
+      if (cancelled || snapshotValues.length === 0) {
+        return;
+      }
+      const latest = Math.max(...snapshotValues.map((snapshot) => snapshot.syncedAt || 0));
+      if (Number.isFinite(latest) && latest > 0) {
+        setLastLyricsSyncAt(latest);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSyncLatestLyrics = useCallback(async () => {
+    if (syncingLyrics) {
+      return;
+    }
+
+    setSyncingLyrics(true);
+    try {
+      const response = await apiRequest('GET', buildLyricsSyncRoute());
+      const payload = (await response.json()) as { items?: unknown[] };
+      const remoteItems = Array.isArray(payload.items)
+        ? dedupeCollabItems(
+            payload.items
+              .map(parseCollabItem)
+              .filter((item): item is CollabLyricsItem => Boolean(item))
+          )
+        : [];
+
+      if (remoteItems.length === 0) {
+        setSyncSummary({ changed: 0, unchanged: 0, unmatched: 0, ambiguous: 0 });
+        setAmbiguousMatches([]);
+        setSyncChanges([]);
+        setLastLyricsSyncAt(Date.now());
+        setToast({
+          visible: true,
+          message: 'Lyrics synced. No remote lyric drafts found.',
+          variant: 'info',
+        });
+        return;
+      }
+
+      const snapshots = await Storage.getLyricsSnapshots();
+      const nextSnapshots: Storage.LyricsSnapshotMap = { ...snapshots };
+      const pendingSongUpdates = new Map<string, Song>();
+      const changes: LyricsSyncChange[] = [];
+      const songsById = new Map(songs.map((song) => [song.id, song]));
+      const songsByTitle = buildSongTitleCandidatesMap(songs);
+      const songIdBySourceTrackId = new Map<string, string>();
+      const ambiguousItems: AmbiguousLyricsMatch[] = [];
+      for (const [songId, snapshot] of Object.entries(nextSnapshots)) {
+        if (snapshot.sourceTrackId) {
+          songIdBySourceTrackId.set(snapshot.sourceTrackId, songId);
+        }
+      }
+      let changed = 0;
+      let unchanged = 0;
+      let unmatched = 0;
+      let ambiguous = 0;
+
+      for (const item of remoteItems) {
+        const snapshotSongId = songIdBySourceTrackId.get(item.externalTrackId);
+        let matchedSong =
+          (snapshotSongId ? songsById.get(snapshotSongId) : undefined) ??
+          songsById.get(item.externalTrackId);
+
+        if (!matchedSong) {
+          const titleCandidates = songsByTitle.get(normalizeTitle(item.title)) ?? [];
+          if (titleCandidates.length === 1) {
+            matchedSong = titleCandidates[0];
+          } else if (titleCandidates.length > 1) {
+            ambiguous += 1;
+            ambiguousItems.push({
+              externalTrackId: item.externalTrackId,
+              title: item.title,
+              candidateCount: titleCandidates.length,
+            });
+            continue;
+          }
+        }
+
+        if (!matchedSong) {
+          unmatched += 1;
+          continue;
+        }
+
+        const incomingLyrics = item.lyrics.replace(/\r\n/g, '\n');
+        const snapshotLyrics = nextSnapshots[matchedSong.id]?.lyrics ?? matchedSong.lyrics;
+        const hasDiffSinceLastSession = snapshotLyrics !== incomingLyrics;
+
+        if (matchedSong.lyrics !== incomingLyrics) {
+          pendingSongUpdates.set(matchedSong.id, {
+            ...matchedSong,
+            lyrics: incomingLyrics,
+            sections: parseSongSections(incomingLyrics),
+            updatedAt: Date.now(),
+          });
+        }
+
+        if (hasDiffSinceLastSession) {
+          changed += 1;
+          const diff = buildLineDiff(snapshotLyrics, incomingLyrics);
+          changes.push({
+            songId: matchedSong.id,
+            title: matchedSong.title,
+            externalTrackId: item.externalTrackId,
+            updatedAt: item.updatedAt,
+            addedLines: diff.addedLines,
+            removedLines: diff.removedLines,
+            lines: diff.lines,
+            isTruncated: diff.isTruncated,
+          });
+        } else {
+          unchanged += 1;
+        }
+
+        nextSnapshots[matchedSong.id] = {
+          lyrics: incomingLyrics,
+          syncedAt: Date.now(),
+          remoteUpdatedAt: item.updatedAt,
+          sourceTrackId: item.externalTrackId,
+        };
+        songIdBySourceTrackId.set(item.externalTrackId, matchedSong.id);
+      }
+
+      for (const updatedSong of pendingSongUpdates.values()) {
+        updateSong(updatedSong);
+        if (activeSong?.id === updatedSong.id) {
+          setActiveSong(updatedSong);
+        }
+      }
+
+      await Storage.saveLyricsSnapshots(nextSnapshots);
+      setSyncSummary({ changed, unchanged, unmatched, ambiguous });
+      setAmbiguousMatches(ambiguousItems.slice(0, 5));
+      setSyncChanges(changes);
+      setLastLyricsSyncAt(Date.now());
+
+      if (changed > 0) {
+        setToast({
+          visible: true,
+          message:
+            `Synced latest lyrics. ${changed} change${changed === 1 ? '' : 's'} since last session.` +
+            (ambiguous > 0
+              ? ` ${ambiguous} draft${ambiguous === 1 ? '' : 's'} skipped due to duplicate local song titles.`
+              : ''),
+          variant: 'success',
+        });
+      } else {
+        setToast({
+          visible: true,
+          message:
+            'Synced latest lyrics. No changes since last session.' +
+            (ambiguous > 0
+              ? ` ${ambiguous} draft${ambiguous === 1 ? '' : 's'} skipped due to duplicate local song titles.`
+              : ''),
+          variant: 'info',
+        });
+      }
+    } catch (error) {
+      console.error('Lyrics sync failed:', error);
+      setToast({
+        visible: true,
+        message: 'Lyrics sync failed. Check API connection and key.',
+        variant: 'error',
+      });
+    } finally {
+      setSyncingLyrics(false);
+    }
+  }, [activeSong?.id, setActiveSong, songs, syncingLyrics, updateSong]);
+
+  const sortedSyncChanges = useMemo(
+    () =>
+      [...syncChanges].sort((a, b) => {
+        const aTime = parseIsoTimestampMs(a.updatedAt);
+        const bTime = parseIsoTimestampMs(b.updatedAt);
+        return bTime - aTime;
+      }),
+    [syncChanges]
+  );
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        variant={toast.variant ?? 'info'}
+        onHide={() => setToast((current) => ({ ...current, visible: false }))}
+      />
       <View style={styles.logoHeader}>
         <Image
           source={require('@/assets/images/easeverse_logo.png')}
@@ -242,6 +676,103 @@ export default function ProfileScreen() {
             value={String(settings.countIn)}
             onChange={v => updateSettings({ countIn: Number(v) as 0 | 2 | 4 })}
           />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Lyrics Sync</Text>
+          <View style={styles.settingsCard}>
+            <SettingRow
+              icon="refresh-cw"
+              label="Sync Latest Lyrics"
+              value={syncingLyrics ? 'Syncing...' : 'Run now'}
+              onPress={syncingLyrics ? undefined : handleSyncLatestLyrics}
+              accessibilityHint="Pulls latest collaborative lyric drafts and compares with last synced session"
+            />
+            <View style={styles.divider} />
+            <SettingRow
+              icon="clock"
+              label="Last Synced"
+              value={formatSyncTime(lastLyricsSyncAt)}
+            />
+            <View style={styles.divider} />
+            <SettingRow
+              icon="git-merge"
+              label="Changes Since Last Session"
+              value={String(syncSummary.changed)}
+            />
+            {syncingLyrics && (
+              <View style={styles.syncingRow}>
+                <ActivityIndicator size="small" color={Colors.gradientStart} />
+                <Text style={styles.syncingText}>Fetching latest drafts and calculating differences...</Text>
+              </View>
+            )}
+          </View>
+
+          {syncSummary.unmatched > 0 && (
+            <Text style={styles.modeHint}>
+              {syncSummary.unmatched} remote draft{syncSummary.unmatched === 1 ? '' : 's'} could not be matched to a local song.
+            </Text>
+          )}
+
+          {syncSummary.ambiguous > 0 && (
+            <Text style={styles.modeHint}>
+              {syncSummary.ambiguous} remote draft{syncSummary.ambiguous === 1 ? '' : 's'} skipped because duplicate local song titles caused ambiguous matching.
+            </Text>
+          )}
+
+          {ambiguousMatches.length > 0 && (
+            <View style={styles.ambiguousList}>
+              {ambiguousMatches.map((item) => (
+                <Text key={item.externalTrackId} style={styles.ambiguousItem}>
+                  - {item.title} ({item.externalTrackId}) matched {item.candidateCount} local songs.
+                </Text>
+              ))}
+            </View>
+          )}
+
+          {(syncSummary.changed > 0 || syncSummary.unchanged > 0) && (
+            <Text style={styles.modeHint}>
+              Last sync: {syncSummary.changed} changed, {syncSummary.unchanged} unchanged, {syncSummary.ambiguous} skipped (ambiguous), {syncSummary.unmatched} unmatched.
+            </Text>
+          )}
+
+          {sortedSyncChanges.length > 0 && (
+            <View style={styles.diffList}>
+              {sortedSyncChanges.map((change) => (
+                <View key={`${change.songId}-${change.externalTrackId}`} style={styles.diffCard}>
+                  <View style={styles.diffHeader}>
+                    <Text style={styles.diffTitle}>{change.title}</Text>
+                    <Text style={styles.diffStats}>+{change.addedLines} / -{change.removedLines}</Text>
+                  </View>
+                  <Text style={styles.diffMeta}>
+                    Source: {change.externalTrackId}
+                    {change.updatedAt ? ` • Updated ${new Date(change.updatedAt).toLocaleString()}` : ''}
+                  </Text>
+                  <View style={styles.diffLines}>
+                    {change.lines.map((line, index) => (
+                      <Text
+                        key={`${change.songId}-${index}`}
+                        style={[
+                          styles.diffLine,
+                          line.type === 'added'
+                            ? styles.diffLineAdded
+                            : line.type === 'removed'
+                              ? styles.diffLineRemoved
+                              : styles.diffLineContext,
+                        ]}
+                      >
+                        {line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  '}
+                        {line.text || ' '}
+                      </Text>
+                    ))}
+                    {change.isTruncated && (
+                      <Text style={styles.diffTruncated}>...more lines changed</Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -406,5 +937,92 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
     lineHeight: 18,
+  },
+  syncingRow: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  syncingText: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    flex: 1,
+  },
+  ambiguousList: {
+    marginTop: -2,
+    gap: 2,
+  },
+  ambiguousItem: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Inter_400Regular',
+  },
+  diffList: {
+    gap: 10,
+  },
+  diffCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    padding: 12,
+    gap: 8,
+  },
+  diffHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  diffTitle: {
+    color: Colors.textPrimary,
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    flex: 1,
+  },
+  diffStats: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+  },
+  diffMeta: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+  },
+  diffLines: {
+    backgroundColor: Colors.surfaceGlassLyrics,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 2,
+  },
+  diffLine: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: 'Inter_400Regular',
+  },
+  diffLineAdded: {
+    color: Colors.successUnderline,
+  },
+  diffLineRemoved: {
+    color: Colors.dangerUnderline,
+  },
+  diffLineContext: {
+    color: Colors.textTertiary,
+  },
+  diffTruncated: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontFamily: 'Inter_400Regular',
+    marginTop: 2,
   },
 });

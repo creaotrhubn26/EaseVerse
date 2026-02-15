@@ -73,6 +73,19 @@ const collabLyricsPool = collabLyricsDbUrl
   : null;
 let collabLyricsTableReadyPromise: Promise<void> | null = null;
 
+function collabRecordTimeMs(record: CollabLyricsRecord): number {
+  const updatedAtMs = Date.parse(record.updatedAt);
+  if (Number.isFinite(updatedAtMs)) {
+    return updatedAtMs;
+  }
+  const receivedAtMs = Date.parse(record.receivedAt);
+  return Number.isFinite(receivedAtMs) ? receivedAtMs : 0;
+}
+
+function sortCollabLyricsRecords(records: CollabLyricsRecord[]): CollabLyricsRecord[] {
+  return [...records].sort((a, b) => collabRecordTimeMs(b) - collabRecordTimeMs(a));
+}
+
 type RateWindowState = { count: number; windowStart: number };
 const pronounceRateWindow = new Map<string, RateWindowState>();
 const scoringRateWindow = new Map<string, RateWindowState>();
@@ -250,7 +263,7 @@ async function listCollabLyricsRecords(filters: {
   const source = filters.source?.trim();
 
   if (!collabLyricsPool) {
-    return Array.from(collabLyricsStore.values()).filter((item) => {
+    const filtered = Array.from(collabLyricsStore.values()).filter((item) => {
       if (projectId && item.projectId !== projectId) {
         return false;
       }
@@ -259,6 +272,7 @@ async function listCollabLyricsRecords(filters: {
       }
       return true;
     });
+    return sortCollabLyricsRecords(filtered);
   }
 
   try {
@@ -294,7 +308,7 @@ async function listCollabLyricsRecords(filters: {
     return items;
   } catch (error) {
     console.error("Collab lyrics DB list failed. Falling back to in-memory store.", error);
-    return Array.from(collabLyricsStore.values()).filter((item) => {
+    const filtered = Array.from(collabLyricsStore.values()).filter((item) => {
       if (projectId && item.projectId !== projectId) {
         return false;
       }
@@ -303,6 +317,7 @@ async function listCollabLyricsRecords(filters: {
       }
       return true;
     });
+    return sortCollabLyricsRecords(filtered);
   }
 }
 

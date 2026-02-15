@@ -340,6 +340,7 @@ export default function ProfileScreen() {
     updateSong,
     setActiveSong,
   } = useApp();
+  const [howToExpanded, setHowToExpanded] = useState(true);
   const [syncingLyrics, setSyncingLyrics] = useState(false);
   const [syncChanges, setSyncChanges] = useState<LyricsSyncChange[]>([]);
   const [lastLyricsSyncAt, setLastLyricsSyncAt] = useState<number | null>(null);
@@ -699,13 +700,34 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">How To Use</Text>
-          <HowToUseEaseVerse
-            onNavigate={(route) => {
+          <Pressable
+            onPress={() => {
+              setHowToExpanded((current) => !current);
               Haptics.selectionAsync();
-              router.push(route as any);
             }}
-          />
+            style={({ pressed }) => [styles.sectionHeader, pressed && styles.sectionHeaderPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="How To Use"
+            accessibilityHint={howToExpanded ? 'Collapses the help tour' : 'Expands the help tour'}
+            accessibilityState={{ expanded: howToExpanded }}
+          >
+            <Text style={styles.sectionTitle}>How To Use</Text>
+            <Ionicons
+              name={howToExpanded ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={Colors.textTertiary}
+            />
+          </Pressable>
+          {howToExpanded ? (
+            <HowToUseEaseVerse
+              onNavigate={(route) => {
+                Haptics.selectionAsync();
+                router.push(route as any);
+              }}
+            />
+          ) : (
+            <Text style={styles.modeHint}>Tap to expand the quick tour and icon legend.</Text>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -1002,6 +1024,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  sectionHeaderPressed: {
+    opacity: 0.9,
   },
   settingsCard: {
     backgroundColor: Colors.surface,

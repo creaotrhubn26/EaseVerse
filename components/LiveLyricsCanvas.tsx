@@ -114,8 +114,9 @@ function AnimatedLine({ line, isActive }: { line: LyricLine; isActive: boolean }
 }
 
 export default function LiveLyricsCanvas({ lines, activeLineIndex }: LiveLyricsCanvasProps) {
-  const visibleStart = Math.max(0, activeLineIndex - 1);
-  const visibleEnd = Math.min(lines.length, activeLineIndex + 3);
+  const hasActiveLine = activeLineIndex >= 0;
+  const visibleStart = hasActiveLine ? Math.max(0, activeLineIndex - 1) : 0;
+  const visibleEnd = hasActiveLine ? Math.min(lines.length, activeLineIndex + 3) : Math.min(lines.length, 4);
   const visibleLines = lines.slice(visibleStart, visibleEnd);
 
   return (
@@ -126,7 +127,7 @@ export default function LiveLyricsCanvas({ lines, activeLineIndex }: LiveLyricsC
           <AnimatedLine
             key={line.id}
             line={line}
-            isActive={globalIdx === activeLineIndex}
+            isActive={hasActiveLine && globalIdx === activeLineIndex}
           />
         );
       })}

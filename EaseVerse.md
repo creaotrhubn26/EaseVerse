@@ -6,7 +6,7 @@ EaseVerse is a mobile-first app for vocalists that captures singing, reveals lyr
 
 The primary user flow is: **Sing → Review → Practice Loop**, with four bottom navigation tabs: Sing, Lyrics, Sessions, and Profile.
 
-The app uses real microphone recording via expo-av with live audio metering. Word states (confirmed/unclear/mismatch) are determined by actual audio levels captured during singing. Session insights (accuracy, pronunciation clarity, timing) are derived from real recorded audio data. A pronunciation coach powered by OpenAI provides phonetic breakdowns and spoken demonstrations of correct word pronunciation.
+The app records audio via `expo-audio` with live metering for signal quality. Live lyric highlighting is driven by transcript-to-lyrics alignment (`lib/live-lyrics.ts`) and runs in real time on web via the Web Speech API; on native platforms, lyrics are displayed without live word tracking and are scored after the take. Session insights (accuracy, clarity, timing) come from STT + alignment on the server (`/api/v1/session-score`) when OpenAI credentials are configured.
 
 ## User Preferences
 
@@ -16,7 +16,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend (Expo / React Native)
 
-- **Framework**: Expo SDK 54 with React Native 0.81, targeting iOS, Android, and Web
+- **Framework**: Expo SDK 55 (preview) with React Native 0.83 + React 19, targeting iOS, Android, and Web
 - **Routing**: Expo Router v6 with file-based routing (`app/` directory). Uses typed routes and the React Compiler experiment.
 - **State Management**: React Context (`lib/AppContext.tsx`) provides global state for songs, sessions, settings, and the active song. No Redux or Zustand.
 - **Local Storage**: AsyncStorage (`@react-native-async-storage/async-storage`) persists songs, sessions, and user settings on-device via `lib/storage.ts`.
@@ -61,67 +61,36 @@ Preferred communication style: Simple, everyday language.
 
 - **Framework**: Express 5 running on Node.js
 - **Location**: `server/` directory with `index.ts` (entry), `routes.ts` (API routes), `storage.ts` (data layer)
-- **Current State**: Minimal — has CORS setup for Replit domains and localhost, serves a landing page HTML template, and has a basic in-memory user storage. API routes are mostly empty.
+- **Current State**: Serves the app, exposes integration endpoints under `/api/v1` (optional API key auth), and provides chat/audio/image integrations under `/api/*`. Uses Postgres-backed storage when `DATABASE_URL` is set (with an in-memory fallback for local/dev).
 - **Build**: Uses `esbuild` to bundle server for production, `tsx` for development
 
 ### Database
 
 - **ORM**: Drizzle ORM configured for PostgreSQL (`drizzle.config.ts`)
 - **Schema**: `shared/schema.ts` defines a `users` table (id, username, password) with Zod validation via `drizzle-zod`
-- **Current Storage**: Server uses `MemStorage` (in-memory Map) — not yet connected to Postgres.
+- **Current Storage**: Server uses Postgres when `DATABASE_URL` is set (users, chat, collab lyrics), with in-memory fallback when it is missing.
 
 ### Key Architectural Decisions
 
 1. **Local-first data**: Songs, sessions, and settings are stored in AsyncStorage on the client. The server is not yet the source of truth.
 2. **Shared schema directory**: `shared/` contains types and schemas used by both frontend and backend.
-3. **Demo data simulation**: `lib/demo-data.ts` provides mock songs and sessions. The Sing screen simulates word-by-word progression using `setInterval` timers.
-4. **Path aliases**: `@/*` maps to project root, `@shared/*` maps to `./shared/*`.
+3. **Live lyrics via transcript alignment**: `lib/live-lyrics.ts` aligns transcript to lyrics to drive active/confirmed word states (real time on web via Web Speech API).
+4. **STT-based scoring**: `/api/v1/session-score` uses OpenAI STT + alignment for credible coaching, with graceful degradation when AI keys are missing.
+5. **External integrations**: `/api/v1/collab/lyrics` supports third-party lyric draft syncing (optional API key auth via `EXTERNAL_API_KEY`).
+6. **Path aliases**: `@/*` maps to project root, `@shared/*` maps to `./shared/*`.
 
 ### Recent Changes
 
-- Added VU meter with animated bars for audio level visualization on Sing screen
-- Added song picker bottom sheet modal for selecting songs
-- Added swipe-to-delete and swipe-to-favorite on session cards using react-native-gesture-handler Swipeable
-- Animated word underlines in LiveLyricsCanvas with smooth fade-in transitions
-- Interactive waveform scrubber with drag-to-seek on Session Review screen
-- Pull-to-refresh on Sessions list
-- Filter badges with icons on Sessions screen
-- Best score stat in Sessions header
-- Fixed stale closure bug in handleStop: duration now tracked via useRef (durationRef) alongside state, so session creation works correctly after recording stops
-- Migrated all shadow* style props to boxShadow syntax (RecordButton, Lyrics, Session Review, Practice Loop, ErrorFallback)
-- Migrated pointerEvents from props to style to avoid deprecation warnings
-- Added pointerEvents:'none' to RecordButton pulse ring to prevent click interception
-- Added pointerEvents:'box-none' to lyrics area and zIndex to topBar/controls for proper click targeting on web
-- Added genre system: 8 genres (Pop, Jazz, R&B, Rock, Classical, Hip-Hop, Country, Soul) with genre-specific vocal coaching
-- Each genre has unique color, icon, vocal style, techniques, word-level pronunciation rules, timing style, and breathing tips
-- Genre picker on Lyrics screen lets users tag each song with a genre
-- Sing screen shows genre badge and vocal style tip, coach hints now genre-aware
-- Session Review shows genre coaching section with techniques, timing advice, and breathing tips
-- Session cards show genre badge in the chips row
-- Song picker modal shows genre icon and label per song
-- Added mindfulness feature for pre-performance mental preparation:
-  - 6 mood states (anxious, scattered, low, neutral, energized, confident) with personalized plans
-  - 4 breathing patterns (Box, 4-7-8, Power Breath, Singer Breath) with animated breath circle
-  - 5 energy channeling techniques (Grounding 5-4-3-2-1, Power Stance, Shake It Out, Focus Word, Channel the Fire)
-  - 3 guided visualizations (Golden Light, Perfect Take, Safe Space) with narration flow
-  - Mood-specific affirmations for vocalists
-  - Multi-phase flow: mood check-in → personalized plan → breathing → technique → visualization → affirmation → ready
-  - Heart icon button on Sing screen navigates to mindfulness (app/mindfulness.tsx)
-  - Data in constants/mindfulness.ts
-- Eliminated all `as any` type assertions — icon types use `ComponentProps<typeof Ionicons>['name']` pattern
-- Wired all previously unused variables with real functionality (Alert validation, Feather icons, animations, progress displays)
-- Fixed unescaped entities in warmup.tsx
-- Added real microphone recording using expo-av with audio metering (lib/useRecording.ts)
-- VU meter now shows real audio levels from microphone, not random animation
-- Signal quality indicator (Good/OK/Poor) now based on real audio levels (>0.4=good, >0.15=ok, else poor)
-- Word states (confirmed/unclear/mismatch) in LiveLyricsCanvas now derived from actual audio levels per word
-- Session insights (textAccuracy, pronunciationClarity, timingConsistency) computed from real recorded audio levels
-- Top-to-fix words in sessions derived from actual low-level words in the recording
-- Added pronunciation coach API endpoint (`/api/pronounce`) using OpenAI GPT-4o-mini for phonetic breakdowns and TTS for spoken pronunciation
-- Built `usePronunciationCoach` hook (lib/usePronunciationCoach.ts) for frontend to fetch and play pronunciation demonstrations
-- Session Review "Top to Fix" items now have tap-to-hear: tap any word to hear AI-generated pronunciation with phonetic spelling and singing tip
-- Practice Loop screen has "Hear pronunciation" button that picks the hardest word in selected phrase and plays pronunciation
-- Coach panel shows phonetic spelling (e.g., "ee-KWUHL"), singing tip, speaking indicator, and replay button
+- Removed demo auto-seeding; real empty-state behavior.
+- Sing screen now uses transcript-to-lyrics alignment for live word states (real time on web via Web Speech API), and settings like `countIn`, `liveMode`, and `feedbackIntensity` affect behavior.
+- Practice loop now plays real phrase audio via `/api/tts`, and practice speed controls playback rate.
+- Fixed duplicate-line lyrics parsing bug by switching to index-based sectioning (`lib/lyrics-sections.ts`).
+- Session scoring upgraded to STT + alignment (server `/api/v1/session-score`), with explicit graceful degradation when AI services are unavailable.
+- Added `/api/v1` integration API (catalog + OpenAPI spec) and `/api/v1/collab/lyrics` for external lyric draft syncing.
+- Hardened server: auto-load `.env`, CORS improvements, optional API keys + rate limiting.
+- Persisted users/chat to Postgres when `DATABASE_URL` is set (memory fallback otherwise).
+- CI now runs lint, typecheck, and tests.
+- Repo hygiene: removed accidental nested submodule clone entry.
 
 ### Development Workflow
 

@@ -35,34 +35,48 @@ function buildWordPositions(lyrics: string): WordPosition[] {
   return positions;
 }
 
-function alignWords(expected: string[], spoken: string[]): Set<number> {
-  const dp: number[][] = Array.from({ length: expected.length + 1 }, () =>
-    Array(spoken.length + 1).fill(0)
-  );
-
-  for (let i = 1; i <= expected.length; i += 1) {
-    for (let j = 1; j <= spoken.length; j += 1) {
-      if (expected[i - 1] === spoken[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1] + 1;
-      } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-      }
+function lowerBound(sorted: number[], target: number): number {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (sorted[mid] < target) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
     }
   }
+  return lo;
+}
+
+function alignWords(expected: string[], spoken: string[]): Set<number> {
+  const indicesByToken = new Map<string, number[]>();
+  expected.forEach((token, index) => {
+    if (!token) {
+      return;
+    }
+    const existing = indicesByToken.get(token);
+    if (existing) {
+      existing.push(index);
+    } else {
+      indicesByToken.set(token, [index]);
+    }
+  });
 
   const matchedIndices = new Set<number>();
-  let i = expected.length;
-  let j = spoken.length;
-  while (i > 0 && j > 0) {
-    if (expected[i - 1] === spoken[j - 1]) {
-      matchedIndices.add(i - 1);
-      i -= 1;
-      j -= 1;
-    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
-      i -= 1;
-    } else {
-      j -= 1;
+  let expectedCursor = 0;
+  for (const token of spoken) {
+    const positions = indicesByToken.get(token);
+    if (!positions) {
+      continue;
     }
+    const posIndex = lowerBound(positions, expectedCursor);
+    if (posIndex >= positions.length) {
+      continue;
+    }
+    const matched = positions[posIndex];
+    matchedIndices.add(matched);
+    expectedCursor = matched + 1;
   }
 
   return matchedIndices;
@@ -83,6 +97,9 @@ function toLineWordPosition(flatIndex: number, positions: WordPosition[]): {
   lineIndex: number;
   wordIndex: number;
 } {
+  if (flatIndex < 0) {
+    return { lineIndex: -1, wordIndex: -1 };
+  }
   if (positions.length === 0) {
     return { lineIndex: 0, wordIndex: 0 };
   }
@@ -99,7 +116,25 @@ export function getLiveLyricProgress(
 ): LiveLyricProgress {
   const positions = buildWordPositions(lyrics);
   const expectedTokens = positions.map((position) => tokenizeWords(position.text)[0]).filter(Boolean);
+  if (expectedTokens.length === 0) {
+    return {
+      activeFlatIndex: -1,
+      activeLineIndex: -1,
+      activeWordIndex: -1,
+      confirmedIndices: new Set<number>(),
+      totalWords: 0,
+    };
+  }
   const spokenTokens = tokenizeWords(transcript);
+  if (spokenTokens.length === 0) {
+    return {
+      activeFlatIndex: -1,
+      activeLineIndex: -1,
+      activeWordIndex: -1,
+      confirmedIndices: new Set<number>(),
+      totalWords: expectedTokens.length,
+    };
+  }
   const allMatched = alignWords(expectedTokens, spokenTokens);
 
   const confirmedIndices =
@@ -112,9 +147,7 @@ export function getLiveLyricProgress(
     activeFlatIndex += 1;
   }
 
-  if (expectedTokens.length === 0) {
-    activeFlatIndex = 0;
-  } else if (activeFlatIndex >= expectedTokens.length) {
+  if (activeFlatIndex >= expectedTokens.length) {
     activeFlatIndex = expectedTokens.length - 1;
   }
 

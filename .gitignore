@@ -35,6 +35,9 @@ yarn-error.*
 # local env files
 .env*.local
 
+# local nested clones / accidental submodules
+EaseVerse/
+
 # typescript
 *.tsbuildinfo
 .vercel

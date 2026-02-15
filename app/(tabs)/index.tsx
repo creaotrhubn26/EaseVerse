@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
+import { AudioModule, useAudioPlayer } from 'expo-audio';
 import Colors from '@/constants/colors';
 import { getGenreProfile, getGenreCoachHints, getWordTipForGenre, getGenreFixReasons } from '@/constants/genres';
 import RecordButton from '@/components/RecordButton';
@@ -25,8 +26,9 @@ import type { LyricLine, SignalQuality, Session } from '@/lib/types';
 
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
-  const { activeSong, songs, setActiveSong, addSession, settings } = useApp();
+  const { activeSong, songs, setActiveSong, addSession, settings, updateSettings } = useApp();
   const recording = useRecording();
+  const metronomePlayer = useAudioPlayer(require('@/assets/sounds/metronome-click.wav'));
   const [quality, setQuality] = useState<SignalQuality>('good');
   const [coachHint, setCoachHint] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('Ready to sing');
@@ -43,6 +45,9 @@ export default function SingScreen() {
   const liveRecognizerRef = useRef<any>(null);
   const liveRecognizerActiveRef = useRef(false);
   const liveRecognizerRestartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const metronomeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const metronomeBeatMsRef = useRef<number | null>(null);
+  const metronomeBeatRef = useRef(0);
 
   const isRecording = recording.isRecording;
   const isPaused = recording.isPaused;
@@ -53,6 +58,12 @@ export default function SingScreen() {
     () => lyricsText.split('\n').filter(l => l.trim()),
     [lyricsText]
   );
+  const bpm = activeSong?.bpm;
+  const bpmValue =
+    typeof bpm === 'number' && Number.isFinite(bpm)
+      ? Math.max(30, Math.min(300, Math.round(bpm)))
+      : null;
+  const beatMs = bpmValue ? Math.round(60000 / bpmValue) : 700;
   const genre = activeSong?.genre || 'pop';
   const genreProfile = useMemo(() => getGenreProfile(genre), [genre]);
   const genreHints = useMemo(() => getGenreCoachHints(genre), [genre]);
@@ -97,6 +108,80 @@ export default function SingScreen() {
   );
   const activeLineIndex = liveProgress.activeLineIndex;
   const activeWordIndex = liveProgress.activeWordIndex;
+
+  const stopMetronome = useCallback(() => {
+    if (metronomeIntervalRef.current) {
+      clearInterval(metronomeIntervalRef.current);
+      metronomeIntervalRef.current = null;
+    }
+    metronomeBeatMsRef.current = null;
+    metronomeBeatRef.current = 0;
+  }, []);
+
+  const playMetronomeTick = useCallback(
+    (accent: boolean) => {
+      if (Platform.OS !== 'web') {
+        void Haptics.selectionAsync();
+      }
+
+      try {
+        metronomePlayer.volume = accent ? 0.42 : 0.28;
+        void metronomePlayer.seekTo(0).catch(() => undefined);
+        metronomePlayer.play();
+      } catch {
+        // Ignore playback errors; haptics still provides a usable metronome.
+      }
+    },
+    [metronomePlayer]
+  );
+
+  const startMetronome = useCallback(
+    async (options?: { immediate?: boolean }) => {
+      stopMetronome();
+      if (!bpmValue || isPaused || isAnalyzing) {
+        return;
+      }
+
+      try {
+        await AudioModule.setAudioModeAsync({ playsInSilentMode: true });
+      } catch {
+        // Ignore audio mode failures; click may still work on many platforms.
+      }
+
+      metronomeBeatRef.current = 0;
+      const immediate = options?.immediate ?? true;
+      if (immediate) {
+        metronomeBeatRef.current = 1;
+        playMetronomeTick(true);
+      }
+
+      metronomeBeatMsRef.current = beatMs;
+      metronomeIntervalRef.current = setInterval(() => {
+        metronomeBeatRef.current = (metronomeBeatRef.current % 4) + 1;
+        playMetronomeTick(metronomeBeatRef.current === 1);
+      }, beatMs);
+    },
+    [
+      beatMs,
+      bpmValue,
+      isAnalyzing,
+      isPaused,
+      playMetronomeTick,
+      stopMetronome,
+    ]
+  );
+
+  useEffect(() => {
+    if (!settings.metronomeEnabled || !bpmValue || isPaused || isAnalyzing) {
+      stopMetronome();
+      return;
+    }
+
+    if (!metronomeIntervalRef.current || metronomeBeatMsRef.current !== beatMs) {
+      void startMetronome({ immediate: false });
+    }
+    return () => stopMetronome();
+  }, [beatMs, bpmValue, isAnalyzing, isPaused, settings.metronomeEnabled, startMetronome, stopMetronome]);
 
   useEffect(() => {
     if (lyricsText) {
@@ -406,16 +491,17 @@ export default function SingScreen() {
       setLiveTranscript('');
       coachHintIndexRef.current = 0;
 
+      if (settings.metronomeEnabled && bpmValue) {
+        await startMetronome({ immediate: true });
+      }
+
       if (settings.countIn > 0) {
-        const bpm = activeSong?.bpm;
-        const beatMs =
-          typeof bpm === 'number' && Number.isFinite(bpm) && bpm > 0
-            ? Math.round(60000 / Math.max(40, Math.min(240, bpm)))
-            : 700;
         cancelCountInRef.current = false;
         for (let beat = settings.countIn; beat > 0; beat -= 1) {
           setCountInRemaining(beat);
-          Haptics.selectionAsync();
+          if (!settings.metronomeEnabled || !bpmValue) {
+            Haptics.selectionAsync();
+          }
           await new Promise((resolve) => setTimeout(resolve, beatMs));
           if (cancelCountInRef.current) {
             cancelCountInRef.current = false;
@@ -585,17 +671,35 @@ export default function SingScreen() {
           ) : (
             <Pressable
               style={styles.transportBtn}
-              onPress={() => {}}
-              disabled
+              onPress={() => {
+                if (!bpmValue) {
+                  Haptics.selectionAsync();
+                  router.push('/(tabs)/lyrics');
+                  return;
+                }
+
+                const next = !settings.metronomeEnabled;
+                updateSettings({ metronomeEnabled: next });
+                Haptics.selectionAsync();
+                if (next) {
+                  void startMetronome({ immediate: true });
+                } else {
+                  stopMetronome();
+                }
+              }}
               accessibilityRole="button"
               accessibilityLabel="Metronome"
-              accessibilityHint="Metronome is not available yet"
-              accessibilityState={{ disabled: true }}
+              accessibilityHint={
+                bpmValue
+                  ? `Toggles the metronome click at ${bpmValue} BPM`
+                  : 'Set a BPM in Lyrics to enable the metronome'
+              }
+              accessibilityState={{ selected: settings.metronomeEnabled }}
             >
               <MaterialCommunityIcons
                 name="metronome"
                 size={24}
-                color={Colors.textTertiary}
+                color={settings.metronomeEnabled ? Colors.gradientStart : Colors.textTertiary}
               />
             </Pressable>
           )}

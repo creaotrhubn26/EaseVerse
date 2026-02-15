@@ -66,4 +66,5 @@ export interface UserSettings {
   lyricsFollowSpeed: LyricsFollowSpeed;
   countIn: 0 | 2 | 4;
   narrationVoice: NarrationVoice;
+  metronomeEnabled: boolean;
 }

@@ -24,6 +24,7 @@ const defaultSettings: UserSettings = {
   lyricsFollowSpeed: 'normal',
   countIn: 0,
   narrationVoice: 'female',
+  metronomeEnabled: false,
 };
 
 function safeParseJson(raw: string): unknown | null {

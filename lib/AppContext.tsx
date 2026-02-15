@@ -35,6 +35,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     lyricsFollowSpeed: 'normal',
     countIn: 0,
     narrationVoice: 'female',
+    metronomeEnabled: false,
   });
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [isLoading, setIsLoading] = useState(true);

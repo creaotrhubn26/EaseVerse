@@ -56,7 +56,10 @@ test('E2E workflow: Lyrics -> Sync -> Sing -> Review -> Practice Loop', async ({
   await page.waitForTimeout(3_800);
   await page.getByTestId('stop-button').click();
 
-  await expect(page.getByText('Session Review')).toBeVisible({ timeout: 30_000 });
+  // Use the screen heading, not any instructional copy that might mention "Session Review".
+  await expect(page.getByRole('heading', { name: 'Session Review' })).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(page.getByText('Added to sessions')).toBeVisible({ timeout: 10_000 });
 
   // Practice loop should load and attempt TTS.

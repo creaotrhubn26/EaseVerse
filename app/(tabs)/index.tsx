@@ -399,7 +399,9 @@ export default function SingScreen() {
     }
 
     const elapsed = result.durationSeconds;
-    if (elapsed > 3) {
+    // `useRecording` tracks duration in whole seconds, so `> 3` effectively
+    // requires 4+ seconds. Treat 3 seconds as the minimum valid take length.
+    if (elapsed >= 3) {
       try {
         setIsAnalyzing(true);
         const recordingUri = result.uri;

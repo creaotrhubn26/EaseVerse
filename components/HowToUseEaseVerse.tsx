@@ -8,10 +8,12 @@ import type { ComponentProps } from 'react';
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
 type LegendItem = {
-  icon: IoniconName;
   label: string;
   description: string;
-};
+} & (
+  | { icon: IoniconName; iconImage?: never }
+  | { iconImage: ImageSourcePropType; icon?: never }
+);
 
 type HowToStep = {
   id: 'sing' | 'lyrics' | 'sessions' | 'profile';
@@ -55,10 +57,19 @@ function IconTiles({
 function Legend({ items }: { items: LegendItem[] }) {
   return (
     <View style={styles.legend}>
-      {items.map((item) => (
-        <View key={`${item.label}-${item.icon}`} style={styles.legendItem}>
+      {items.map((item, index) => (
+        <View key={`${item.label}-${index}`} style={styles.legendItem}>
           <View style={styles.legendIcon}>
-            <Ionicons name={item.icon} size={18} color={Colors.gradientMid} />
+            {'iconImage' in item ? (
+              <Image
+                source={item.iconImage}
+                style={styles.legendIconImage}
+                resizeMode="cover"
+                accessible={false}
+              />
+            ) : (
+              <Ionicons name={item.icon} size={18} color={Colors.gradientMid} />
+            )}
           </View>
           <View style={styles.legendCopy}>
             <Text style={styles.legendLabel}>{item.label}</Text>
@@ -147,7 +158,11 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
         ],
         legend: [
           { icon: 'add-circle-outline', label: 'New song', description: 'Clears the current draft and starts fresh.' },
-          { icon: 'speedometer-outline', label: 'Tempo (BPM)', description: 'Syncs count-in + metronome while recording.' },
+          {
+            iconImage: require('@/assets/images/bpm_icon.png'),
+            label: 'Tempo (BPM)',
+            description: 'Syncs count-in + metronome while recording.',
+          },
           { icon: 'pulse-outline', label: 'Tap', description: 'Tap repeatedly to detect BPM.' },
           { icon: 'layers-outline', label: 'Structure', description: 'Helps you see sections like Verse/Chorus.' },
           { icon: 'download-outline', label: 'Import', description: 'Paste in lyrics from another source.' },
@@ -599,6 +614,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
+  },
+  legendIconImage: {
+    width: 20,
+    height: 20,
+    borderRadius: 7,
   },
   legendCopy: {
     flex: 1,

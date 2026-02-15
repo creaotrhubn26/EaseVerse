@@ -3,6 +3,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image,
   TextInput,
   Pressable,
   ScrollView,
@@ -274,7 +275,15 @@ export default function LyricsScreen() {
       </View>
 
       <View style={styles.tempoSection}>
-        <Text style={styles.genreSectionLabel}>Tempo (BPM)</Text>
+        <View style={styles.sectionLabelRow}>
+          <Image
+            source={require('@/assets/images/bpm_icon.png')}
+            style={styles.sectionLabelIcon}
+            resizeMode="cover"
+            accessible={false}
+          />
+          <Text style={styles.genreSectionLabel}>Tempo (BPM)</Text>
+        </View>
         <View style={styles.tempoRow}>
           <TextInput
             value={tempoBpmText}
@@ -536,6 +545,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     textTransform: 'uppercase' as const,
     letterSpacing: 0.8,
+  },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionLabelIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
   },
   genreScrollContent: {
     gap: 8,

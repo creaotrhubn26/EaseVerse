@@ -718,7 +718,7 @@ export default function ProfileScreen() {
           >
             <View style={styles.sectionTitleRow}>
               <Image
-                source={require('@/assets/images/easeverse_logo_howto-icon.png')}
+                source={require('@/assets/images/icon-set/howto-icon.png')}
                 style={styles.sectionTitleIcon}
                 resizeMode="cover"
                 accessible={false}

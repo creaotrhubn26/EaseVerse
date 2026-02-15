@@ -217,7 +217,7 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
         <View style={styles.introHeader}>
           <View style={styles.introIcon}>
             <Image
-              source={require('@/assets/images/easeverse_logo_howto-icon.png')}
+              source={require('@/assets/images/icon-set/howto-icon.png')}
               style={styles.howToIcon}
               accessibilityRole="image"
               accessibilityLabel="How to use EaseVerse"

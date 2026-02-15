@@ -1,13 +1,21 @@
 import React from 'react';
 import { Image, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
+type LogoHeaderVariant = 'compact' | 'hero';
+
 type LogoHeaderProps = {
+  variant?: LogoHeaderVariant;
   style?: StyleProp<ViewStyle>;
 };
 
-export default function LogoHeader(props: LogoHeaderProps) {
+const variantHeight: Record<LogoHeaderVariant, number> = {
+  compact: 56,
+  hero: 92,
+};
+
+export default function LogoHeader({ variant = 'compact', style }: LogoHeaderProps) {
   return (
-    <View style={[styles.logoHeader, props.style]}>
+    <View style={[styles.logoHeader, { height: variantHeight[variant] }, style]}>
       <Image
         source={require('@/assets/images/easeverse_logo.png')}
         style={styles.logo}
@@ -29,7 +37,7 @@ const styles = StyleSheet.create({
   },
   logo: {
     width: '100%',
-    aspectRatio: 3.2,
+    height: '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,
@@ -37,4 +45,3 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 });
-

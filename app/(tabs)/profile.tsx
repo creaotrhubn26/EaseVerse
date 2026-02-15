@@ -617,7 +617,7 @@ export default function ProfileScreen() {
         variant={toast.variant ?? 'info'}
         onHide={() => setToast((current) => ({ ...current, visible: false }))}
       />
-      <LogoHeader />
+      <LogoHeader variant="hero" />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}

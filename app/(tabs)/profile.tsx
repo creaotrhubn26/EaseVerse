@@ -8,16 +8,19 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useApp } from '@/lib/AppContext';
 import Toast from '@/components/Toast';
 import LogoHeader from '@/components/LogoHeader';
-import { apiRequest } from '@/lib/query-client';
+import HowToUseEaseVerse from '@/components/HowToUseEaseVerse';
+import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { parseSongSections } from '@/lib/lyrics-sections';
 import * as Storage from '@/lib/storage';
 import type { FeedbackIntensity, LiveMode, Song } from '@/lib/types';
@@ -346,6 +349,42 @@ export default function ProfileScreen() {
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
 
+  const apiBaseUrl = useMemo(() => getApiUrl(), []);
+  const apiHost = useMemo(() => {
+    try {
+      const parsed = new URL(apiBaseUrl);
+      return parsed.host;
+    } catch {
+      return apiBaseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    }
+  }, [apiBaseUrl]);
+
+  const openUrl = useCallback(
+    async (url: string) => {
+      try {
+        await Linking.openURL(url);
+      } catch (error) {
+        console.warn('Failed to open URL:', url, error);
+        setToast({
+          visible: true,
+          message: 'Unable to open link on this device.',
+          variant: 'error',
+        });
+      }
+    },
+    [setToast]
+  );
+
+  const handleOpenApiCatalog = useCallback(() => {
+    const url = new URL('/api/v1', apiBaseUrl).toString();
+    void openUrl(url);
+  }, [apiBaseUrl, openUrl]);
+
+  const handleOpenOpenApiJson = useCallback(() => {
+    const url = new URL('/api/v1/openapi.json', apiBaseUrl).toString();
+    void openUrl(url);
+  }, [apiBaseUrl, openUrl]);
+
   const totalDuration = sessions.reduce((acc, s) => acc + s.duration, 0);
   const avgAccuracy = sessions.length > 0
     ? Math.round(sessions.reduce((acc, s) => acc + s.insights.textAccuracy, 0) / sessions.length)
@@ -608,6 +647,16 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle} accessibilityRole="header">How To Use</Text>
+          <HowToUseEaseVerse
+            onNavigate={(route) => {
+              Haptics.selectionAsync();
+              router.push(route as any);
+            }}
+          />
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle} accessibilityRole="header">Language & Accent</Text>
           <View style={styles.settingsCard}>
             <SettingRow
@@ -768,18 +817,57 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">About</Text>
-          <View style={styles.settingsCard}>
-            <SettingRow icon="info" label="Version" value="1.0.0" />
-            <View style={styles.divider} />
-            <SettingRow icon="shield" label="Privacy" value="Local only" />
-          </View>
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
+	        <View style={styles.section}>
+	          <Text style={styles.sectionTitle} accessibilityRole="header">About</Text>
+	          <View style={styles.aboutCard}>
+	            <View style={styles.aboutRow}>
+	              <View style={styles.aboutIconWrap}>
+	                <Image
+	                  source={require('@/assets/images/easeverse_logo_App.png')}
+	                  style={styles.aboutIcon}
+	                  resizeMode="contain"
+	                  accessibilityRole="image"
+	                  accessibilityLabel="EaseVerse app icon"
+	                />
+	              </View>
+	              <View style={styles.aboutCopy}>
+	                <Text style={styles.aboutTitle}>EaseVerse</Text>
+	                <Text style={styles.aboutText}>
+	                  Live lyric guidance, credible session reviews, and practice loops for vocalists.
+	                  Keep lyrics synced with your team and iterate fast.
+	                </Text>
+	              </View>
+	            </View>
+	          </View>
+
+	          <View style={styles.settingsCard}>
+	            <SettingRow icon="info" label="Version" value="1.0.0" />
+	            <View style={styles.divider} />
+	            <SettingRow icon="globe" label="API" value={apiHost || 'Unknown'} />
+	            <View style={styles.divider} />
+	            <SettingRow
+	              icon="link"
+	              label="API Catalog"
+	              value="Open"
+	              onPress={handleOpenApiCatalog}
+	              accessibilityHint="Opens the API discovery document in your browser"
+	            />
+	            <View style={styles.divider} />
+	            <SettingRow
+	              icon="file-text"
+	              label="OpenAPI Spec"
+	              value="Open"
+	              onPress={handleOpenOpenApiJson}
+	              accessibilityHint="Opens the OpenAPI JSON spec in your browser"
+	            />
+	            <View style={styles.divider} />
+	            <SettingRow icon="shield" label="Privacy" value="Local + optional Postgres" />
+	          </View>
+	        </View>
+	      </ScrollView>
+	    </View>
+	  );
+	}
 
 const styles = StyleSheet.create({
   container: {
@@ -838,6 +926,49 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderGlass,
     overflow: 'hidden',
+  },
+  aboutCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    padding: 14,
+    marginBottom: 12,
+  },
+  aboutRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  aboutIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  aboutIcon: {
+    width: 44,
+    height: 44,
+  },
+  aboutCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  aboutTitle: {
+    color: Colors.textPrimary,
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
+  },
+  aboutText: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Inter_400Regular',
   },
   settingRow: {
     flexDirection: 'row',

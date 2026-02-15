@@ -25,6 +25,8 @@ const ttsRequestSchema = z.object({
 const pronounceRequestSchema = z.object({
   word: z.string().trim().min(1).max(60),
   context: z.string().trim().max(280).optional(),
+  language: z.string().trim().max(40).optional(),
+  accentGoal: z.string().trim().max(32).optional(),
 });
 
 const pronounceResultSchema = z.object({
@@ -37,6 +39,13 @@ const sessionScoreRequestSchema = z.object({
   lyrics: z.string().trim().min(1).max(10000),
   durationSeconds: z.number().int().min(1).max(3600).optional(),
   audioBase64: z.string().min(50),
+  language: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z]{2}(-[a-z]{2})?$/)
+    .optional(),
+  accentGoal: z.string().trim().min(1).max(32).optional(),
 });
 
 const collabLyricsUpsertSchema = z.object({
@@ -599,8 +608,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid request body" });
       }
 
-      const { word, context } = parsedBody.data;
+      const { word, context, language, accentGoal } = parsedBody.data;
       const contextLine = context || "";
+      const languageHint = language?.trim() || "English";
+      const accentHint = accentGoal?.trim();
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -609,13 +620,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           {
             role: "system",
             content:
-              "You are a vocal pronunciation coach for singers. Return strict JSON with keys: phonetic, tip, slow.",
+              `You are a vocal pronunciation coach for singers. Return strict JSON with keys: phonetic, tip, slow. Tip must be in ${languageHint}.`,
           },
           {
             role: "user",
             content: contextLine
-              ? `Word: "${word}" in lyric line: "${contextLine}". Keep tip under 15 words.`
-              : `Word: "${word}". Keep tip under 15 words.`,
+              ? `Word: "${word}" in lyric line: "${contextLine}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`
+              : `Word: "${word}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`,
           },
         ],
         temperature: 0.2,
@@ -679,12 +690,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid request body" });
       }
 
-      const { lyrics, audioBase64, durationSeconds } = parsedBody.data;
+      const { lyrics, audioBase64, durationSeconds, language } = parsedBody.data;
       const rawAudio = Buffer.from(audioBase64, "base64");
       const { buffer: compatibleAudio, format } = await ensureCompatibleFormat(rawAudio);
+      const normalizedLanguage = language ? language.split("-")[0] : undefined;
       const transcript = await speechToText(
         compatibleAudio,
-        format === "wav" || format === "mp3" ? format : "wav"
+        format === "wav" || format === "mp3" ? format : "wav",
+        normalizedLanguage ? { language: normalizedLanguage } : undefined
       );
 
       const score = buildSessionScoring({

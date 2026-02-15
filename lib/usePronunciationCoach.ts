@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useApp } from '@/lib/AppContext';
 import { getApiHeaders, getApiUrl } from '@/lib/query-client';
 
 export interface PronunciationResult {
@@ -12,6 +13,7 @@ export interface PronunciationResult {
 export type CoachState = 'idle' | 'loading' | 'playing' | 'ready';
 
 export function usePronunciationCoach() {
+  const { settings } = useApp();
   const [state, setState] = useState<CoachState>('idle');
   const [result, setResult] = useState<PronunciationResult | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
@@ -44,7 +46,12 @@ export function usePronunciationCoach() {
       const response = await fetch(url.toString(), {
         method: 'POST',
         headers: getApiHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ word, context }),
+        body: JSON.stringify({
+          word,
+          context,
+          language: settings.language,
+          accentGoal: settings.accentGoal,
+        }),
       });
 
       if (!response.ok) throw new Error(`Failed: ${response.status}`);
@@ -73,7 +80,7 @@ export function usePronunciationCoach() {
       console.error('Pronunciation coach error:', err);
       setState('idle');
     }
-  }, [player]);
+  }, [player, settings.accentGoal, settings.language]);
 
   const replay = useCallback(async () => {
     if (!result) return;

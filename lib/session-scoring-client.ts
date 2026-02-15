@@ -36,8 +36,10 @@ export async function analyzeSessionRecording(params: {
   recordingUri: string;
   lyrics: string;
   durationSeconds: number;
+  language?: string;
+  accentGoal?: string;
 }): Promise<SessionScoringResponse | null> {
-  const { recordingUri, lyrics, durationSeconds } = params;
+  const { recordingUri, lyrics, durationSeconds, language, accentGoal } = params;
   if (!recordingUri || !lyrics.trim()) {
     return null;
   }
@@ -52,6 +54,8 @@ export async function analyzeSessionRecording(params: {
         lyrics,
         durationSeconds,
         audioBase64,
+        language,
+        accentGoal,
       }),
     });
 

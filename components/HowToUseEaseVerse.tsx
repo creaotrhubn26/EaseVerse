@@ -152,7 +152,7 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
           'Use Lyrics Sync to pull the latest collab drafts.',
         ],
         legend: [
-          { icon: 'language', label: 'Language', description: 'Controls coaching language / phrasing.' },
+          { icon: 'language', label: 'Language', description: 'Affects live recognition and pronunciation coaching.' },
           { icon: 'pulse', label: 'Feedback', description: 'How frequently coaching prompts appear.' },
           { icon: 'git-merge', label: 'Lyrics sync', description: 'See what changed since your last session.' },
         ],
@@ -504,4 +504,3 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
   },
 });
-

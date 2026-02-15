@@ -17,6 +17,7 @@ import LogoHeader from '@/components/LogoHeader';
 import { useApp } from '@/lib/AppContext';
 import { buildLiveLyricLines, getLiveLyricProgress } from '@/lib/live-lyrics';
 import { generateId } from '@/lib/storage';
+import { resolveSpeechRecognitionLang, resolveSttLanguageCode } from '@/lib/language';
 import { useRecording } from '@/lib/useRecording';
 import { analyzeSessionRecording } from '@/lib/session-scoring-client';
 import { buildSessionScoring } from '@shared/session-scoring';
@@ -152,7 +153,7 @@ export default function SingScreen() {
     const recognizer = liveRecognizerRef.current ?? new SpeechRecognitionCtor();
     recognizer.continuous = true;
     recognizer.interimResults = true;
-    recognizer.lang = 'en-US';
+    recognizer.lang = resolveSpeechRecognitionLang(settings.language, settings.accentGoal);
     recognizer.onresult = (event: any) => {
       let transcript = '';
       for (let i = 0; i < event.results.length; i += 1) {
@@ -208,7 +209,7 @@ export default function SingScreen() {
         liveRecognizerActiveRef.current = false;
       }
     };
-  }, [isPaused, isRecording]);
+  }, [isPaused, isRecording, settings.accentGoal, settings.language]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -318,6 +319,8 @@ export default function SingScreen() {
             recordingUri,
             lyrics: lyricsText,
             durationSeconds: elapsed,
+            language: resolveSttLanguageCode(settings.language),
+            accentGoal: settings.accentGoal,
           });
           if (scored?.insights) {
             resolvedInsights = {

@@ -2,15 +2,18 @@ import React, { useEffect, useRef } from 'react';
 import { AccessibilityInfo, Animated, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { AudioModule, useAudioPlayer } from 'expo-audio';
 import Colors from '@/constants/colors';
 import type { ComponentProps } from 'react';
 
 type ToastVariant = 'success' | 'error' | 'info';
+type ToastSound = 'none' | 'lyricsUpdated';
 
 type ToastProps = {
   visible: boolean;
   message: string;
   variant?: ToastVariant;
+  sound?: ToastSound;
   onHide: () => void;
   duration?: number;
 };
@@ -27,17 +30,47 @@ export default function Toast({
   visible,
   message,
   variant = 'success',
+  sound = 'none',
   onHide,
   duration = 2200,
 }: ToastProps) {
   const insets = useSafeAreaInsets();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-20)).current;
+  const didPlaySoundRef = useRef(false);
+  const sfxPlayer = useAudioPlayer(
+    sound === 'lyricsUpdated' ? require('@/assets/sounds/lyrics-updated.wav') : null
+  );
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      didPlaySoundRef.current = false;
+      return;
+    }
 
     AccessibilityInfo.announceForAccessibility(message);
+
+    if (!didPlaySoundRef.current && sound !== 'none') {
+      didPlaySoundRef.current = true;
+      try {
+        void AudioModule.setAudioModeAsync({ playsInSilentMode: true });
+      } catch {
+        // Ignore audio-mode errors.
+      }
+      try {
+        sfxPlayer.volume = 0.45;
+        void sfxPlayer.seekTo(0).catch(() => undefined);
+        setTimeout(() => {
+          try {
+            sfxPlayer.play();
+          } catch {
+            // Ignore sound effect failures (autoplay restrictions, etc.)
+          }
+        }, 0);
+      } catch {
+        // Ignore sound effect failures.
+      }
+    }
 
     Animated.parallel([
       Animated.timing(opacity, {
@@ -70,7 +103,7 @@ export default function Toast({
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [visible, duration, variant, message, opacity, translateY, onHide]);
+  }, [visible, duration, sound, variant, message, opacity, sfxPlayer, translateY, onHide]);
 
   if (!visible) return null;
 

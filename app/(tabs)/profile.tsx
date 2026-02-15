@@ -668,6 +668,11 @@ export default function ProfileScreen() {
         visible={toast.visible}
         message={toast.message}
         variant={toast.variant ?? 'info'}
+        sound={
+          toast.variant === 'success' && toast.message.startsWith('Synced latest lyrics.')
+            ? 'lyricsUpdated'
+            : 'none'
+        }
         onHide={() => setToast((current) => ({ ...current, visible: false }))}
       />
       <LogoHeader variant="hero" />

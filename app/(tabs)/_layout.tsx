@@ -2,10 +2,16 @@ import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
-import { Platform, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Image, Platform, StyleSheet, View } from "react-native";
 import React from "react";
 import Colors from "@/constants/colors";
+
+const tabIconSources = {
+  sing: require("@/assets/images/icon-set/Singing.png"),
+  lyrics: require("@/assets/images/icon-set/Lyrics.png"),
+  sessions: require("@/assets/images/icon-set/sessions.png"),
+  profile: require("@/assets/images/icon-set/Profile.png"),
+} as const;
 
 function NativeTabLayout() {
   return (
@@ -73,8 +79,13 @@ function ClassicTabLayout() {
         name="index"
         options={{
           title: "Sing",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="mic" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <Image
+              source={tabIconSources.sing}
+              style={[styles.tabIcon, { opacity: focused ? 1 : 0.55 }]}
+              resizeMode="cover"
+              accessible={false}
+            />
           ),
         }}
       />
@@ -82,8 +93,13 @@ function ClassicTabLayout() {
         name="lyrics"
         options={{
           title: "Lyrics",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-text" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <Image
+              source={tabIconSources.lyrics}
+              style={[styles.tabIcon, { opacity: focused ? 1 : 0.55 }]}
+              resizeMode="cover"
+              accessible={false}
+            />
           ),
         }}
       />
@@ -91,8 +107,13 @@ function ClassicTabLayout() {
         name="sessions"
         options={{
           title: "Sessions",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <Image
+              source={tabIconSources.sessions}
+              style={[styles.tabIcon, { opacity: focused ? 1 : 0.55 }]}
+              resizeMode="cover"
+              accessible={false}
+            />
           ),
         }}
       />
@@ -100,8 +121,13 @@ function ClassicTabLayout() {
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <Image
+              source={tabIconSources.profile}
+              style={[styles.tabIcon, { opacity: focused ? 1 : 0.55 }]}
+              resizeMode="cover"
+              accessible={false}
+            />
           ),
         }}
       />
@@ -115,3 +141,11 @@ export default function TabLayout() {
   }
   return <ClassicTabLayout />;
 }
+
+const styles = StyleSheet.create({
+  tabIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+  },
+});

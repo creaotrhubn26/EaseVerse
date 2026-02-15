@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
@@ -20,6 +20,7 @@ type HowToStep = {
   route: string;
   accent: string;
   icon: IoniconName;
+  iconImage?: ImageSourcePropType;
   bullets: string[];
   legend: LegendItem[];
   showWarmupIcons?: boolean;
@@ -27,6 +28,28 @@ type HowToStep = {
 
 function SnippetFrame({ children }: { children: React.ReactNode }) {
   return <View style={styles.snippetFrame}>{children}</View>;
+}
+
+function IconTiles({
+  title,
+  items,
+}: {
+  title: string;
+  items: { label: string; source: ImageSourcePropType }[];
+}) {
+  return (
+    <SnippetFrame>
+      <Text style={styles.snippetTitle}>{title}</Text>
+      <View style={styles.iconTileRow}>
+        {items.map((item) => (
+          <View key={item.label} style={styles.iconTile}>
+            <Image source={item.source} style={styles.iconTileImage} resizeMode="cover" accessible={false} />
+            <Text style={styles.iconTileLabel}>{item.label}</Text>
+          </View>
+        ))}
+      </View>
+    </SnippetFrame>
+  );
 }
 
 function Legend({ items }: { items: LegendItem[] }) {
@@ -91,6 +114,7 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
         route: '/',
         accent: Colors.gradientStart,
         icon: 'mic',
+        iconImage: require('@/assets/images/icon-set/Singing.png'),
         bullets: [
           'Pick a song (tap the title at the top).',
           'Set Tempo (BPM) in Lyrics to sync count-in and the metronome.',
@@ -113,6 +137,7 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
         route: '/lyrics',
         accent: Colors.successUnderline,
         icon: 'document-text',
+        iconImage: require('@/assets/images/icon-set/Lyrics.png'),
         bullets: [
           'Write or import lyrics for your song.',
           'Set Tempo (BPM) or Tap to detect BPM quickly.',
@@ -135,6 +160,7 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
         route: '/sessions',
         accent: Colors.warningUnderline,
         icon: 'time',
+        iconImage: require('@/assets/images/icon-set/sessions.png'),
         bullets: [
           'Browse recordings and open Session Review.',
           'Filter by Latest, Best, or Flagged.',
@@ -156,6 +182,7 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
         route: '/profile',
         accent: Colors.gradientMid,
         icon: 'person',
+        iconImage: require('@/assets/images/icon-set/Profile.png'),
         bullets: [
           'Set Language and Accent Goal for coaching tone.',
           'Adjust Live Mode and Lyrics Follow Speed for live tracking.',
@@ -174,11 +201,14 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
     []
   );
 
-  const tabJump = [
-    { id: 'sing' as const, label: 'Sing', icon: 'mic' as const, route: '/' },
-    { id: 'lyrics' as const, label: 'Lyrics', icon: 'document-text' as const, route: '/lyrics' },
-    { id: 'sessions' as const, label: 'Sessions', icon: 'time' as const, route: '/sessions' },
-    { id: 'profile' as const, label: 'Profile', icon: 'person' as const, route: '/profile' },
+  const tabJump: Array<
+    | { id: HowToStep['id']; label: string; route: string; icon: IoniconName }
+    | { id: HowToStep['id']; label: string; route: string; image: ImageSourcePropType }
+  > = [
+    { id: 'sing', label: 'Sing', image: require('@/assets/images/icon-set/Singing.png'), route: '/' },
+    { id: 'lyrics', label: 'Lyrics', image: require('@/assets/images/icon-set/Lyrics.png'), route: '/lyrics' },
+    { id: 'sessions', label: 'Sessions', image: require('@/assets/images/icon-set/sessions.png'), route: '/sessions' },
+    { id: 'profile', label: 'Profile', image: require('@/assets/images/icon-set/Profile.png'), route: '/profile' },
   ];
 
   return (
@@ -213,7 +243,11 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                 accessibilityLabel={`Go to ${item.label}`}
                 accessibilityHint="Navigates to this screen"
               >
-                <Ionicons name={item.icon} size={16} color={Colors.textSecondary} />
+                {'icon' in item ? (
+                  <Ionicons name={item.icon} size={16} color={Colors.textSecondary} />
+                ) : (
+                  <Image source={item.image} style={styles.tabPillImage} resizeMode="cover" accessible={false} />
+                )}
                 <Text style={styles.tabPillText}>{item.label}</Text>
               </Pressable>
             ))}
@@ -233,8 +267,24 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                 accessibilityLabel={`${step.title}. ${step.summary}`}
                 accessibilityHint="Expands for details"
               >
-                <View style={[styles.stepIcon, { backgroundColor: step.accent + '22', borderColor: step.accent + '55' }]}>
-                  <Ionicons name={step.icon} size={18} color={step.accent} />
+                <View
+                  style={[
+                    styles.stepIcon,
+                    step.iconImage
+                      ? styles.stepIconImageWrap
+                      : { backgroundColor: step.accent + '22', borderColor: step.accent + '55' },
+                  ]}
+                >
+                  {step.iconImage ? (
+                    <Image
+                      source={step.iconImage}
+                      style={styles.stepIconImage}
+                      resizeMode="cover"
+                      accessible={false}
+                    />
+                  ) : (
+                    <Ionicons name={step.icon} size={18} color={step.accent} />
+                  )}
                 </View>
                 <View style={styles.stepCopy}>
                   <Text style={styles.stepTitle}>{step.title}</Text>
@@ -256,6 +306,30 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                       </Text>
                     ))}
                   </View>
+
+                  {step.id === 'profile' && (
+                    <IconTiles
+                      title="Profile icons"
+                      items={[
+                        {
+                          label: 'Live mode',
+                          source: require('@/assets/images/icon-set/Live_mode.png'),
+                        },
+                        {
+                          label: 'Feedback',
+                          source: require('@/assets/images/icon-set/Feedback_intensity_high.png'),
+                        },
+                        {
+                          label: 'Mindfulness voice',
+                          source: require('@/assets/images/icon-set/Mindfullness_voice.png'),
+                        },
+                        {
+                          label: 'Lyrics sync',
+                          source: require('@/assets/images/icon-set/Lyrics_sync.png'),
+                        },
+                      ]}
+                    />
+                  )}
 
                   {step.showWarmupIcons && (
                     <SnippetFrame>
@@ -382,6 +456,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_500Medium',
   },
+  tabPillImage: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+  },
   steps: {
     gap: 10,
   },
@@ -409,6 +488,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  stepIconImageWrap: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    overflow: 'hidden',
+  },
+  stepIconImage: {
+    width: 38,
+    height: 38,
   },
   stepCopy: {
     flex: 1,
@@ -472,6 +560,27 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 13,
     fontFamily: 'Inter_500Medium',
+  },
+  iconTileRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  iconTile: {
+    alignItems: 'center',
+    gap: 6,
+    width: 120,
+  },
+  iconTileImage: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+  },
+  iconTileLabel: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    textAlign: 'center',
   },
   legend: {
     gap: 10,

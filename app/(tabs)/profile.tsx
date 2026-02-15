@@ -716,7 +716,15 @@ export default function ProfileScreen() {
             accessibilityHint={howToExpanded ? 'Collapses the help tour' : 'Expands the help tour'}
             accessibilityState={{ expanded: howToExpanded }}
           >
-            <Text style={styles.sectionTitle}>How To Use</Text>
+            <View style={styles.sectionTitleRow}>
+              <Image
+                source={require('@/assets/images/easeverse_logo_howto-icon.png')}
+                style={styles.sectionTitleIcon}
+                resizeMode="cover"
+                accessible={false}
+              />
+              <Text style={styles.sectionTitle}>How To Use</Text>
+            </View>
             <Ionicons
               name={howToExpanded ? 'chevron-up' : 'chevron-down'}
               size={18}
@@ -736,7 +744,15 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Language & Accent</Text>
+          <View style={styles.sectionTitleRow}>
+            <Image
+              source={require('@/assets/images/icon-set/Language_accent.png')}
+              style={styles.sectionTitleIcon}
+              resizeMode="cover"
+              accessible={false}
+            />
+            <Text style={styles.sectionTitle} accessibilityRole="header">Language & Accent</Text>
+          </View>
           <View style={styles.settingsCard}>
             <SettingRow
               icon="globe"
@@ -757,7 +773,15 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Feedback Intensity</Text>
+          <View style={styles.sectionTitleRow}>
+            <Image
+              source={require('@/assets/images/icon-set/Feedback_intensity_high.png')}
+              style={styles.sectionTitleIcon}
+              resizeMode="cover"
+              accessible={false}
+            />
+            <Text style={styles.sectionTitle} accessibilityRole="header">Feedback Intensity</Text>
+          </View>
           <SegmentedControl<FeedbackIntensity>
             options={[
               { key: 'low', label: 'Low' },
@@ -770,7 +794,15 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Live Mode</Text>
+          <View style={styles.sectionTitleRow}>
+            <Image
+              source={require('@/assets/images/icon-set/Live_mode.png')}
+              style={styles.sectionTitleIcon}
+              resizeMode="cover"
+              accessible={false}
+            />
+            <Text style={styles.sectionTitle} accessibilityRole="header">Live Mode</Text>
+          </View>
           <SegmentedControl<LiveMode>
             options={[
               { key: 'stability', label: 'Stability' },
@@ -816,7 +848,15 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Mindfulness Voice</Text>
+          <View style={styles.sectionTitleRow}>
+            <Image
+              source={require('@/assets/images/icon-set/Mindfullness_voice.png')}
+              style={styles.sectionTitleIcon}
+              resizeMode="cover"
+              accessible={false}
+            />
+            <Text style={styles.sectionTitle} accessibilityRole="header">Mindfulness Voice</Text>
+          </View>
           <SegmentedControl<NarrationVoice>
             options={[
               { key: 'female', label: 'Female' },
@@ -831,7 +871,15 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Lyrics Sync</Text>
+          <View style={styles.sectionTitleRow}>
+            <Image
+              source={require('@/assets/images/icon-set/Lyrics_sync.png')}
+              style={styles.sectionTitleIcon}
+              resizeMode="cover"
+              accessible={false}
+            />
+            <Text style={styles.sectionTitle} accessibilityRole="header">Lyrics Sync</Text>
+          </View>
           <View style={styles.settingsCard}>
             <SettingRow
               icon="refresh-cw"
@@ -1029,6 +1077,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitleIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
   },
   sectionHeader: {
     flexDirection: 'row',

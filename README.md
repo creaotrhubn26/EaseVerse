@@ -60,6 +60,22 @@ Move from thought to lyric seamlessly
 It is not an AI that writes for you.
 It is a system that helps you write better — with less resistance.
 
+## Setup (Don’t Commit Keys)
+
+Create a local `.env` (it is gitignored) and add:
+
+```bash
+ELEVENLABS_API_KEY=...
+
+# Optional (recommended for deterministic voices):
+ELEVENLABS_VOICE_ID_FEMALE=...
+ELEVENLABS_VOICE_ID_MALE=...
+
+# Optional:
+ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+ELEVENLABS_TTS_CACHE_DIR=server_cache/elevenlabs_tts
+```
+
 ## PWA (Web Installable App)
 
 EaseVerse supports a Progressive Web App deployment under `/app`.

@@ -55,12 +55,14 @@ export type SignalQuality = 'good' | 'ok' | 'poor';
 export type FeedbackIntensity = 'low' | 'medium' | 'high';
 export type LiveMode = 'stability' | 'speed';
 export type NarrationVoice = 'female' | 'male';
+export type LyricsFollowSpeed = 'slow' | 'normal' | 'fast';
 
 export interface UserSettings {
   language: string;
   accentGoal: string;
   feedbackIntensity: FeedbackIntensity;
   liveMode: LiveMode;
+  lyricsFollowSpeed: LyricsFollowSpeed;
   countIn: 0 | 2 | 4;
   narrationVoice: NarrationVoice;
 }

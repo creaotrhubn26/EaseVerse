@@ -20,6 +20,7 @@ const defaultSettings: UserSettings = {
   accentGoal: 'US',
   feedbackIntensity: 'medium',
   liveMode: 'stability',
+  lyricsFollowSpeed: 'normal',
   countIn: 0,
   narrationVoice: 'female',
 };

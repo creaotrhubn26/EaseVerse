@@ -1,4 +1,4 @@
-import type { GenreId, LiveMode, LyricLine } from './types';
+import type { GenreId, LiveMode, LyricsFollowSpeed, LyricLine } from './types';
 import { getWordTipForGenre } from '@/constants/genres';
 
 const WORD_RE = /[a-z0-9']+/gi;
@@ -112,7 +112,8 @@ function toLineWordPosition(flatIndex: number, positions: WordPosition[]): {
 export function getLiveLyricProgress(
   lyrics: string,
   transcript: string,
-  liveMode: LiveMode
+  liveMode: LiveMode,
+  followSpeed: LyricsFollowSpeed = 'normal'
 ): LiveLyricProgress {
   const positions = buildWordPositions(lyrics);
   const expectedTokens = positions.map((position) => tokenizeWords(position.text)[0]).filter(Boolean);
@@ -145,6 +146,33 @@ export function getLiveLyricProgress(
   let activeFlatIndex = 0;
   while (activeFlatIndex < expectedTokens.length && confirmedIndices.has(activeFlatIndex)) {
     activeFlatIndex += 1;
+  }
+
+  if (liveMode === 'speed' && followSpeed !== 'slow' && allMatched.size >= 2) {
+    let furthestMatched = -1;
+    for (const index of allMatched) {
+      if (index > furthestMatched) {
+        furthestMatched = index;
+      }
+    }
+
+    if (furthestMatched > activeFlatIndex) {
+      const jumpTo = Math.min(furthestMatched + 1, expectedTokens.length - 1);
+      if (followSpeed === 'fast') {
+        activeFlatIndex = jumpTo;
+      } else {
+        let missingCount = 0;
+        for (let index = activeFlatIndex; index <= furthestMatched; index += 1) {
+          if (!allMatched.has(index)) {
+            missingCount += 1;
+          }
+        }
+        // Skip ahead only when recognition is mostly continuous.
+        if (missingCount <= 3) {
+          activeFlatIndex = jumpTo;
+        }
+      }
+    }
   }
 
   if (activeFlatIndex >= expectedTokens.length) {
@@ -182,6 +210,8 @@ export function buildLiveLyricLines(params: {
           state = 'confirmed';
         } else if (flatIndex === activeFlatIndex) {
           state = 'active';
+        } else if (activeFlatIndex >= 0 && flatIndex < activeFlatIndex) {
+          state = 'unclear';
         }
 
         let hint: string | undefined;

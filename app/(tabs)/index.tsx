@@ -86,8 +86,14 @@ export default function SingScreen() {
         : 4000;
 
   const liveProgress = useMemo(
-    () => getLiveLyricProgress(lyricsText, liveTranscript, settings.liveMode),
-    [lyricsText, liveTranscript, settings.liveMode]
+    () =>
+      getLiveLyricProgress(
+        lyricsText,
+        liveTranscript,
+        settings.liveMode,
+        settings.lyricsFollowSpeed
+      ),
+    [lyricsText, liveTranscript, settings.liveMode, settings.lyricsFollowSpeed]
   );
   const activeLineIndex = liveProgress.activeLineIndex;
   const activeWordIndex = liveProgress.activeWordIndex;

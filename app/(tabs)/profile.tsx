@@ -23,7 +23,7 @@ import HowToUseEaseVerse from '@/components/HowToUseEaseVerse';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { parseSongSections } from '@/lib/lyrics-sections';
 import * as Storage from '@/lib/storage';
-import type { FeedbackIntensity, LiveMode, NarrationVoice, Song } from '@/lib/types';
+import type { FeedbackIntensity, LiveMode, LyricsFollowSpeed, NarrationVoice, Song } from '@/lib/types';
 
 type CollabLyricsItem = {
   externalTrackId: string;
@@ -704,6 +704,22 @@ export default function ProfileScreen() {
             {settings.liveMode === 'stability'
               ? 'Stability mode waits for confident recognition before updating'
               : 'Speed mode shows results immediately with lower confidence'}
+          </Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Lyrics Follow Speed</Text>
+          <SegmentedControl<LyricsFollowSpeed>
+            options={[
+              { key: 'slow', label: 'Slow' },
+              { key: 'normal', label: 'Normal' },
+              { key: 'fast', label: 'Fast' },
+            ]}
+            value={settings.lyricsFollowSpeed}
+            onChange={(v) => updateSettings({ lyricsFollowSpeed: v })}
+          />
+          <Text style={styles.modeHint}>
+            Controls how quickly the highlighted word advances in live tracking (most noticeable in Speed mode).
           </Text>
         </View>
 

@@ -34,3 +34,36 @@ test('buildLiveLyricLines marks confirmed and active words from transcript align
   );
   assert.equal(lines[1].words[0].state, 'active');
 });
+
+test('lyrics follow speed changes how aggressively live lyrics advance in speed mode', () => {
+  const lyrics = 'a b c d e f g';
+  const transcript = 'a c d e';
+
+  const slow = getLiveLyricProgress(lyrics, transcript, 'speed', 'slow');
+  const normal = getLiveLyricProgress(lyrics, transcript, 'speed', 'normal');
+  const fast = getLiveLyricProgress(lyrics, transcript, 'speed', 'fast');
+
+  assert.equal(slow.activeFlatIndex, 1);
+  assert.equal(normal.activeFlatIndex, 5);
+  assert.equal(fast.activeFlatIndex, 5);
+
+  const slowLines = buildLiveLyricLines({
+    lyrics,
+    activeFlatIndex: slow.activeFlatIndex,
+    confirmedIndices: slow.confirmedIndices,
+  });
+  assert.deepEqual(
+    slowLines[0].words.map((w) => w.state),
+    ['confirmed', 'active', 'confirmed', 'confirmed', 'confirmed', 'upcoming', 'upcoming']
+  );
+
+  const normalLines = buildLiveLyricLines({
+    lyrics,
+    activeFlatIndex: normal.activeFlatIndex,
+    confirmedIndices: normal.confirmedIndices,
+  });
+  assert.deepEqual(
+    normalLines[0].words.map((w) => w.state),
+    ['confirmed', 'unclear', 'confirmed', 'confirmed', 'confirmed', 'active', 'upcoming']
+  );
+});

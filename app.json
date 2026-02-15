@@ -26,7 +26,7 @@
       }
     },
     "web": {
-      "favicon": "./assets/images/easeverse_logo_App.png",
+      "favicon": "./assets/images/easeverse_logo_App_favicon.png",
       "backgroundColor": "#0E0F14"
     },
     "plugins": [

@@ -68,6 +68,8 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
               const isActive = item.id === activeSongId;
               const lineCount = item.lyrics.split('\n').filter(l => l.trim()).length;
               const gp = item.genre ? getGenreProfile(item.genre) : null;
+              const bpmLabel =
+                typeof item.bpm === 'number' && Number.isFinite(item.bpm) ? `${Math.round(item.bpm)} BPM` : '';
               return (
                 <Pressable
                   style={[styles.songItem, isActive && styles.songItemActive]}
@@ -78,7 +80,11 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
                   }}
                   accessibilityRole="button"
                   accessibilityLabel={`Select song ${item.title}`}
-                  accessibilityHint={`${lineCount} lines. Updated ${formatDate(item.updatedAt)}.`}
+                  accessibilityHint={
+                    `${lineCount} lines.` +
+                    (bpmLabel ? ` Tempo ${bpmLabel}.` : '') +
+                    ` Updated ${formatDate(item.updatedAt)}.`
+                  }
                   accessibilityState={{ selected: isActive }}
                 >
                   <View style={[styles.songIcon, gp && { backgroundColor: gp.accentColor }]}>
@@ -93,7 +99,8 @@ export default function SongPickerModal({ visible, songs, activeSongId, onSelect
                       {item.title}
                     </Text>
                     <Text style={styles.songMeta}>
-                      {gp ? gp.label + '  ' : ''}{lineCount} lines  {formatDate(item.updatedAt)}
+                      {gp ? gp.label + '  ' : ''}{lineCount} lines
+                      {bpmLabel ? `  ${bpmLabel}` : ''}  {formatDate(item.updatedAt)}
                     </Text>
                   </View>
                   {isActive && (

@@ -34,6 +34,7 @@ export default function LyricsScreen() {
   const [importText, setImportText] = useState('');
   const [songTitle, setSongTitle] = useState(activeSong?.title || '');
   const [selectedGenre, setSelectedGenre] = useState<GenreId>(activeSong?.genre || 'pop');
+  const [tempoBpmText, setTempoBpmText] = useState(activeSong?.bpm ? String(activeSong.bpm) : '');
   const [toast, setToast] = useState<{ visible: boolean; message: string; variant?: 'success' | 'error' }>({
     visible: false,
     message: '',
@@ -41,6 +42,7 @@ export default function LyricsScreen() {
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = useRef(true);
   const lastToastTimeRef = useRef(0);
+  const tapTempoRef = useRef<number[]>([]);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
@@ -49,7 +51,8 @@ export default function LyricsScreen() {
     setEditText(activeSong?.lyrics || '');
     setSongTitle(activeSong?.title || '');
     setSelectedGenre(activeSong?.genre || 'pop');
-  }, [activeSong?.id, activeSong?.lyrics, activeSong?.title, activeSong?.genre]);
+    setTempoBpmText(activeSong?.bpm ? String(activeSong.bpm) : '');
+  }, [activeSong?.id, activeSong?.lyrics, activeSong?.title, activeSong?.genre, activeSong?.bpm]);
 
   const performSave = useCallback(() => {
     if (!editText.trim()) return;
@@ -62,6 +65,9 @@ export default function LyricsScreen() {
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const sections = parseSongSections(editText);
+    const parsedBpm = tempoBpmText.trim()
+      ? Math.max(30, Math.min(300, parseInt(tempoBpmText, 10)))
+      : undefined;
 
     if (activeSong) {
       const updated: Song = {
@@ -69,6 +75,7 @@ export default function LyricsScreen() {
         title: songTitle || 'Untitled',
         lyrics: editText,
         genre: selectedGenre,
+        bpm: parsedBpm,
         sections,
         updatedAt: Date.now(),
       };
@@ -80,6 +87,7 @@ export default function LyricsScreen() {
         title: songTitle || 'Untitled',
         lyrics: editText,
         genre: selectedGenre,
+        bpm: parsedBpm,
         sections,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -93,7 +101,7 @@ export default function LyricsScreen() {
       lastToastTimeRef.current = now;
       setToast({ visible: true, message: 'Saved & ready for live' });
     }
-  }, [editText, songTitle, activeSong, selectedGenre, songs, updateSong, addSong, setActiveSong]);
+  }, [editText, songTitle, activeSong, selectedGenre, tempoBpmText, songs, updateSong, addSong, setActiveSong]);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -112,7 +120,7 @@ export default function LyricsScreen() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [editText, songTitle, selectedGenre, performSave]);
+  }, [editText, songTitle, selectedGenre, tempoBpmText, performSave]);
 
   const handleImport = useCallback(() => {
     if (!importText.trim()) return;
@@ -153,9 +161,38 @@ export default function LyricsScreen() {
     setEditText('');
     setSongTitle('');
     setSelectedGenre('pop');
+    setTempoBpmText('');
     setActiveSong(null);
     setActiveTab('write');
   };
+
+  const handleTapTempo = useCallback(() => {
+    const now = Date.now();
+    const taps = tapTempoRef.current;
+    const lastTap = taps.at(-1);
+    if (lastTap && now - lastTap > 2000) {
+      taps.length = 0;
+    }
+    taps.push(now);
+    while (taps.length > 8) {
+      taps.shift();
+    }
+
+    if (taps.length >= 2) {
+      const intervals: number[] = [];
+      for (let i = 1; i < taps.length; i += 1) {
+        intervals.push(taps[i] - taps[i - 1]);
+      }
+      const avg = intervals.reduce((sum, ms) => sum + ms, 0) / intervals.length;
+      if (avg > 0) {
+        const bpm = Math.round(60000 / avg);
+        const clamped = Math.max(30, Math.min(300, bpm));
+        setTempoBpmText(String(clamped));
+      }
+    }
+
+    Haptics.selectionAsync();
+  }, []);
 
   const tabs: { key: TabKey; label: string; icon: ComponentProps<typeof Feather>['name'] }[] = [
     { key: 'write', label: 'Write', icon: 'edit-3' },
@@ -234,6 +271,49 @@ export default function LyricsScreen() {
             );
           })}
         </ScrollView>
+      </View>
+
+      <View style={styles.tempoSection}>
+        <Text style={styles.genreSectionLabel}>Tempo (BPM)</Text>
+        <View style={styles.tempoRow}>
+          <TextInput
+            value={tempoBpmText}
+            onChangeText={(value) => setTempoBpmText(value.replace(/[^0-9]/g, '').slice(0, 3))}
+            onBlur={() => {
+              if (!tempoBpmText.trim()) {
+                return;
+              }
+              const parsed = parseInt(tempoBpmText, 10);
+              if (!Number.isFinite(parsed)) {
+                setTempoBpmText('');
+                return;
+              }
+              const clamped = Math.max(30, Math.min(300, parsed));
+              if (clamped !== parsed) {
+                setTempoBpmText(String(clamped));
+              }
+            }}
+            placeholder="e.g. 120"
+            placeholderTextColor={Colors.textTertiary}
+            style={styles.tempoField}
+            keyboardType="number-pad"
+            accessibilityLabel="Tempo in beats per minute"
+            accessibilityHint="Sets the song tempo used for count-in while recording"
+          />
+          <Pressable
+            onPress={handleTapTempo}
+            style={styles.tapTempoButton}
+            accessibilityRole="button"
+            accessibilityLabel="Tap tempo"
+            accessibilityHint="Tap repeatedly to detect BPM"
+          >
+            <Feather name="activity" size={16} color={Colors.textSecondary} />
+            <Text style={styles.tapTempoText}>Tap</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.tempoHint}>
+          Used for count-in tempo (and upcoming timing coaching).
+        </Text>
       </View>
 
       <View style={styles.tabBar}>
@@ -403,6 +483,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 12,
     gap: 8,
+  },
+  tempoSection: {
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    gap: 8,
+  },
+  tempoRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  tempoField: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  tapTempoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.surfaceGlass,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    minHeight: 44,
+    minWidth: 70,
+    justifyContent: 'center',
+  },
+  tapTempoText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  tempoHint: {
+    color: Colors.textTertiary,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
   },
   genreSectionLabel: {
     color: Colors.textTertiary,

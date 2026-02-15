@@ -27,6 +27,7 @@ export interface Song {
   lyrics: string;
   sections: SongSection[];
   genre: GenreId;
+  bpm?: number;
   createdAt: number;
   updatedAt: number;
 }

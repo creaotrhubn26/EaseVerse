@@ -407,11 +407,16 @@ export default function SingScreen() {
       coachHintIndexRef.current = 0;
 
       if (settings.countIn > 0) {
+        const bpm = activeSong?.bpm;
+        const beatMs =
+          typeof bpm === 'number' && Number.isFinite(bpm) && bpm > 0
+            ? Math.round(60000 / Math.max(40, Math.min(240, bpm)))
+            : 700;
         cancelCountInRef.current = false;
         for (let beat = settings.countIn; beat > 0; beat -= 1) {
           setCountInRemaining(beat);
           Haptics.selectionAsync();
-          await new Promise((resolve) => setTimeout(resolve, 700));
+          await new Promise((resolve) => setTimeout(resolve, beatMs));
           if (cancelCountInRef.current) {
             cancelCountInRef.current = false;
             return;

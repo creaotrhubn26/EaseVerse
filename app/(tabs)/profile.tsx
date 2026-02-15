@@ -30,6 +30,7 @@ type CollabLyricsItem = {
   title: string;
   lyrics: string;
   updatedAt?: string;
+  bpm?: number;
 };
 
 type DiffLine = {
@@ -98,11 +99,24 @@ function parseCollabItem(input: unknown): CollabLyricsItem | null {
     return null;
   }
 
+  const rawBpm = raw.bpm;
+  const parsedBpm =
+    typeof rawBpm === 'number' && Number.isFinite(rawBpm)
+      ? Math.round(rawBpm)
+      : typeof rawBpm === 'string' && rawBpm.trim()
+        ? Number.parseInt(rawBpm.trim(), 10)
+        : undefined;
+  const bpm =
+    typeof parsedBpm === 'number' && Number.isFinite(parsedBpm)
+      ? Math.max(30, Math.min(300, parsedBpm))
+      : undefined;
+
   return {
     externalTrackId: raw.externalTrackId,
     title: raw.title,
     lyrics: raw.lyrics,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+    bpm,
   };
 }
 
@@ -515,37 +529,75 @@ export default function ProfileScreen() {
         }
 
         const incomingLyrics = item.lyrics.replace(/\r\n/g, '\n');
-        const snapshotLyrics = nextSnapshots[matchedSong.id]?.lyrics ?? matchedSong.lyrics;
-        const hasDiffSinceLastSession = snapshotLyrics !== incomingLyrics;
+        const incomingBpm =
+          typeof item.bpm === 'number' && Number.isFinite(item.bpm)
+            ? Math.max(30, Math.min(300, Math.round(item.bpm)))
+            : undefined;
 
-        if (matchedSong.lyrics !== incomingLyrics) {
+        const snapshotLyrics = nextSnapshots[matchedSong.id]?.lyrics ?? matchedSong.lyrics;
+        const snapshotBpm = nextSnapshots[matchedSong.id]?.bpm ?? matchedSong.bpm;
+        const hasLyricsDiffSinceLastSession = snapshotLyrics !== incomingLyrics;
+        const hasTempoDiffSinceLastSession =
+          typeof incomingBpm === 'number' && incomingBpm !== snapshotBpm;
+        const hasDiffSinceLastSession =
+          hasLyricsDiffSinceLastSession || hasTempoDiffSinceLastSession;
+
+        const shouldUpdateLyrics = matchedSong.lyrics !== incomingLyrics;
+        const shouldUpdateTempo =
+          typeof incomingBpm === 'number' && incomingBpm !== matchedSong.bpm;
+
+        if (shouldUpdateLyrics || shouldUpdateTempo) {
           pendingSongUpdates.set(matchedSong.id, {
             ...matchedSong,
-            lyrics: incomingLyrics,
-            sections: parseSongSections(incomingLyrics),
+            ...(shouldUpdateLyrics
+              ? {
+                  lyrics: incomingLyrics,
+                  sections: parseSongSections(incomingLyrics),
+                }
+              : {}),
+            ...(shouldUpdateTempo ? { bpm: incomingBpm } : {}),
             updatedAt: Date.now(),
           });
         }
 
         if (hasDiffSinceLastSession) {
           changed += 1;
-          const diff = buildLineDiff(snapshotLyrics, incomingLyrics);
-          changes.push({
-            songId: matchedSong.id,
-            title: matchedSong.title,
-            externalTrackId: item.externalTrackId,
-            updatedAt: item.updatedAt,
-            addedLines: diff.addedLines,
-            removedLines: diff.removedLines,
-            lines: diff.lines,
-            isTruncated: diff.isTruncated,
-          });
+          if (hasLyricsDiffSinceLastSession) {
+            const diff = buildLineDiff(snapshotLyrics, incomingLyrics);
+            changes.push({
+              songId: matchedSong.id,
+              title: matchedSong.title,
+              externalTrackId: item.externalTrackId,
+              updatedAt: item.updatedAt,
+              addedLines: diff.addedLines,
+              removedLines: diff.removedLines,
+              lines: diff.lines,
+              isTruncated: diff.isTruncated,
+            });
+          } else {
+            const beforeLabel = typeof snapshotBpm === 'number' ? `${snapshotBpm} BPM` : 'unset';
+            const afterLabel = typeof incomingBpm === 'number' ? `${incomingBpm} BPM` : 'unset';
+            changes.push({
+              songId: matchedSong.id,
+              title: matchedSong.title,
+              externalTrackId: item.externalTrackId,
+              updatedAt: item.updatedAt,
+              addedLines: 0,
+              removedLines: 0,
+              lines: [{ type: 'context', text: `Tempo updated: ${beforeLabel} -> ${afterLabel}` }],
+              isTruncated: false,
+            });
+          }
         } else {
           unchanged += 1;
         }
 
         nextSnapshots[matchedSong.id] = {
           lyrics: incomingLyrics,
+          bpm:
+            typeof incomingBpm === 'number'
+              ? incomingBpm
+              : nextSnapshots[matchedSong.id]?.bpm ?? matchedSong.bpm,
           syncedAt: Date.now(),
           remoteUpdatedAt: item.updatedAt,
           sourceTrackId: item.externalTrackId,

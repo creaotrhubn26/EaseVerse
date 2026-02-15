@@ -56,11 +56,30 @@ const sessionScoreRequestSchema = z.object({
   accentGoal: z.string().trim().min(1).max(32).optional(),
 });
 
+const bpmSchema = z.preprocess((value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.round(value);
+  }
+  return value;
+}, z.number().int().min(30).max(300).optional());
+
 const collabLyricsUpsertSchema = z.object({
   externalTrackId: z.string().trim().min(1).max(160),
   projectId: z.string().trim().max(160).optional(),
   title: z.string().trim().min(1).max(240),
   artist: z.string().trim().max(160).optional(),
+  bpm: bpmSchema,
   lyrics: z.string().trim().min(1).max(20000),
   collaborators: z.array(z.string().trim().min(1).max(120)).max(40).optional(),
   source: z.string().trim().max(120).optional(),
@@ -72,6 +91,7 @@ type CollabLyricsRecord = {
   projectId?: string;
   title: string;
   artist?: string;
+  bpm?: number;
   lyrics: string;
   collaborators: string[];
   source: string;
@@ -133,11 +153,20 @@ function parseStringArrayLike(input: unknown): string[] {
 }
 
 function mapCollabLyricsDbRow(row: any): CollabLyricsRecord {
+  const rawBpm = row.bpm;
+  const bpm =
+    rawBpm === null || rawBpm === undefined
+      ? undefined
+      : (() => {
+          const parsed = typeof rawBpm === "number" ? rawBpm : Number(rawBpm);
+          return Number.isFinite(parsed) ? Math.round(parsed) : undefined;
+        })();
   return {
     externalTrackId: String(row.external_track_id),
     projectId: row.project_id ? String(row.project_id) : undefined,
     title: String(row.title),
     artist: row.artist ? String(row.artist) : undefined,
+    bpm,
     lyrics: String(row.lyrics),
     collaborators: parseStringArrayLike(row.collaborators),
     source: row.source ? String(row.source) : "external",
@@ -158,6 +187,7 @@ async function ensureCollabLyricsTable(): Promise<void> {
           project_id VARCHAR(160),
           title VARCHAR(240) NOT NULL,
           artist VARCHAR(160),
+          bpm INTEGER,
           lyrics TEXT NOT NULL,
           collaborators JSONB NOT NULL DEFAULT '[]'::jsonb,
           source VARCHAR(120) NOT NULL DEFAULT 'external',
@@ -165,6 +195,11 @@ async function ensureCollabLyricsTable(): Promise<void> {
           received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+      `);
+
+      await collabLyricsPool.query(`
+        ALTER TABLE collab_lyrics_drafts
+        ADD COLUMN IF NOT EXISTS bpm INTEGER;
       `);
 
       await collabLyricsPool.query(`
@@ -199,18 +234,20 @@ async function upsertCollabLyricsRecord(
           project_id,
           title,
           artist,
+          bpm,
           lyrics,
           collaborators,
           source,
           updated_at,
           received_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::timestamptz, $9::timestamptz)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::timestamptz, $10::timestamptz)
         ON CONFLICT (external_track_id)
         DO UPDATE SET
           project_id = EXCLUDED.project_id,
           title = EXCLUDED.title,
           artist = EXCLUDED.artist,
+          bpm = EXCLUDED.bpm,
           lyrics = EXCLUDED.lyrics,
           collaborators = EXCLUDED.collaborators,
           source = EXCLUDED.source,
@@ -223,6 +260,7 @@ async function upsertCollabLyricsRecord(
         record.projectId ?? null,
         record.title,
         record.artist ?? null,
+        record.bpm ?? null,
         record.lyrics,
         JSON.stringify(record.collaborators),
         record.source,
@@ -782,6 +820,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         projectId: data.projectId,
         title: data.title,
         artist: data.artist,
+        bpm: data.bpm ?? existing?.bpm,
         lyrics: data.lyrics,
         collaborators: data.collaborators ?? existing?.collaborators ?? [],
         source: data.source ?? existing?.source ?? "external",

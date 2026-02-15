@@ -8,6 +8,7 @@ const LYRICS_SNAPSHOTS_KEY = '@easeverse_lyrics_snapshots';
 
 export type LyricsSnapshotRecord = {
   lyrics: string;
+  bpm?: number;
   syncedAt: number;
   remoteUpdatedAt?: string;
   sourceTrackId?: string;

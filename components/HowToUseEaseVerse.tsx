@@ -186,7 +186,12 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
       <View style={styles.introCard}>
         <View style={styles.introHeader}>
           <View style={styles.introIcon}>
-            <Ionicons name="sparkles" size={18} color={Colors.gradientStart} />
+            <Image
+              source={require('@/assets/images/easeverse_logo_howto-icon.png')}
+              style={styles.howToIcon}
+              accessibilityRole="image"
+              accessibilityLabel="How to use EaseVerse"
+            />
           </View>
           <View style={styles.introCopy}>
             <Text style={styles.introTitle}>Quick Tour</Text>
@@ -325,6 +330,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.accentBorder,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  howToIcon: {
+    width: 34,
+    height: 34,
+    resizeMode: 'cover',
   },
   introCopy: {
     flex: 1,

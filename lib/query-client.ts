@@ -31,7 +31,31 @@ export function getApiUrl(): string {
 
   const runtimeLocation = (globalThis as { location?: { origin?: string } }).location;
   if (runtimeLocation?.origin) {
-    return new URL(runtimeLocation.origin).href;
+    try {
+      const runtimeUrl = new URL(runtimeLocation.origin);
+      const isLocalHost =
+        runtimeUrl.hostname === "localhost" || runtimeUrl.hostname === "127.0.0.1";
+      const isExpoWebDevPort = new Set([
+        "8081",
+        "8082",
+        "8083",
+        "8084",
+        "8085",
+        "19000",
+        "19001",
+        "19002",
+        "19006",
+      ]).has(runtimeUrl.port);
+
+      // When running Expo web dev server, local API is usually served separately on :5000.
+      if (isLocalHost && isExpoWebDevPort) {
+        return "http://localhost:5000/";
+      }
+
+      return runtimeUrl.href;
+    } catch {
+      // Fall through to default.
+    }
   }
 
   return "http://localhost:5000/";

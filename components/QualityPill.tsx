@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import type { SignalQuality } from '@/lib/types';
+import { scaledIconSize, useResponsiveLayout } from '@/lib/responsive';
 
 interface QualityPillProps {
   quality: SignalQuality;
@@ -15,10 +16,12 @@ const qualityConfig = {
 };
 
 export default function QualityPill({ quality }: QualityPillProps) {
+  const responsive = useResponsiveLayout();
   const config = qualityConfig[quality];
+  const iconSize = scaledIconSize(10, responsive);
   return (
     <View style={[styles.pill, { borderColor: config.color + '40' }]}>
-      <Feather name={config.icon} size={12} color={config.color} />
+      <Feather name={config.icon} size={iconSize} color={config.color} />
       <Text style={[styles.text, { color: config.color }]}>{config.label}</Text>
     </View>
   );

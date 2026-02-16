@@ -6,6 +6,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import SessionCard from './SessionCard';
 import type { Session } from '@/lib/types';
+import { scaledIconSize, useResponsiveLayout } from '@/lib/responsive';
 
 interface SwipeableSessionCardProps {
   session: Session;
@@ -15,7 +16,9 @@ interface SwipeableSessionCardProps {
 }
 
 export default function SwipeableSessionCard({ session, onPress, onFavorite, onDelete }: SwipeableSessionCardProps) {
+  const responsive = useResponsiveLayout();
   const swipeableRef = useRef<Swipeable>(null);
+  const actionIconSize = scaledIconSize(14, responsive);
 
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
@@ -46,7 +49,7 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
         accessibilityHint="Removes this recording from your sessions"
       >
         <Animated.View style={[styles.deleteContent, { transform: [{ scale }], opacity }]}>
-          <Ionicons name="trash-outline" size={22} color="#fff" />
+          <Ionicons name="trash-outline" size={actionIconSize} color="#fff" />
           <Text style={styles.actionLabel}>Delete</Text>
         </Animated.View>
       </Pressable>
@@ -86,7 +89,7 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
           <View>
             <Ionicons
               name={session.favorite ? 'heart-dislike' : 'heart'}
-              size={22}
+              size={actionIconSize}
               color="#fff"
             />
           </View>

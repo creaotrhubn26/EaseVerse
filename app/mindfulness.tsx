@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -23,6 +24,8 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { useNarration } from '@/lib/useNarration';
 import { AudioModule } from 'expo-audio';
+import { useApp } from '@/lib/AppContext';
+import type { NarrationVoice } from '@/lib/types';
 import Colors from '@/constants/colors';
 import {
   moodOptions,
@@ -39,10 +42,16 @@ import {
   type EnergyTechnique,
   type VisualizationExercise,
 } from '@/constants/mindfulness';
+import { scaledIconSize, useResponsiveLayout } from '@/lib/responsive';
 
 type MindfulnessPhase = 'mood' | 'plan' | 'breathing' | 'technique' | 'visualization' | 'affirmation' | 'complete';
 
 function BreathingGuide({ pattern, onComplete, speak }: { pattern: BreathingPattern; onComplete: () => void; speak: (text: string, onDone?: () => void) => Promise<void> }) {
+  const responsive = useResponsiveLayout();
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
   const [currentCycle, setCurrentCycle] = useState(0);
   const [phase, setPhase] = useState<'inhale' | 'hold' | 'exhale' | 'holdAfter'>('inhale');
   const [countdown, setCountdown] = useState(pattern.inhale);
@@ -224,7 +233,7 @@ function BreathingGuide({ pattern, onComplete, speak }: { pattern: BreathingPatt
             end={{ x: 1, y: 0 }}
             style={styles.startBreathGradient}
           >
-            <Ionicons name="play" size={18} color="#fff" />
+            <Ionicons name="play" size={scaledIcon(11)} color="#fff" />
             <Text style={styles.startBreathText}>Begin</Text>
           </LinearGradient>
         </Pressable>
@@ -247,6 +256,11 @@ function BreathingGuide({ pattern, onComplete, speak }: { pattern: BreathingPatt
 }
 
 function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTechnique; onComplete: () => void; speak: (text: string, onDone?: () => void) => Promise<void> }) {
+  const responsive = useResponsiveLayout();
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
   const [currentStep, setCurrentStep] = useState(0);
   const [timeLeft, setTimeLeft] = useState(technique.durationSeconds);
   const [isActive, setIsActive] = useState(false);
@@ -307,7 +321,7 @@ function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTec
   return (
     <View style={styles.techniqueContainer}>
       <View style={[styles.techniqueIconCircle, { backgroundColor: technique.color + '20' }]}>
-        <Ionicons name={technique.icon} size={28} color={technique.color} />
+        <Ionicons name={technique.icon} size={scaledIcon(16)} color={technique.color} />
       </View>
       <Text style={styles.techniqueTitle}>{technique.title}</Text>
       <Text style={styles.techniqueDesc}>{technique.description}</Text>
@@ -358,7 +372,7 @@ function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTec
             end={{ x: 1, y: 0 }}
             style={styles.startBreathGradient}
           >
-            <Ionicons name="play" size={18} color="#fff" />
+            <Ionicons name="play" size={scaledIcon(11)} color="#fff" />
             <Text style={styles.startBreathText}>Start</Text>
           </LinearGradient>
         </Pressable>
@@ -381,6 +395,11 @@ function TechniqueGuide({ technique, onComplete, speak }: { technique: EnergyTec
 }
 
 function VisualizationGuide({ visualization, onComplete, speak }: { visualization: VisualizationExercise; onComplete: () => void; speak: (text: string, onDone?: () => void) => Promise<void> }) {
+  const responsive = useResponsiveLayout();
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
   const [currentLine, setCurrentLine] = useState(0);
   const [isActive, setIsActive] = useState(false);
 
@@ -402,37 +421,104 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
     };
   }, [isActive, pulseValue]);
 
-  const spokenLineRef = useRef(-1);
+  const sequenceIdRef = useRef(0);
+  const lineAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lineFailSafeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!isActive) return;
-    lineOpacity.value = withTiming(1, { duration: 600 });
-    if (spokenLineRef.current !== 0) {
-      spokenLineRef.current = 0;
-      speak(visualization.narration[0]).catch(() => {});
+    if (!isActive) {
+      return;
     }
 
-    const lineDuration = (visualization.durationSeconds / visualization.narration.length) * 1000;
-    const lineInterval = setInterval(() => {
-      lineOpacity.value = withSequence(
-        withTiming(0, { duration: 300 }),
-        withTiming(1, { duration: 500 })
-      );
-      setCurrentLine(l => {
-        const next = l + 1;
-        if (next >= visualization.narration.length) {
-          clearInterval(lineInterval);
-          setTimeout(() => onComplete(), 2000);
-          return l;
+    sequenceIdRef.current += 1;
+    const thisSequence = sequenceIdRef.current;
+    const lines = visualization.narration;
+    const lineCount = Math.max(1, lines.length);
+    const targetLineDurationMs = Math.max(
+      2200,
+      Math.round((visualization.durationSeconds * 1000) / lineCount)
+    );
+
+    const clearTimers = () => {
+      if (lineAdvanceTimeoutRef.current) {
+        clearTimeout(lineAdvanceTimeoutRef.current);
+        lineAdvanceTimeoutRef.current = null;
+      }
+      if (lineFailSafeTimeoutRef.current) {
+        clearTimeout(lineFailSafeTimeoutRef.current);
+        lineFailSafeTimeoutRef.current = null;
+      }
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+        completionTimeoutRef.current = null;
+      }
+    };
+
+    lineOpacity.value = withTiming(1, { duration: 600 });
+    setCurrentLine(0);
+
+    const playLine = (lineIndex: number) => {
+      if (sequenceIdRef.current !== thisSequence || lineIndex >= lines.length) {
+        return;
+      }
+
+      const lineStartAt = Date.now();
+      let advanced = false;
+
+      const advanceToNextLine = () => {
+        if (advanced || sequenceIdRef.current !== thisSequence) {
+          return;
         }
-        if (spokenLineRef.current !== next) {
-          spokenLineRef.current = next;
-          speak(visualization.narration[next]).catch(() => {});
+        advanced = true;
+
+        if (lineFailSafeTimeoutRef.current) {
+          clearTimeout(lineFailSafeTimeoutRef.current);
+          lineFailSafeTimeoutRef.current = null;
         }
-        return next;
+
+        const nextLine = lineIndex + 1;
+        if (nextLine >= lines.length) {
+          completionTimeoutRef.current = setTimeout(() => {
+            if (sequenceIdRef.current !== thisSequence) {
+              return;
+            }
+            setIsActive(false);
+            onComplete();
+          }, 900);
+          return;
+        }
+
+        const elapsedMs = Date.now() - lineStartAt;
+        const waitMs = Math.max(250, targetLineDurationMs - elapsedMs);
+        lineAdvanceTimeoutRef.current = setTimeout(() => {
+          if (sequenceIdRef.current !== thisSequence) {
+            return;
+          }
+          lineOpacity.value = withSequence(
+            withTiming(0, { duration: 240 }),
+            withTiming(1, { duration: 420 })
+          );
+          setCurrentLine(nextLine);
+          playLine(nextLine);
+        }, waitMs);
+      };
+
+      lineFailSafeTimeoutRef.current = setTimeout(() => {
+        advanceToNextLine();
+      }, targetLineDurationMs + 5000);
+
+      speak(lines[lineIndex], advanceToNextLine).catch(() => {
+        advanceToNextLine();
       });
-    }, lineDuration);
-    return () => clearInterval(lineInterval);
+    };
+
+    playLine(0);
+
+    return () => {
+      sequenceIdRef.current += 1;
+      clearTimers();
+    };
   }, [isActive, visualization.narration.length, visualization.durationSeconds, lineOpacity, onComplete, speak, visualization.narration]);
 
   const lineStyle = useAnimatedStyle(() => ({
@@ -447,7 +533,7 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
     <View style={styles.vizContainer}>
       <Animated.View style={[styles.vizGlowCircle, { borderColor: visualization.color + '40' }, pulseStyle]}>
         <View style={[styles.vizInnerCircle, { backgroundColor: visualization.color + '15' }]}>
-          <Ionicons name={visualization.icon} size={36} color={visualization.color} />
+          <Ionicons name={visualization.icon} size={scaledIcon(20)} color={visualization.color} />
         </View>
       </Animated.View>
 
@@ -467,7 +553,7 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
           style={styles.startBreathBtn}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            spokenLineRef.current = -1;
+            sequenceIdRef.current += 1;
             setIsActive(true);
             setCurrentLine(0);
             lineOpacity.value = 0;
@@ -482,7 +568,7 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
             end={{ x: 1, y: 0 }}
             style={styles.startBreathGradient}
           >
-            <Ionicons name="play" size={18} color="#fff" />
+            <Ionicons name="play" size={scaledIcon(11)} color="#fff" />
             <Text style={styles.startBreathText}>Begin</Text>
           </LinearGradient>
         </Pressable>
@@ -506,6 +592,8 @@ function VisualizationGuide({ visualization, onComplete, speak }: { visualizatio
 
 export default function MindfulnessScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
+  const { settings, updateSettings } = useApp();
   const { speak: speakNarration, stop: stopNarration, state: narrationState } = useNarration();
   const [currentPhase, setCurrentPhase] = useState<MindfulnessPhase>('mood');
   const [selectedMood, setSelectedMood] = useState<MoodLevel | null>(null);
@@ -519,6 +607,16 @@ export default function MindfulnessScreen() {
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+  const horizontalInset = responsive.contentPadding;
+  const contentMaxWidth = responsive.contentMaxWidth;
+  const sectionWrapStyle = useMemo(
+    () => ({ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }),
+    [contentMaxWidth]
+  );
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
 
   useEffect(() => {
     AudioModule.setAudioModeAsync({
@@ -534,6 +632,15 @@ export default function MindfulnessScreen() {
       onDone?.();
     }
   }, [narrationEnabled, speakNarration]);
+
+  const handleNarrationVoiceChange = useCallback((voice: NarrationVoice) => {
+    if (settings.narrationVoice === voice) {
+      return;
+    }
+    stopNarration();
+    updateSettings({ narrationVoice: voice });
+    void Haptics.selectionAsync();
+  }, [settings.narrationVoice, stopNarration, updateSettings]);
 
   useEffect(() => {
     fadeIn.value = withTiming(1, { duration: 400 });
@@ -575,7 +682,7 @@ export default function MindfulnessScreen() {
   const renderMoodPicker = () => (
     <Animated.View style={[styles.phaseContent, fadeStyle]}>
       <View style={styles.phaseHeader}>
-        <Ionicons name="heart" size={28} color={Colors.gradientStart} />
+        <Ionicons name="heart" size={scaledIcon(16)} color={Colors.gradientStart} />
         <Text style={styles.phaseTitle}>How are you feeling?</Text>
         <Text style={styles.phaseSubtitle}>Check in with yourself before you sing. Your emotional state shapes your voice.</Text>
       </View>
@@ -592,7 +699,7 @@ export default function MindfulnessScreen() {
             accessibilityState={{ selected: selectedMood === mood.id }}
           >
             <View style={[styles.moodIconCircle, { backgroundColor: mood.color + '15' }]}>
-              <Ionicons name={mood.icon} size={24} color={mood.color} />
+              <Ionicons name={mood.icon} size={scaledIcon(14)} color={mood.color} />
             </View>
             <Text style={styles.moodLabel}>{mood.label}</Text>
             <Text style={styles.moodDesc}>{mood.description}</Text>
@@ -610,7 +717,7 @@ export default function MindfulnessScreen() {
       <Animated.View style={[styles.phaseContent, fadeStyle]}>
         <View style={styles.phaseHeader}>
           <View style={[styles.moodBadge, { backgroundColor: mood.color + '20', borderColor: mood.color + '40' }]}>
-            <Ionicons name={mood.icon} size={16} color={mood.color} />
+            <Ionicons name={mood.icon} size={scaledIcon(10)} color={mood.color} />
             <Text style={[styles.moodBadgeText, { color: mood.color }]}>{mood.label}</Text>
           </View>
           <Text style={styles.phaseTitle}>Your Mindfulness Plan</Text>
@@ -626,13 +733,13 @@ export default function MindfulnessScreen() {
             accessibilityHint="Starts the breathing practice"
           >
             <View style={[styles.planIconCircle, { backgroundColor: (selectedBreathing?.color || '#3B82F6') + '15' }]}>
-              <Ionicons name={selectedBreathing?.icon || 'square-outline'} size={22} color={selectedBreathing?.color || '#3B82F6'} />
+              <Ionicons name={selectedBreathing?.icon || 'square-outline'} size={scaledIcon(13)} color={selectedBreathing?.color || '#3B82F6'} />
             </View>
             <View style={styles.planCardText}>
               <Text style={styles.planCardTitle}>Breathing</Text>
               <Text style={styles.planCardDesc}>{selectedBreathing?.title || 'Box Breathing'}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+            <Ionicons name="chevron-forward" size={scaledIcon(11)} color={Colors.textTertiary} />
           </Pressable>
 
           <Pressable
@@ -643,13 +750,13 @@ export default function MindfulnessScreen() {
             accessibilityHint="Starts the grounding technique"
           >
             <View style={[styles.planIconCircle, { backgroundColor: (selectedTechnique?.color || '#10B981') + '15' }]}>
-              <Ionicons name={selectedTechnique?.icon || 'earth'} size={22} color={selectedTechnique?.color || '#10B981'} />
+              <Ionicons name={selectedTechnique?.icon || 'earth'} size={scaledIcon(13)} color={selectedTechnique?.color || '#10B981'} />
             </View>
             <View style={styles.planCardText}>
               <Text style={styles.planCardTitle}>Energy Technique</Text>
               <Text style={styles.planCardDesc}>{selectedTechnique?.title || 'Grounding'}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+            <Ionicons name="chevron-forward" size={scaledIcon(11)} color={Colors.textTertiary} />
           </Pressable>
 
           <Pressable
@@ -660,13 +767,13 @@ export default function MindfulnessScreen() {
             accessibilityHint="Starts guided visualization"
           >
             <View style={[styles.planIconCircle, { backgroundColor: (selectedViz?.color || '#FF7A18') + '15' }]}>
-              <Ionicons name={selectedViz?.icon || 'sunny'} size={22} color={selectedViz?.color || '#FF7A18'} />
+              <Ionicons name={selectedViz?.icon || 'sunny'} size={scaledIcon(13)} color={selectedViz?.color || '#FF7A18'} />
             </View>
             <View style={styles.planCardText}>
               <Text style={styles.planCardTitle}>Visualization</Text>
               <Text style={styles.planCardDesc}>{selectedViz?.title || 'Golden Light'}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+            <Ionicons name="chevron-forward" size={scaledIcon(11)} color={Colors.textTertiary} />
           </Pressable>
 
           <Pressable
@@ -677,13 +784,13 @@ export default function MindfulnessScreen() {
             accessibilityHint="Starts affirmation practice"
           >
             <View style={[styles.planIconCircle, { backgroundColor: '#F59E0B15' }]}>
-              <Ionicons name="sparkles" size={22} color="#F59E0B" />
+              <Ionicons name="sparkles" size={scaledIcon(13)} color="#F59E0B" />
             </View>
             <View style={styles.planCardText}>
               <Text style={styles.planCardTitle}>Affirmation</Text>
               <Text style={styles.planCardDesc}>Power words for your mood</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+            <Ionicons name="chevron-forward" size={scaledIcon(11)} color={Colors.textTertiary} />
           </Pressable>
         </View>
 
@@ -701,7 +808,7 @@ export default function MindfulnessScreen() {
             style={styles.allBreathingGradient}
           >
             <Text style={styles.allBreathingText}>Start Full Session</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
+            <Ionicons name="arrow-forward" size={scaledIcon(11)} color="#fff" />
           </LinearGradient>
         </Pressable>
       </Animated.View>
@@ -732,7 +839,7 @@ export default function MindfulnessScreen() {
             accessibilityLabel={`Select pattern ${b.title}`}
             accessibilityState={{ selected: selectedBreathing?.id === b.id }}
           >
-            <Ionicons name={b.icon} size={14} color={b.color} />
+            <Ionicons name={b.icon} size={scaledIcon(9)} color={b.color} />
             <Text style={[styles.otherOptionText, { color: b.color }]}>{b.title}</Text>
           </Pressable>
         ))}
@@ -764,7 +871,7 @@ export default function MindfulnessScreen() {
             accessibilityLabel={`Select technique ${t.title}`}
             accessibilityState={{ selected: selectedTechnique?.id === t.id }}
           >
-            <Ionicons name={t.icon} size={14} color={t.color} />
+            <Ionicons name={t.icon} size={scaledIcon(9)} color={t.color} />
             <Text style={[styles.otherOptionText, { color: t.color }]}>{t.title}</Text>
           </Pressable>
         ))}
@@ -796,7 +903,7 @@ export default function MindfulnessScreen() {
             accessibilityLabel={`Select visualization ${v.title}`}
             accessibilityState={{ selected: selectedViz?.id === v.id }}
           >
-            <Ionicons name={v.icon} size={14} color={v.color} />
+            <Ionicons name={v.icon} size={scaledIcon(9)} color={v.color} />
             <Text style={[styles.otherOptionText, { color: v.color }]}>{v.title}</Text>
           </Pressable>
         ))}
@@ -810,7 +917,7 @@ export default function MindfulnessScreen() {
     return (
       <Animated.View style={[styles.phaseContent, fadeStyle]}>
         <View style={styles.affirmationCard}>
-          <Ionicons name="sparkles" size={32} color="#F59E0B" />
+          <Ionicons name="sparkles" size={scaledIcon(19)} color="#F59E0B" />
           <Text style={styles.affirmationText}>{currentAffirmation}</Text>
           <Text style={styles.affirmationInstruction}>Repeat this to yourself 3 times, slowly and with feeling</Text>
         </View>
@@ -826,7 +933,7 @@ export default function MindfulnessScreen() {
           accessibilityLabel="Get another affirmation"
           accessibilityHint="Shows a different affirmation for your mood"
         >
-          <Ionicons name="refresh" size={18} color={Colors.gradientStart} />
+          <Ionicons name="refresh" size={scaledIcon(11)} color={Colors.gradientStart} />
           <Text style={styles.nextAffirmationText}>Another One</Text>
         </Pressable>
 
@@ -844,7 +951,7 @@ export default function MindfulnessScreen() {
             style={styles.finishGradient}
           >
             <Text style={styles.finishText}>I Feel Ready</Text>
-            <Ionicons name="checkmark-circle" size={20} color="#fff" />
+            <Ionicons name="checkmark-circle" size={scaledIcon(12)} color="#fff" />
           </LinearGradient>
         </Pressable>
       </Animated.View>
@@ -854,7 +961,7 @@ export default function MindfulnessScreen() {
   const renderComplete = () => (
     <Animated.View style={[styles.phaseContent, styles.completeContainer, fadeStyle]}>
       <View style={styles.completeGlow}>
-        <Ionicons name="sparkles" size={48} color={Colors.gradientStart} />
+        <Ionicons name="sparkles" size={scaledIcon(28)} color={Colors.gradientStart} />
       </View>
       <Text style={styles.completeTitle}>You Are Ready</Text>
       <Text style={styles.completeSubtitle}>
@@ -863,15 +970,15 @@ export default function MindfulnessScreen() {
 
       <View style={styles.completeTips}>
         <View style={styles.completeTipRow}>
-          <Ionicons name="checkmark-circle" size={16} color={Colors.successUnderline} />
+          <Ionicons name="checkmark-circle" size={scaledIcon(10)} color={Colors.successUnderline} />
           <Text style={styles.completeTipText}>Carry your calm breathing into your performance</Text>
         </View>
         <View style={styles.completeTipRow}>
-          <Ionicons name="checkmark-circle" size={16} color={Colors.successUnderline} />
+          <Ionicons name="checkmark-circle" size={scaledIcon(10)} color={Colors.successUnderline} />
           <Text style={styles.completeTipText}>If tension returns, take one deep breath before the next phrase</Text>
         </View>
         <View style={styles.completeTipRow}>
-          <Ionicons name="checkmark-circle" size={16} color={Colors.successUnderline} />
+          <Ionicons name="checkmark-circle" size={scaledIcon(10)} color={Colors.successUnderline} />
           <Text style={styles.completeTipText}>Trust your preparation and let your emotions fuel your singing</Text>
         </View>
       </View>
@@ -892,7 +999,7 @@ export default function MindfulnessScreen() {
           end={{ x: 1, y: 0 }}
           style={styles.doneBtnGradient}
         >
-          <Ionicons name="mic" size={20} color="#fff" />
+          <Ionicons name="mic" size={scaledIcon(12)} color="#fff" />
           <Text style={styles.doneBtnText}>Go Sing</Text>
         </LinearGradient>
       </Pressable>
@@ -906,7 +1013,7 @@ export default function MindfulnessScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
           onPress={() => router.back()}
           hitSlop={12}
@@ -915,7 +1022,7 @@ export default function MindfulnessScreen() {
           accessibilityLabel="Go back"
           accessibilityHint="Returns to the previous screen"
         >
-          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+          <Ionicons name="arrow-back" size={scaledIcon(14)} color={Colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle} accessibilityRole="header">Mindfulness</Text>
         <Pressable
@@ -932,14 +1039,67 @@ export default function MindfulnessScreen() {
         >
           <Ionicons
             name={narrationEnabled ? "volume-high" : "volume-mute"}
-            size={22}
+            size={scaledIcon(13)}
             color={narrationEnabled ? Colors.gradientStart : Colors.textTertiary}
           />
         </Pressable>
       </View>
 
+      <View style={[styles.voiceSelectorSection, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
+        <Text style={styles.voiceSelectorTitle}>Mindfulness Voice</Text>
+        <View style={styles.voiceSelectorRow}>
+          <Pressable
+            style={[
+              styles.voiceOption,
+              settings.narrationVoice === 'female' && styles.voiceOptionActive,
+            ]}
+            onPress={() => handleNarrationVoiceChange('female')}
+            accessibilityRole="button"
+            accessibilityLabel="Use female mindfulness voice"
+            accessibilityHint="Sets spoken mindfulness guidance voice to female"
+            accessibilityState={{ selected: settings.narrationVoice === 'female' }}
+          >
+            <Image
+              source={require('@/assets/images/Female.png')}
+              style={styles.voiceOptionAvatar}
+              resizeMode="contain"
+            />
+            <Text style={[
+              styles.voiceOptionText,
+              settings.narrationVoice === 'female' && styles.voiceOptionTextActive,
+            ]}>
+              Female
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.voiceOption,
+              settings.narrationVoice === 'male' && styles.voiceOptionActive,
+            ]}
+            onPress={() => handleNarrationVoiceChange('male')}
+            accessibilityRole="button"
+            accessibilityLabel="Use male mindfulness voice"
+            accessibilityHint="Sets spoken mindfulness guidance voice to male"
+            accessibilityState={{ selected: settings.narrationVoice === 'male' }}
+          >
+            <Image
+              source={require('@/assets/images/Male.png')}
+              style={styles.voiceOptionAvatar}
+              resizeMode="contain"
+            />
+            <Text style={[
+              styles.voiceOptionText,
+              settings.narrationVoice === 'male' && styles.voiceOptionTextActive,
+            ]}>
+              Male
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
       {currentPhase !== 'mood' && currentPhase !== 'complete' && (
-        <View style={styles.progressDots}>
+        <View style={[styles.progressDots, sectionWrapStyle]}>
           {['plan', 'breathing', 'technique', 'visualization', 'affirmation'].map((p, i) => (
             <View
               key={p}
@@ -953,15 +1113,16 @@ export default function MindfulnessScreen() {
         </View>
       )}
 
-      <View style={{ flex: 1 }}>
+      <View style={[{ flex: 1 }, sectionWrapStyle]}>
       {narrationState === 'loading' && (
         <View style={styles.narrationLoading}>
-          <Ionicons name="mic" size={12} color={Colors.gradientStart} />
+          <Ionicons name="mic" size={scaledIcon(8)} color={Colors.gradientStart} />
           <Text style={styles.narrationLoadingText}>Generating voice...</Text>
         </View>
       )}
 
       <ScrollView
+        style={sectionWrapStyle}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 40 }}
       >
@@ -1007,6 +1168,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 8,
+  },
+  voiceSelectorSection: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  voiceSelectorTitle: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  voiceSelectorRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  voiceOption: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surfaceGlass,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  voiceOptionActive: {
+    borderColor: Colors.gradientStart,
+    backgroundColor: Colors.accentSubtle,
+  },
+  voiceOptionAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  voiceOptionText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+  },
+  voiceOptionTextActive: {
+    color: Colors.gradientStart,
+    fontFamily: 'Inter_600SemiBold',
   },
   progressDot: {
     width: 8,

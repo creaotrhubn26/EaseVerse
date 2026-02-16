@@ -19,6 +19,7 @@ import WaveformTimeline from '@/components/WaveformTimeline';
 import Toast from '@/components/Toast';
 import { useApp } from '@/lib/AppContext';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
+import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
 function InsightCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -38,6 +39,11 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
   coachState: string;
   coachResult: { phonetic: string; tip: string; slow: string } | null;
 }) {
+  const responsive = useResponsiveLayout();
+  const iconSize = scaledIconSize(11, responsive);
+  const detailIconSize = scaledIconSize(10, responsive);
+  const replayIconSize = scaledIconSize(9, responsive);
+
   return (
     <View>
       <Pressable
@@ -60,13 +66,13 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
         {isActive && coachState === 'loading' ? (
           <ActivityIndicator size="small" color={Colors.gradientStart} />
         ) : (
-          <Ionicons name="volume-high-outline" size={18} color={Colors.gradientStart} />
+          <Ionicons name="volume-high-outline" size={iconSize} color={Colors.gradientStart} />
         )}
       </Pressable>
       {isActive && coachResult && (
         <View style={styles.coachPanel}>
           <View style={styles.coachPhoneticRow}>
-            <Ionicons name="ear-outline" size={16} color={Colors.gradientEnd} />
+            <Ionicons name="ear-outline" size={detailIconSize} color={Colors.gradientEnd} />
             <Text style={styles.coachPhonetic}>{coachResult.phonetic}</Text>
             {coachState === 'playing' && (
               <View style={styles.speakingIndicator}>
@@ -87,7 +93,7 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
             accessibilityLabel={`Replay pronunciation for ${word}`}
             accessibilityHint="Plays the pronunciation guidance again"
           >
-            <Ionicons name="reload" size={14} color={Colors.gradientStart} />
+            <Ionicons name="reload" size={replayIconSize} color={Colors.gradientStart} />
             <Text style={styles.replayText}>Replay</Text>
           </Pressable>
         </View>
@@ -98,11 +104,13 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
 
 export default function SessionReviewScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
   const { id, fromRecording } = useLocalSearchParams<{ id: string; fromRecording?: string }>();
   const { sessions } = useApp();
   const coach = usePronunciationCoach();
   const [activeFixWord, setActiveFixWord] = useState<string | null>(null);
   const [showAddedToast, setShowAddedToast] = useState(false);
+  const [waveformProgress, setWaveformProgress] = useState(0);
 
   useEffect(() => {
     if (fromRecording === '1') {
@@ -120,11 +128,22 @@ export default function SessionReviewScreen() {
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+  const horizontalInset = responsive.contentPadding;
+  const contentMaxWidth = responsive.contentMaxWidth;
+  const sectionWrapStyle = useMemo(
+    () => ({ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }),
+    [contentMaxWidth]
+  );
+  const backIconSize = tierValue(responsive.tier, [30, 34, 38, 44, 52, 62, 74]);
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
 
   if (!session) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <Pressable
             onPress={() => router.back()}
             hitSlop={12}
@@ -133,7 +152,7 @@ export default function SessionReviewScreen() {
             accessibilityLabel="Go back"
             accessibilityHint="Returns to the previous screen"
           >
-            <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+            <Ionicons name="arrow-back" size={backIconSize} color={Colors.textPrimary} />
           </Pressable>
         </View>
         <View style={styles.notFound}>
@@ -183,7 +202,7 @@ export default function SessionReviewScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
           onPress={() => router.back()}
           hitSlop={12}
@@ -192,7 +211,7 @@ export default function SessionReviewScreen() {
           accessibilityLabel="Go back"
           accessibilityHint="Returns to sessions"
         >
-          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+          <Ionicons name="arrow-back" size={backIconSize} color={Colors.textPrimary} />
         </Pressable>
         <Text style={styles.topBarTitle} numberOfLines={1} accessibilityRole="header">Session Review</Text>
         <View style={{ width: 44 }} />
@@ -211,7 +230,8 @@ export default function SessionReviewScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}
       >
-        <View style={styles.sessionHeader}>
+        <View style={{ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }}>
+        <View style={[styles.sessionHeader, { paddingHorizontal: horizontalInset }]}>
           <Text style={styles.sessionTitle}>{session.title}</Text>
           <View style={styles.sessionMeta}>
             <Text style={styles.metaText}>{formatDate(session.date)}</Text>
@@ -220,19 +240,20 @@ export default function SessionReviewScreen() {
           </View>
         </View>
 
-        <View style={styles.waveformSection}>
+        <View style={[styles.waveformSection, { paddingHorizontal: horizontalInset }]}>
           <WaveformTimeline
-            progress={1}
+            progress={waveformProgress}
             barCount={70}
             duration={session.duration}
             interactive
             onSeek={(seekPos) => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setWaveformProgress(seekPos);
             }}
           />
         </View>
 
-        <View style={styles.insightsRow}>
+        <View style={[styles.insightsRow, { paddingHorizontal: horizontalInset }]}>
           <InsightCard
             label="Text Accuracy"
             value={`${session.insights.textAccuracy}%`}
@@ -251,16 +272,16 @@ export default function SessionReviewScreen() {
         </View>
 
         {genreProfile && (
-          <View style={styles.genreCoachSection}>
+          <View style={[styles.genreCoachSection, { paddingHorizontal: horizontalInset }]}>
             <View style={styles.genreCoachHeader}>
               <View style={[styles.genreCoachBadge, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
-                <Ionicons name={genreProfile.icon} size={14} color={genreProfile.color} />
+                <Ionicons name={genreProfile.icon} size={scaledIcon(9)} color={genreProfile.color} />
                 <Text style={[styles.genreCoachBadgeText, { color: genreProfile.color }]}>{genreProfile.label} Coaching</Text>
               </View>
             </View>
             <View style={styles.genreCoachCard}>
               <View style={styles.genreCoachRow}>
-                <Ionicons name="mic-outline" size={16} color={genreProfile.color} />
+                <Ionicons name="mic-outline" size={scaledIcon(10)} color={genreProfile.color} />
                 <View style={styles.genreCoachInfo}>
                   <Text style={styles.genreCoachLabel}>Vocal Style</Text>
                   <Text style={styles.genreCoachValue}>{genreProfile.vocalStyle}</Text>
@@ -268,7 +289,7 @@ export default function SessionReviewScreen() {
               </View>
               <View style={styles.genreCoachDivider} />
               <View style={styles.genreCoachRow}>
-                <Ionicons name="time-outline" size={16} color={genreProfile.color} />
+                <Ionicons name="time-outline" size={scaledIcon(10)} color={genreProfile.color} />
                 <View style={styles.genreCoachInfo}>
                   <Text style={styles.genreCoachLabel}>Timing</Text>
                   <Text style={styles.genreCoachValue}>{genreProfile.timingStyle}</Text>
@@ -276,7 +297,7 @@ export default function SessionReviewScreen() {
               </View>
               <View style={styles.genreCoachDivider} />
               <View style={styles.genreCoachRow}>
-                <Ionicons name="leaf-outline" size={16} color={genreProfile.color} />
+                <Ionicons name="leaf-outline" size={scaledIcon(10)} color={genreProfile.color} />
                 <View style={styles.genreCoachInfo}>
                   <Text style={styles.genreCoachLabel}>Breathing</Text>
                   <Text style={styles.genreCoachValue}>{genreProfile.breathingTip}</Text>
@@ -301,11 +322,11 @@ export default function SessionReviewScreen() {
           </View>
         )}
 
-        <View style={styles.fixSection}>
+        <View style={[styles.fixSection, { paddingHorizontal: horizontalInset }]}>
           <View style={styles.fixSectionHeader}>
             <Text style={styles.fixSectionTitle}>Top to Fix</Text>
             <View style={styles.fixSectionHint}>
-              <Ionicons name="volume-high-outline" size={12} color={Colors.textTertiary} />
+              <Ionicons name="volume-high-outline" size={scaledIcon(8)} color={Colors.textTertiary} />
               <Text style={styles.fixSectionHintText}>Tap to hear</Text>
             </View>
           </View>
@@ -326,16 +347,26 @@ export default function SessionReviewScreen() {
         </View>
 
         {session.lyrics && (
-          <View style={styles.lyricsSection}>
+          <View style={[styles.lyricsSection, { paddingHorizontal: horizontalInset }]}>
             <Text style={styles.fixSectionTitle}>Lyrics</Text>
             <View style={styles.lyricsCard}>
               <Text style={styles.lyricsText}>{session.lyrics}</Text>
             </View>
           </View>
         )}
+        </View>
       </ScrollView>
 
-      <View style={[styles.bottomAction, { paddingBottom: Math.max(insets.bottom, webBottomInset) + 16 }]}>
+      <View
+        style={[
+          styles.bottomAction,
+          sectionWrapStyle,
+          {
+            paddingHorizontal: horizontalInset,
+            paddingBottom: Math.max(insets.bottom, webBottomInset) + 16,
+          },
+        ]}
+      >
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -352,7 +383,7 @@ export default function SessionReviewScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.practiceBtn}
           >
-            <Ionicons name="repeat" size={20} color="#fff" />
+            <Ionicons name="repeat" size={scaledIcon(12)} color="#fff" />
             <Text style={styles.practiceBtnText}>Practice Loop</Text>
           </LinearGradient>
         </Pressable>

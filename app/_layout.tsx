@@ -68,6 +68,14 @@ function RootLayoutNav() {
           animation: "slide_from_bottom",
         }}
       />
+      <Stack.Screen
+        name="easepocket"
+        options={{
+          headerShown: false,
+          presentation: "card",
+          animation: "slide_from_bottom",
+        }}
+      />
     </Stack>
   );
 }

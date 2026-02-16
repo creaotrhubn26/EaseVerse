@@ -74,7 +74,24 @@ ELEVENLABS_VOICE_ID_MALE=...
 # Optional:
 ELEVENLABS_MODEL_ID=eleven_multilingual_v2
 ELEVENLABS_TTS_CACHE_DIR=server_cache/elevenlabs_tts
+
+# For AI icon generation (one of these):
+OPENAI_API_KEY=...
+# AI_INTEGRATIONS_OPENAI_API_KEY=...
 ```
+
+## AI Icon Generation
+
+Generate the full icon pack with an image model (instead of manual drawing):
+
+```bash
+npm run icons:ai
+```
+
+This updates the icon files already used in the interface under:
+
+- `assets/images/icon-set/*.png`
+- `assets/images/*.png` (record, stop, metronome, bpm, etc.)
 
 ## PWA (Web Installable App)
 
@@ -116,6 +133,17 @@ EaseVerse now exposes a versioned integration API at ` /api/v1 `.
 - `POST /api/v1/tts`
 - `POST /api/v1/pronounce`
 - `POST /api/v1/session-score`
+- `POST /api/v1/collab/lyrics`
+- `GET /api/v1/collab/lyrics`
+- `WS /api/v1/ws` (realtime lyric updates)
+
+### Realtime Lyrics WebSocket
+
+Connect to:
+
+`wss://YOUR_DOMAIN/api/v1/ws?apiKey=YOUR_EXTERNAL_API_KEY&source=creatorhub&projectId=YOUR_PROJECT_ID`
+
+Server emits `collab_lyrics_updated` events whenever `POST /api/v1/collab/lyrics` upserts a draft.
 
 ### Example
 

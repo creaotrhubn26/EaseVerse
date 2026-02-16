@@ -131,11 +131,6 @@ export default function LiveLyricsCanvas({ lines, activeLineIndex }: LiveLyricsC
           />
         );
       })}
-      {lines.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Add lyrics to get started</Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -187,15 +182,5 @@ const styles = StyleSheet.create({
     borderRadius: 1.5,
     marginTop: 1,
     alignSelf: 'center',
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    color: Colors.textTertiary,
-    fontSize: 16,
-    fontFamily: 'Inter_500Medium',
   },
 });

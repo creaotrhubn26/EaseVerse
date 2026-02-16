@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { getGenreProfile } from '@/constants/genres';
 import type { Session } from '@/lib/types';
+import { scaledIconSize, useResponsiveLayout } from '@/lib/responsive';
 
 interface SessionCardProps {
   session: Session;
@@ -36,9 +37,13 @@ function getScoreColor(score: number): string {
 }
 
 export default function SessionCard({ session, onPress, onFavorite, onDelete }: SessionCardProps) {
+  const responsive = useResponsiveLayout();
   const genreProfile = session.genre ? getGenreProfile(session.genre) : null;
   const formattedDate = formatDate(session.date);
   const formattedDuration = formatDuration(session.duration);
+  const primaryIconSize = scaledIconSize(14, responsive);
+  const metaIconSize = scaledIconSize(10, responsive);
+  const genreIconSize = scaledIconSize(9, responsive);
 
   return (
     <Pressable
@@ -65,7 +70,7 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
           >
             <Ionicons
               name={session.favorite ? 'heart' : 'heart-outline'}
-              size={20}
+              size={primaryIconSize}
               color={session.favorite ? Colors.dangerUnderline : Colors.textTertiary}
             />
           </Pressable>
@@ -80,13 +85,13 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
             accessibilityLabel="Delete session"
             accessibilityHint="Removes this recording from your sessions"
           >
-            <Ionicons name="trash-outline" size={18} color={Colors.textTertiary} />
+            <Ionicons name="trash-outline" size={primaryIconSize} color={Colors.textTertiary} />
           </Pressable>
         </View>
         <View style={styles.meta}>
           <Text style={styles.metaText}>{formattedDate}</Text>
           <View style={styles.dot} />
-          <Feather name="clock" size={12} color={Colors.textTertiary} />
+          <Feather name="clock" size={metaIconSize} color={Colors.textTertiary} />
           <Text style={styles.metaText}>{formattedDuration}</Text>
         </View>
       </View>
@@ -94,7 +99,7 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
       <View style={styles.chips}>
         {genreProfile && (
           <View style={[styles.genreChip, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
-            <Ionicons name={genreProfile.icon} size={11} color={genreProfile.color} />
+            <Ionicons name={genreProfile.icon} size={genreIconSize} color={genreProfile.color} />
             <Text style={[styles.genreChipText, { color: genreProfile.color }]}>{genreProfile.label}</Text>
           </View>
         )}

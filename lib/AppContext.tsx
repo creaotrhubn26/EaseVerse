@@ -1,6 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback, useRef } from 'react';
 import type { Song, Session, UserSettings } from './types';
 import * as Storage from './storage';
+import { runLearningBackfill } from './learning-backfill';
+import { apiRequest, getApiUrl } from './query-client';
+import { parseSongSections } from './lyrics-sections';
+import {
+  buildLyricsRealtimeSocketUrl,
+  buildLyricsSyncRoute,
+  buildSongTitleCandidatesMap,
+  dedupeCollabItems,
+  normalizeTitle,
+  parseCollabItem,
+} from './collab-lyrics';
 
 interface AppContextValue {
   songs: Song[];
@@ -24,6 +35,10 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+type CollabRealtimeMessage = {
+  type?: string;
+};
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [songs, setSongs] = useState<Song[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -40,6 +55,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const songsRef = useRef<Song[]>([]);
+  const autoLyricsSyncInFlightRef = useRef(false);
+  const autoLyricsSyncQueuedRef = useRef(false);
+  const runAutoLyricsSyncRef = useRef<() => void>(() => undefined);
+  const apiBaseUrl = useMemo(() => getApiUrl(), []);
 
   const queuePersist = useCallback((task: () => Promise<void>) => {
     persistQueueRef.current = persistQueueRef.current
@@ -53,6 +73,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     return persistQueueRef.current;
   }, []);
+
+  useEffect(() => {
+    songsRef.current = songs;
+  }, [songs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +94,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSessions(loadedSessions);
         setSettings(loadedSettings);
         setActiveSong(loadedSongs[0] || null);
+        void runLearningBackfill({ sessions: loadedSessions }).catch((error) => {
+          console.error('Learning backfill failed:', error);
+        });
       } catch (e) {
         console.error('Failed to load data', e);
       } finally {
@@ -91,6 +118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateSong = useCallback((song: Song) => {
     setSongs(prev => prev.map(s => s.id === song.id ? song : s));
+    setActiveSong(prev => (prev && prev.id === song.id ? song : prev));
     void queuePersist(() => Storage.saveSong(song));
   }, [queuePersist]);
 
@@ -145,6 +173,228 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void queuePersist(() => Storage.saveSettings(updatedSettings as UserSettings));
     }
   }, [queuePersist]);
+
+  const syncCollaborativeLyricsInBackground = useCallback(async () => {
+    const currentSongs = songsRef.current;
+    if (currentSongs.length === 0) {
+      return;
+    }
+
+    let response: Response;
+    try {
+      response = await apiRequest('GET', buildLyricsSyncRoute());
+    } catch {
+      return;
+    }
+
+    const payload = (await response.json()) as { items?: unknown[] };
+    const remoteItems = Array.isArray(payload.items)
+      ? dedupeCollabItems(
+          payload.items
+            .map(parseCollabItem)
+            .filter((item): item is NonNullable<ReturnType<typeof parseCollabItem>> => Boolean(item))
+        )
+      : [];
+
+    if (remoteItems.length === 0) {
+      return;
+    }
+
+    const snapshots = await Storage.getLyricsSnapshots();
+    const nextSnapshots: Storage.LyricsSnapshotMap = { ...snapshots };
+    const songsById = new Map(currentSongs.map((song) => [song.id, song]));
+    const songsByTitle = buildSongTitleCandidatesMap(currentSongs);
+    const songIdBySourceTrackId = new Map<string, string>();
+    const pendingSongUpdates = new Map<string, Song>();
+
+    for (const [songId, snapshot] of Object.entries(nextSnapshots)) {
+      if (snapshot.sourceTrackId) {
+        songIdBySourceTrackId.set(snapshot.sourceTrackId, songId);
+      }
+    }
+
+    for (const item of remoteItems) {
+      const snapshotSongId = songIdBySourceTrackId.get(item.externalTrackId);
+      let matchedSong =
+        (snapshotSongId ? songsById.get(snapshotSongId) : undefined) ??
+        songsById.get(item.externalTrackId);
+
+      if (!matchedSong) {
+        const titleCandidates = songsByTitle.get(normalizeTitle(item.title)) ?? [];
+        if (titleCandidates.length === 1) {
+          matchedSong = titleCandidates[0];
+        }
+      }
+
+      if (!matchedSong) {
+        continue;
+      }
+
+      const incomingLyrics = item.lyrics.replace(/\r\n/g, '\n');
+      const incomingBpm =
+        typeof item.bpm === 'number' && Number.isFinite(item.bpm)
+          ? Math.max(30, Math.min(300, Math.round(item.bpm)))
+          : undefined;
+
+      const shouldUpdateLyrics = matchedSong.lyrics !== incomingLyrics;
+      const shouldUpdateTempo =
+        typeof incomingBpm === 'number' && incomingBpm !== matchedSong.bpm;
+
+      if (shouldUpdateLyrics || shouldUpdateTempo) {
+        pendingSongUpdates.set(matchedSong.id, {
+          ...matchedSong,
+          ...(shouldUpdateLyrics
+            ? {
+                lyrics: incomingLyrics,
+                sections: parseSongSections(incomingLyrics),
+              }
+            : {}),
+          ...(shouldUpdateTempo ? { bpm: incomingBpm } : {}),
+          updatedAt: Date.now(),
+        });
+      }
+
+      nextSnapshots[matchedSong.id] = {
+        lyrics: incomingLyrics,
+        bpm:
+          typeof incomingBpm === 'number'
+            ? incomingBpm
+            : nextSnapshots[matchedSong.id]?.bpm ?? matchedSong.bpm,
+        syncedAt: Date.now(),
+        remoteUpdatedAt: item.updatedAt,
+        sourceTrackId: item.externalTrackId,
+      };
+      songIdBySourceTrackId.set(item.externalTrackId, matchedSong.id);
+    }
+
+    if (pendingSongUpdates.size > 0) {
+      for (const updatedSong of pendingSongUpdates.values()) {
+        updateSong(updatedSong);
+      }
+    }
+
+    await Storage.saveLyricsSnapshots(nextSnapshots);
+  }, [updateSong]);
+
+  const runAutoLyricsSync = useCallback(() => {
+    if (autoLyricsSyncInFlightRef.current) {
+      autoLyricsSyncQueuedRef.current = true;
+      return;
+    }
+
+    autoLyricsSyncInFlightRef.current = true;
+    void (async () => {
+      try {
+        await syncCollaborativeLyricsInBackground();
+      } catch (error) {
+        console.error('Background lyrics sync failed:', error);
+      } finally {
+        autoLyricsSyncInFlightRef.current = false;
+        if (autoLyricsSyncQueuedRef.current) {
+          autoLyricsSyncQueuedRef.current = false;
+          setTimeout(() => {
+            runAutoLyricsSyncRef.current();
+          }, 0);
+        }
+      }
+    })();
+  }, [syncCollaborativeLyricsInBackground]);
+
+  useEffect(() => {
+    runAutoLyricsSyncRef.current = runAutoLyricsSync;
+  }, [runAutoLyricsSync]);
+
+  useEffect(() => {
+    if (isLoading || typeof WebSocket === 'undefined') {
+      return;
+    }
+
+    runAutoLyricsSync();
+
+    const wsUrl = buildLyricsRealtimeSocketUrl(apiBaseUrl);
+    if (!wsUrl) {
+      return;
+    }
+
+    let cancelled = false;
+    let reconnectAttempts = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let socket: WebSocket | null = null;
+
+    const scheduleReconnect = () => {
+      if (cancelled || reconnectTimer) {
+        return;
+      }
+      const delay = Math.min(30_000, Math.max(1_000, 1_000 * 2 ** reconnectAttempts));
+      reconnectAttempts += 1;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (cancelled) {
+        return;
+      }
+
+      try {
+        socket = new WebSocket(wsUrl);
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+
+      socket.onopen = () => {
+        reconnectAttempts = 0;
+        runAutoLyricsSyncRef.current();
+      };
+
+      socket.onmessage = (event) => {
+        if (typeof event.data !== 'string') {
+          return;
+        }
+
+        let parsed: CollabRealtimeMessage | null = null;
+        try {
+          parsed = JSON.parse(event.data) as CollabRealtimeMessage;
+        } catch {
+          return;
+        }
+
+        if (parsed?.type === 'collab_lyrics_updated') {
+          runAutoLyricsSyncRef.current();
+        }
+      };
+
+      socket.onclose = () => {
+        if (cancelled) {
+          return;
+        }
+        scheduleReconnect();
+      };
+
+      socket.onerror = () => {
+        // Reconnect is handled by onclose.
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (
+        socket &&
+        (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+      ) {
+        socket.close();
+      }
+    };
+  }, [apiBaseUrl, isLoading, runAutoLyricsSync]);
 
   const value = useMemo(() => ({
     songs,

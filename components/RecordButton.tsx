@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View, type ImageSourcePropType } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -19,9 +19,16 @@ interface RecordButtonProps {
   isPaused: boolean;
   onPress: () => void;
   size?: number;
+  iconSource?: ImageSourcePropType;
 }
 
-export default function RecordButton({ isRecording, isPaused, onPress, size = 80 }: RecordButtonProps) {
+export default function RecordButton({
+  isRecording,
+  isPaused,
+  onPress,
+  size = 80,
+  iconSource = require('@/assets/images/record_icon.png'),
+}: RecordButtonProps) {
   const pulseAnim = useSharedValue(0);
   const pressScale = useSharedValue(1);
   const accessibilityLabel = !isRecording
@@ -51,7 +58,7 @@ export default function RecordButton({ isRecording, isPaused, onPress, size = 80
   }, [isRecording, isPaused, pulseAnim]);
 
   const pulseStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(pulseAnim.value, [0, 1], [0.2, 0.6]),
+    opacity: interpolate(pulseAnim.value, [0, 1], [0, 0.6]),
     transform: [{ scale: interpolate(pulseAnim.value, [0, 1], [1, 1.25]) }],
   }));
 
@@ -80,27 +87,37 @@ export default function RecordButton({ isRecording, isPaused, onPress, size = 80
       <Animated.View style={buttonScale}>
         <Pressable
           onPress={handlePress}
-          style={styles.pressable}
+          style={[styles.pressable, !isRecording && styles.pressableIdle]}
           testID="record-button"
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
           accessibilityHint={accessibilityHint}
           accessibilityState={{ busy: isRecording && !isPaused }}
         >
-          <LinearGradient
-            colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.button, { width: size, height: size, borderRadius: size / 2 }]}
-          >
-            {isRecording && !isPaused ? (
-              <Ionicons name="pause" size={size * 0.4} color="#fff" />
-            ) : isPaused ? (
-              <Ionicons name="play" size={size * 0.4} color="#fff" style={{ marginLeft: 4 }} />
-            ) : (
-              <View style={[styles.innerCircle, { width: size * 0.35, height: size * 0.35, borderRadius: size * 0.175 }]} />
-            )}
-          </LinearGradient>
+          {!isRecording ? (
+            <Image
+              source={iconSource}
+              style={[
+                styles.recordButtonImage,
+                { width: size, height: size, borderRadius: Math.round(size * 0.26) },
+              ]}
+              resizeMode="contain"
+              accessible={false}
+            />
+          ) : (
+            <LinearGradient
+              colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.button, { width: size, height: size, borderRadius: size / 2 }]}
+            >
+              {isPaused ? (
+                <Ionicons name="play" size={size * 0.4} color="#fff" style={{ marginLeft: 4 }} />
+              ) : (
+                <Ionicons name="pause" size={size * 0.4} color="#fff" />
+              )}
+            </LinearGradient>
+          )}
         </Pressable>
       </Animated.View>
     </View>
@@ -120,11 +137,18 @@ const styles = StyleSheet.create({
     boxShadow: `0px 4px 16px ${Colors.accentGlow}`,
     elevation: 8,
   },
+  pressableIdle: {
+    boxShadow: 'none',
+    elevation: 0,
+  },
   button: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  innerCircle: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
+  recordButtonImage: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
 });

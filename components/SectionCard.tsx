@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import type { SongSection } from '@/lib/types';
+import { scaledIconSize, useResponsiveLayout } from '@/lib/responsive';
 
 interface SectionCardProps {
   section: SongSection;
@@ -15,14 +16,18 @@ interface SectionCardProps {
 
 const sectionColors: Record<string, string> = {
   verse: Colors.gradientStart,
+  'pre-chorus': Colors.gradientMid,
   chorus: Colors.successUnderline,
   bridge: Colors.warningUnderline,
+  'final-chorus': Colors.gradientEnd,
   intro: Colors.textSecondary,
   outro: Colors.textSecondary,
 };
 
 export default function SectionCard({ section, index, onMoveUp, onMoveDown, isFirst, isLast }: SectionCardProps) {
+  const responsive = useResponsiveLayout();
   const color = sectionColors[section.type] || Colors.textSecondary;
+  const arrowIconSize = scaledIconSize(14, responsive);
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -42,7 +47,11 @@ export default function SectionCard({ section, index, onMoveUp, onMoveDown, isFi
             accessibilityHint="Reorders this section earlier in the song"
             accessibilityState={{ disabled: isFirst }}
           >
-            <Ionicons name="chevron-up" size={18} color={isFirst ? Colors.textTertiary : Colors.textSecondary} />
+            <Ionicons
+              name="chevron-up"
+              size={arrowIconSize}
+              color={isFirst ? Colors.textTertiary : Colors.textSecondary}
+            />
           </Pressable>
           <Pressable
             onPress={onMoveDown}
@@ -54,7 +63,11 @@ export default function SectionCard({ section, index, onMoveUp, onMoveDown, isFi
             accessibilityHint="Reorders this section later in the song"
             accessibilityState={{ disabled: isLast }}
           >
-            <Ionicons name="chevron-down" size={18} color={isLast ? Colors.textTertiary : Colors.textSecondary} />
+            <Ionicons
+              name="chevron-down"
+              size={arrowIconSize}
+              color={isLast ? Colors.textTertiary : Colors.textSecondary}
+            />
           </Pressable>
         </View>
       </View>
@@ -99,7 +112,6 @@ const styles = StyleSheet.create({
   typeLabel: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    textTransform: 'capitalize',
   },
   arrows: {
     flexDirection: 'row',

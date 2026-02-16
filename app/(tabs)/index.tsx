@@ -1,11 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, Pressable, Platform, Image } from 'react-native';
+import { StyleSheet, Text, View, Pressable, Platform, Image, type ImageSourcePropType } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { AudioModule, useAudioPlayer } from 'expo-audio';
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import Colors from '@/constants/colors';
 import { getGenreProfile, getGenreCoachHints, getWordTipForGenre, getGenreFixReasons } from '@/constants/genres';
 import RecordButton from '@/components/RecordButton';
@@ -21,11 +30,97 @@ import { generateId } from '@/lib/storage';
 import { resolveSpeechRecognitionLang, resolveSttLanguageCode } from '@/lib/language';
 import { useRecording } from '@/lib/useRecording';
 import { analyzeSessionRecording } from '@/lib/session-scoring-client';
+import { ingestSessionLearningEvent } from '@/lib/learning-client';
 import { buildSessionScoring } from '@shared/session-scoring';
 import type { LyricLine, SignalQuality, Session } from '@/lib/types';
+import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
+
+function AnimatedTransportIcon({
+  source,
+  size,
+  active,
+  dimmed,
+}: {
+  source: ImageSourcePropType;
+  size: number;
+  active: boolean;
+  dimmed?: boolean;
+}) {
+  const pulse = useSharedValue(0);
+  const activeProgress = useSharedValue(active ? 1 : 0);
+
+  useEffect(() => {
+    activeProgress.value = withTiming(active ? 1 : 0, {
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+    });
+    if (active) {
+      pulse.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 980, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 980, easing: Easing.inOut(Easing.quad) })
+        ),
+        -1,
+        false
+      );
+    } else {
+      pulse.value = withTiming(0, { duration: 180 });
+    }
+  }, [active, activeProgress, pulse]);
+
+  const wrapStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(pulse.value, [0, 1], [0, -2]) },
+      { scale: interpolate(activeProgress.value, [0, 1], [1, 1.05]) },
+    ],
+    opacity: dimmed ? 0.5 : 1,
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity:
+      interpolate(activeProgress.value, [0, 1], [0, 0.66]) *
+      interpolate(pulse.value, [0, 1], [0.55, 1]),
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [0.9, 1.08]) }],
+  }));
+
+  const iconSize = Math.max(20, Math.round(size * 0.86));
+  const iconRadius = Math.round(iconSize * 0.24);
+  const glowSize = Math.max(16, Math.round(size * 0.72));
+  const glowRadius = Math.round(glowSize * 0.38);
+
+  return (
+    <Animated.View style={[styles.transportIconShell, { width: size, height: size }, wrapStyle]}>
+      <Animated.View
+        style={[
+          styles.transportIconGlow,
+          {
+            width: glowSize,
+            height: glowSize,
+            borderRadius: glowRadius,
+          },
+          glowStyle,
+        ]}
+      />
+      <Image
+        source={source}
+        style={[
+          styles.transportIconImage,
+          {
+            width: iconSize,
+            height: iconSize,
+            borderRadius: iconRadius,
+          },
+        ]}
+        resizeMode="contain"
+        accessible={false}
+      />
+    </Animated.View>
+  );
+}
 
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
   const { activeSong, songs, setActiveSong, addSession, settings, updateSettings } = useApp();
   const recording = useRecording();
   const metronomePlayer = useAudioPlayer(require('@/assets/sounds/metronome-click.wav'));
@@ -406,6 +501,7 @@ export default function SingScreen() {
         setIsAnalyzing(true);
         const recordingUri = result.uri;
         let resolvedInsights: Session['insights'] | null = null;
+        let resolvedTranscript = liveTranscript.trim();
 
         if (recordingUri) {
           const scored = await analyzeSessionRecording({
@@ -425,6 +521,7 @@ export default function SingScreen() {
               timingConsistency: scored.insights.timingConsistency,
               topToFix: scored.insights.topToFix?.slice(0, 5) || [],
             };
+            resolvedTranscript = scored.transcript?.trim() || resolvedTranscript;
           }
         }
 
@@ -440,6 +537,7 @@ export default function SingScreen() {
             timingConsistency: localScore.insights.timingConsistency,
             topToFix: localScore.insights.topToFix.slice(0, 5),
           };
+          resolvedTranscript = localScore.transcript.trim();
         }
 
         if (!resolvedInsights) {
@@ -466,8 +564,10 @@ export default function SingScreen() {
           favorite: false,
           insights: resolvedInsights,
           lyrics: lyricsText,
+          transcript: resolvedTranscript || undefined,
         };
         addSession(session);
+        void ingestSessionLearningEvent({ session });
         router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
       } finally {
         setIsAnalyzing(false);
@@ -476,7 +576,17 @@ export default function SingScreen() {
 
     setLiveTranscript('');
     setCountInRemaining(null);
-  }, [activeSong, addSession, genre, genreProfile.label, liveTranscript, lyricsText, recording]);
+  }, [
+    activeSong,
+    addSession,
+    genre,
+    genreProfile.label,
+    liveTranscript,
+    lyricsText,
+    recording,
+    settings.accentGoal,
+    settings.language,
+  ]);
 
   const handleRecordPress = async () => {
     if (isAnalyzing) {
@@ -531,31 +641,52 @@ export default function SingScreen() {
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+  const horizontalInset = responsive.contentPadding;
+  const contentMaxWidth = responsive.contentMaxWidth;
+  const sectionWrapStyle = useMemo(
+    () => ({ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }),
+    [contentMaxWidth]
+  );
+  const quickActionSize = tierValue(responsive.tier, [56, 60, 64, 72, 86, 104, 124]);
+  const warmupIconSize = tierValue(responsive.tier, [24, 26, 28, 32, 38, 46, 56]);
+  const transportImageSize = tierValue(responsive.tier, [34, 38, 42, 50, 62, 76, 92]);
+  const transportButtonSize = tierValue(responsive.tier, [50, 54, 58, 66, 78, 94, 112]);
+  const noSongLogoSize = tierValue(responsive.tier, [110, 124, 146, 170, 210, 252, 300]);
+  const noSongStateIconSize = tierValue(responsive.tier, [120, 140, 164, 196, 240, 290, 340]);
+  const recordButtonSize = tierValue(responsive.tier, [88, 96, 104, 116, 136, 164, 196]);
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <LogoHeader />
-      <View style={styles.topBar}>
-        <Pressable
-          style={styles.songSelector}
-          onPress={() => {
-            Haptics.selectionAsync();
-            setShowSongPicker(true);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Choose song"
-          accessibilityHint="Opens the song picker"
-        >
-          <Text style={styles.songTitle} numberOfLines={1} accessibilityRole="header">
-            {activeSong?.title || 'No Song'}
-          </Text>
-          <Ionicons name="chevron-down" size={16} color={Colors.textTertiary} />
-        </Pressable>
+      <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
+        <View style={styles.songSelectorSlot}>
+          {activeSong ? (
+            <Pressable
+              style={styles.songSelector}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowSongPicker(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Choose song"
+              accessibilityHint="Opens the song picker"
+            >
+              <Text style={styles.songTitle} numberOfLines={1} accessibilityRole="header">
+                {activeSong.title}
+              </Text>
+              <Ionicons name="chevron-down" size={scaledIcon(12)} color={Colors.textTertiary} />
+            </Pressable>
+          ) : null}
+        </View>
 
         <View style={styles.topRight}>
           {activeSong && (
             <View style={[styles.genreBadge, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
-              <Ionicons name={genreProfile.icon} size={12} color={genreProfile.color} />
+              <Ionicons name={genreProfile.icon} size={scaledIcon(9)} color={genreProfile.color} />
               <Text style={[styles.genreBadgeText, { color: genreProfile.color }]}>{genreProfile.label}</Text>
             </View>
           )}
@@ -564,9 +695,15 @@ export default function SingScreen() {
       </View>
 
       {activeSong && !isRecording && (
-        <View style={styles.preRecordRow}>
+        <View
+          style={[
+            styles.preRecordRow,
+            sectionWrapStyle,
+            { marginHorizontal: horizontalInset },
+          ]}
+        >
           <View style={styles.genreTipBar}>
-            <Ionicons name="bulb-outline" size={14} color={genreProfile.color} />
+            <Ionicons name="bulb-outline" size={scaledIcon(10)} color={genreProfile.color} />
             <Text style={styles.genreTipText} numberOfLines={1}>
               {genreProfile.vocalStyle}
             </Text>
@@ -583,13 +720,20 @@ export default function SingScreen() {
           >
             <Image
               source={require('@/assets/images/warmup-icon.png')}
-              style={styles.warmUpIcon}
+              style={[styles.warmUpIcon, { width: warmupIconSize, height: warmupIconSize }]}
               accessible={false}
             />
             <Text style={styles.warmUpBtnText}>Warm Up</Text>
           </Pressable>
           <Pressable
-            style={styles.mindfulBtn}
+            style={[
+              styles.mindfulBtn,
+              {
+                width: quickActionSize,
+                height: quickActionSize,
+                borderRadius: Math.round(quickActionSize * 0.24),
+              },
+            ]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               router.push('/mindfulness');
@@ -600,22 +744,74 @@ export default function SingScreen() {
           >
             <Image
               source={require('@/assets/images/mindfulness-icon.png')}
-              style={styles.mindfulIcon}
+              style={[
+                styles.mindfulIcon,
+                {
+                  width: quickActionSize,
+                  height: quickActionSize,
+                  borderRadius: Math.round(quickActionSize * 0.24),
+                },
+              ]}
+              accessible={false}
+            />
+          </Pressable>
+          <Pressable
+            style={[
+              styles.easePocketBtn,
+              {
+                width: quickActionSize,
+                height: quickActionSize,
+                borderRadius: Math.round(quickActionSize * 0.24),
+              },
+            ]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.push('/easepocket');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open EasePocket timing trainer"
+            accessibilityHint="Opens the timing trainer modes"
+          >
+            <Image
+              source={require('@/assets/images/EasePocket.png')}
+              style={[
+                styles.easePocketIcon,
+                {
+                  width: quickActionSize,
+                  height: quickActionSize,
+                  borderRadius: Math.round(quickActionSize * 0.24),
+                },
+              ]}
               accessible={false}
             />
           </Pressable>
         </View>
       )}
 
-      <View style={[styles.lyricsArea, { pointerEvents: 'box-none' as const }]}>
+      <View
+        style={[
+          styles.lyricsArea,
+          sectionWrapStyle,
+          { paddingHorizontal: Math.max(12, horizontalInset - 2), pointerEvents: 'box-none' as const },
+        ]}
+      >
         <LiveLyricsCanvas lines={lines} activeLineIndex={activeLineIndex} />
       </View>
 
-      <View style={styles.coachArea}>
+      <View style={[styles.coachArea, sectionWrapStyle, { paddingHorizontal: Math.max(12, horizontalInset - 2) }]}>
         <CoachPill hint={coachHint} visible={!!coachHint} />
       </View>
 
-      <View style={[styles.controls, { paddingBottom: Math.max(insets.bottom, webBottomInset) + 90 }]}>
+      <View
+        style={[
+          styles.controls,
+          sectionWrapStyle,
+          {
+            paddingHorizontal: horizontalInset,
+            paddingBottom: Math.max(insets.bottom, webBottomInset) + 90,
+          },
+        ]}
+      >
         <VUMeter isActive={isRecording && !isPaused} audioLevel={recording.audioLevel} />
 
         <View style={styles.statusRow}>
@@ -634,7 +830,15 @@ export default function SingScreen() {
 
         <View style={styles.transportRow}>
           <Pressable
-            style={styles.transportBtn}
+            style={({ pressed }) => [
+              styles.transportBtn,
+              {
+                width: transportButtonSize,
+                height: transportButtonSize,
+                borderRadius: Math.round(transportButtonSize * 0.32),
+              },
+              pressed && styles.transportBtnPressed,
+            ]}
             onPress={handleMarker}
             disabled={!isRecording}
             accessibilityRole="button"
@@ -642,10 +846,11 @@ export default function SingScreen() {
             accessibilityHint="Adds a marker at the current recording time"
             accessibilityState={{ disabled: !isRecording }}
           >
-            <Ionicons
-              name="flag"
-              size={24}
-              color={isRecording ? Colors.textSecondary : Colors.textTertiary}
+            <AnimatedTransportIcon
+              source={require('@/assets/images/flag_icon.png')}
+              size={transportImageSize}
+              active={isRecording}
+              dimmed={!isRecording}
             />
           </Pressable>
 
@@ -653,12 +858,21 @@ export default function SingScreen() {
             isRecording={isRecording}
             isPaused={isPaused}
             onPress={handleRecordPress}
-            size={80}
+            size={recordButtonSize}
+            iconSource={require('@/assets/images/record_icon.png')}
           />
 
           {isRecording ? (
             <Pressable
-              style={styles.transportBtn}
+              style={({ pressed }) => [
+                styles.transportBtn,
+                {
+                  width: transportButtonSize,
+                  height: transportButtonSize,
+                  borderRadius: Math.round(transportButtonSize * 0.32),
+                },
+                pressed && styles.transportBtnPressed,
+              ]}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 handleStop();
@@ -668,11 +882,23 @@ export default function SingScreen() {
               accessibilityLabel="Stop recording"
               accessibilityHint="Stops recording and opens session review"
             >
-              <Ionicons name="stop-circle" size={28} color={Colors.dangerUnderline} />
+              <AnimatedTransportIcon
+                source={require('@/assets/images/Stop_icon.png')}
+                size={transportImageSize}
+                active
+              />
             </Pressable>
           ) : (
             <Pressable
-              style={styles.transportBtn}
+              style={({ pressed }) => [
+                styles.transportBtn,
+                {
+                  width: transportButtonSize,
+                  height: transportButtonSize,
+                  borderRadius: Math.round(transportButtonSize * 0.32),
+                },
+                pressed && styles.transportBtnPressed,
+              ]}
               onPress={() => {
                 if (!bpmValue) {
                   Haptics.selectionAsync();
@@ -698,10 +924,11 @@ export default function SingScreen() {
               }
               accessibilityState={{ selected: settings.metronomeEnabled }}
             >
-              <MaterialCommunityIcons
-                name="metronome"
-                size={24}
-                color={settings.metronomeEnabled ? Colors.gradientStart : Colors.textTertiary}
+              <AnimatedTransportIcon
+                source={require('@/assets/images/metronome_icon.png')}
+                size={transportImageSize}
+                active={settings.metronomeEnabled}
+                dimmed={!settings.metronomeEnabled}
               />
             </Pressable>
           )}
@@ -710,11 +937,52 @@ export default function SingScreen() {
 
       {!activeSong && (
         <View style={styles.emptyOverlay}>
-          <View style={styles.emptyCard}>
-            <Ionicons name="musical-notes" size={48} color={Colors.textTertiary} />
+          <View
+            style={[
+              styles.emptyCard,
+              { width: '100%' as const, maxWidth: responsive.cardMaxWidth },
+            ]}
+          >
+            <Image
+              source={require('@/assets/images/easeverse_logo_App.png')}
+              style={[
+                styles.emptyStateTopLogo,
+                {
+                  width: noSongLogoSize,
+                  height: noSongLogoSize,
+                },
+              ]}
+              resizeMode="contain"
+              accessibilityRole="image"
+              accessibilityLabel="EaseVerse logo"
+            />
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowSongPicker(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Choose existing song"
+              accessibilityHint="Opens the song picker so you can load a song"
+              style={({ pressed }) => [styles.emptyStateIconPressable, pressed && styles.emptyStateIconPressablePressed]}
+            >
+              <Image
+                source={require('@/assets/images/nosong_state.png')}
+                style={[
+                  styles.emptyStateIcon,
+                  {
+                    width: noSongStateIconSize,
+                    height: noSongStateIconSize,
+                  },
+                ]}
+                resizeMode="contain"
+                accessibilityRole="image"
+                accessibilityLabel="No song loaded"
+              />
+            </Pressable>
             <Text style={styles.emptyTitle}>No lyrics loaded</Text>
             <Text style={styles.emptySubtitle}>
-              Before you start, do you want to warm up or do a quick mindfulness reset?
+              Choose an existing song or add new lyrics before you start.
             </Text>
             <View style={styles.emptyQuickRow}>
               <Pressable
@@ -752,6 +1020,19 @@ export default function SingScreen() {
                 <Text style={styles.emptyQuickText}>Mindfulness</Text>
               </Pressable>
             </View>
+            <Pressable
+              style={({ pressed }) => [styles.emptySecondaryBtn, pressed && styles.emptySecondaryBtnPressed]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowSongPicker(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Choose existing song"
+              accessibilityHint="Opens the song picker"
+            >
+              <Ionicons name="musical-notes-outline" size={scaledIcon(11)} color={Colors.textPrimary} />
+              <Text style={styles.emptySecondaryBtnText}>Choose Existing Song</Text>
+            </Pressable>
             <Pressable
               style={styles.emptyBtn}
               onPress={() => router.push('/(tabs)/lyrics')}
@@ -800,9 +1081,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    minHeight: 44,
+  },
+  songSelectorSlot: {
     flex: 1,
     marginRight: 12,
-    minHeight: 44,
+    justifyContent: 'center',
   },
   songTitle: {
     color: Colors.textPrimary,
@@ -880,6 +1164,23 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 10,
   },
+  easePocketBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surfaceGlass,
+  },
+  easePocketIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    resizeMode: 'cover',
+  },
   genreTipText: {
     color: Colors.textSecondary,
     fontSize: 12,
@@ -930,10 +1231,31 @@ const styles = StyleSheet.create({
     gap: 40,
   },
   transportBtn: {
-    width: 48,
-    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+  },
+  transportBtnPressed: {
+    transform: [{ scale: 0.96 }],
+    opacity: 0.92,
+  },
+  transportIconShell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transportIconGlow: {
+    position: 'absolute',
+    backgroundColor: Colors.accentGlow,
+  },
+  transportIconImage: {
+    maxWidth: '100%' as const,
+    maxHeight: '100%' as const,
   },
   emptyOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -945,6 +1267,20 @@ const styles = StyleSheet.create({
   emptyCard: {
     alignItems: 'center',
     gap: 16,
+  },
+  emptyStateTopLogo: {
+    marginBottom: -6,
+  },
+  emptyStateIcon: {
+    marginBottom: -4,
+  },
+  emptyStateIconPressable: {
+    borderRadius: 20,
+    padding: 6,
+  },
+  emptyStateIconPressablePressed: {
+    opacity: 0.86,
+    transform: [{ scale: 0.99 }],
   },
   emptyTitle: {
     color: Colors.textSecondary,
@@ -990,6 +1326,30 @@ const styles = StyleSheet.create({
   },
   emptyQuickText: {
     color: Colors.textSecondary,
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  emptySecondaryBtn: {
+    width: '100%',
+    maxWidth: 420,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surfaceGlass,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginTop: -4,
+  },
+  emptySecondaryBtnPressed: {
+    opacity: 0.9,
+  },
+  emptySecondaryBtnText: {
+    color: Colors.textPrimary,
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
   },

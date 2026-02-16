@@ -27,6 +27,7 @@ import { useApp } from '@/lib/AppContext';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { getApiHeaders, getApiUrl } from '@/lib/query-client';
+import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
 const speedOptions = [0.8, 1.0, 1.1] as const;
 const loopLengthOptions = [5, 10, 20] as const;
@@ -48,6 +49,7 @@ function blobToDataUri(blob: Blob): Promise<string> {
 
 export default function PracticeLoopScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { sessions, settings } = useApp();
 
@@ -76,6 +78,17 @@ export default function PracticeLoopScreen() {
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+  const horizontalInset = responsive.contentPadding;
+  const contentMaxWidth = responsive.contentMaxWidth;
+  const sectionWrapStyle = useMemo(
+    () => ({ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }),
+    [contentMaxWidth]
+  );
+  const backIconSize = tierValue(responsive.tier, [30, 34, 38, 44, 52, 62, 74]);
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
 
   const lyricsLines = useMemo(() => {
     if (!session?.lyrics) return [];
@@ -139,7 +152,7 @@ export default function PracticeLoopScreen() {
     } finally {
       setIsLoopAudioLoading(false);
     }
-  }, [loopAudioLine, loopAudioUri, lyricsLines, selectedLineIdx]);
+  }, [loopAudioLine, loopAudioUri, lyricsLines, selectedLineIdx, settings.narrationVoice]);
 
   useEffect(() => {
     if (!isLooping) {
@@ -275,7 +288,7 @@ export default function PracticeLoopScreen() {
   if (!session) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <Pressable
             onPress={() => router.back()}
             hitSlop={12}
@@ -284,7 +297,7 @@ export default function PracticeLoopScreen() {
             accessibilityLabel="Go back"
             accessibilityHint="Returns to the previous screen"
           >
-            <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+            <Ionicons name="arrow-back" size={backIconSize} color={Colors.textPrimary} />
           </Pressable>
         </View>
         <View style={styles.notFound}>
@@ -296,7 +309,7 @@ export default function PracticeLoopScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
           onPress={() => router.back()}
           hitSlop={12}
@@ -305,13 +318,13 @@ export default function PracticeLoopScreen() {
           accessibilityLabel="Go back"
           accessibilityHint="Returns to session review"
         >
-          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+          <Ionicons name="arrow-back" size={backIconSize} color={Colors.textPrimary} />
         </Pressable>
         <Text style={styles.topBarTitle} accessibilityRole="header">Practice Loop</Text>
         <View style={{ width: 44 }} />
       </View>
 
-      <View style={styles.body}>
+      <View style={[styles.body, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <View style={styles.phraseSelector}>
           <Text style={styles.selectorLabel}>Select Phrase</Text>
           <View style={styles.phraseList}>
@@ -366,7 +379,7 @@ export default function PracticeLoopScreen() {
             {coach.state === 'loading' ? (
               <ActivityIndicator size="small" color={Colors.gradientStart} />
             ) : (
-              <Ionicons name="volume-high-outline" size={18} color={Colors.gradientStart} />
+              <Ionicons name="volume-high-outline" size={scaledIcon(11)} color={Colors.gradientStart} />
             )}
             <Text style={styles.pronounceBtnText}>
               {coach.state === 'playing' ? 'Speaking...' : 'Hear pronunciation'}
@@ -426,7 +439,7 @@ export default function PracticeLoopScreen() {
 
           <View style={styles.controlGroup}>
             <View style={styles.controlLabelRow}>
-              <Feather name="activity" size={14} color={Colors.textTertiary} />
+              <Feather name="activity" size={scaledIcon(9)} color={Colors.textTertiary} />
               <Text style={styles.controlLabel}>Speed</Text>
             </View>
             <View style={styles.optionsRow}>
@@ -452,7 +465,16 @@ export default function PracticeLoopScreen() {
         </View>
       </View>
 
-      <View style={[styles.bottomAction, { paddingBottom: Math.max(insets.bottom, webBottomInset) + 16 }]}>
+      <View
+        style={[
+          styles.bottomAction,
+          sectionWrapStyle,
+          {
+            paddingHorizontal: horizontalInset,
+            paddingBottom: Math.max(insets.bottom, webBottomInset) + 16,
+          },
+        ]}
+      >
         <Pressable
           onPress={async () => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -506,7 +528,7 @@ export default function PracticeLoopScreen() {
               {isLoopAudioLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Ionicons name={isLooping ? 'stop' : 'repeat'} size={20} color="#fff" />
+                <Ionicons name={isLooping ? 'stop' : 'repeat'} size={scaledIcon(12)} color="#fff" />
               )}
               <Text style={styles.loopBtnText}>
                 {isLoopAudioLoading ? 'Preparing Audio...' : isLooping ? 'Stop Loop' : 'Start Loop'}

@@ -23,16 +23,19 @@ import LogoHeader from '@/components/LogoHeader';
 import HowToUseEaseVerse from '@/components/HowToUseEaseVerse';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { parseSongSections } from '@/lib/lyrics-sections';
+import { fetchLearningRecommendations } from '@/lib/learning-client';
+import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
+import {
+  buildLyricsSyncRoute,
+  buildSongTitleCandidatesMap,
+  dedupeCollabItems,
+  normalizeTitle,
+  parseCollabItem,
+  parseIsoTimestampMs,
+  type CollabLyricsItem,
+} from '@/lib/collab-lyrics';
 import * as Storage from '@/lib/storage';
 import type { FeedbackIntensity, LiveMode, LyricsFollowSpeed, NarrationVoice, Song } from '@/lib/types';
-
-type CollabLyricsItem = {
-  externalTrackId: string;
-  title: string;
-  lyrics: string;
-  updatedAt?: string;
-  bpm?: number;
-};
 
 type DiffLine = {
   type: 'added' | 'removed' | 'context';
@@ -56,101 +59,18 @@ type AmbiguousLyricsMatch = {
   candidateCount: number;
 };
 
+type LearningRecommendationsView = {
+  focusWords: string[];
+  globalChallengeWords: string[];
+  practicePlan: {
+    type: 'lyrics' | 'timing';
+    title: string;
+    reason: string;
+    targetMode?: string;
+  }[];
+};
+
 const DIFF_PREVIEW_LIMIT = 18;
-
-function normalizeTitle(value: string): string {
-  return value.trim().toLocaleLowerCase();
-}
-
-function parseIsoTimestampMs(value?: string): number {
-  if (!value) {
-    return 0;
-  }
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function buildLyricsSyncRoute(): string {
-  const params = new URLSearchParams();
-  const source = process.env.EXPO_PUBLIC_LYRICS_SYNC_SOURCE?.trim();
-  const projectId = process.env.EXPO_PUBLIC_LYRICS_SYNC_PROJECT_ID?.trim();
-
-  if (source) {
-    params.set('source', source);
-  }
-  if (projectId) {
-    params.set('projectId', projectId);
-  }
-
-  const query = params.toString();
-  return query ? `/api/v1/collab/lyrics?${query}` : '/api/v1/collab/lyrics';
-}
-
-function parseCollabItem(input: unknown): CollabLyricsItem | null {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return null;
-  }
-
-  const raw = input as Record<string, unknown>;
-  if (
-    typeof raw.externalTrackId !== 'string' ||
-    typeof raw.title !== 'string' ||
-    typeof raw.lyrics !== 'string'
-  ) {
-    return null;
-  }
-
-  const rawBpm = raw.bpm;
-  const parsedBpm =
-    typeof rawBpm === 'number' && Number.isFinite(rawBpm)
-      ? Math.round(rawBpm)
-      : typeof rawBpm === 'string' && rawBpm.trim()
-        ? Number.parseInt(rawBpm.trim(), 10)
-        : undefined;
-  const bpm =
-    typeof parsedBpm === 'number' && Number.isFinite(parsedBpm)
-      ? Math.max(30, Math.min(300, parsedBpm))
-      : undefined;
-
-  return {
-    externalTrackId: raw.externalTrackId,
-    title: raw.title,
-    lyrics: raw.lyrics,
-    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
-    bpm,
-  };
-}
-
-function dedupeCollabItems(items: CollabLyricsItem[]): CollabLyricsItem[] {
-  const byTrackId = new Map<string, CollabLyricsItem>();
-  for (const item of items) {
-    const current = byTrackId.get(item.externalTrackId);
-    if (!current) {
-      byTrackId.set(item.externalTrackId, item);
-      continue;
-    }
-    const currentTime = parseIsoTimestampMs(current.updatedAt);
-    const incomingTime = parseIsoTimestampMs(item.updatedAt);
-    if (incomingTime >= currentTime) {
-      byTrackId.set(item.externalTrackId, item);
-    }
-  }
-  return Array.from(byTrackId.values());
-}
-
-function buildSongTitleCandidatesMap(songs: Song[]): Map<string, Song[]> {
-  const candidates = new Map<string, Song[]>();
-  for (const song of songs) {
-    const key = normalizeTitle(song.title);
-    if (!key) {
-      continue;
-    }
-    const existing = candidates.get(key) ?? [];
-    existing.push(song);
-    candidates.set(key, existing);
-  }
-  return candidates;
-}
 
 function buildLineDiff(
   previousLyrics: string,
@@ -254,12 +174,25 @@ function SettingRow({
   onPress?: () => void;
   accessibilityHint?: string;
 }) {
+  const responsive = useResponsiveLayout();
+  const iconContainerSize = tierValue(responsive.tier, [40, 46, 52, 60, 74, 92, 112]);
+  const iconGlyphSize = tierValue(responsive.tier, [20, 22, 24, 28, 34, 40, 46]);
+
   if (!onPress) {
     return (
       <View style={styles.settingRow}>
         <View style={styles.settingLeft}>
-          <View style={styles.iconContainer}>
-            <Feather name={icon} size={18} color={Colors.gradientMid} />
+          <View
+            style={[
+              styles.iconContainer,
+              {
+                width: iconContainerSize,
+                height: iconContainerSize,
+                borderRadius: Math.round(iconContainerSize * 0.26),
+              },
+            ]}
+          >
+            <Feather name={icon} size={iconGlyphSize} color={Colors.gradientMid} />
           </View>
           <Text style={styles.settingLabel}>{label}</Text>
         </View>
@@ -279,14 +212,23 @@ function SettingRow({
       accessibilityHint={accessibilityHint}
     >
       <View style={styles.settingLeft}>
-        <View style={styles.iconContainer}>
-          <Feather name={icon} size={18} color={Colors.gradientMid} />
+        <View
+          style={[
+            styles.iconContainer,
+            {
+              width: iconContainerSize,
+              height: iconContainerSize,
+              borderRadius: Math.round(iconContainerSize * 0.26),
+            },
+          ]}
+        >
+          <Feather name={icon} size={iconGlyphSize} color={Colors.gradientMid} />
         </View>
         <Text style={styles.settingLabel}>{label}</Text>
       </View>
         <View style={styles.settingRight}>
           <Text style={styles.settingValue}>{value}</Text>
-          <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+          <Ionicons name="chevron-forward" size={scaledIconSize(10, responsive)} color={Colors.textTertiary} />
       </View>
     </Pressable>
   );
@@ -301,6 +243,10 @@ function SegmentedControl<T extends string>({
   value: T;
   onChange: (key: T) => void;
 }) {
+  const responsive = useResponsiveLayout();
+  const segmentIconWidth = tierValue(responsive.tier, [56, 64, 72, 84, 104, 128, 156]);
+  const segmentIconHeight = tierValue(responsive.tier, [36, 40, 44, 50, 60, 72, 86]);
+
   return (
     <View style={styles.segmented}>
       {options.map(opt => (
@@ -319,7 +265,14 @@ function SegmentedControl<T extends string>({
           {opt.iconImage ? (
             <Image
               source={opt.iconImage}
-              style={[styles.segmentIcon, { opacity: value === opt.key ? 1 : 0.6 }]}
+              style={[
+                styles.segmentIcon,
+                {
+                  width: segmentIconWidth,
+                  height: segmentIconHeight,
+                  opacity: value === opt.key ? 1 : 0.6,
+                },
+              ]}
               resizeMode="contain"
               accessible={false}
             />
@@ -341,6 +294,7 @@ function SegmentedControl<T extends string>({
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
   const {
     settings,
     updateSettings,
@@ -361,6 +315,8 @@ export default function ProfileScreen() {
     ambiguous: 0,
   });
   const [ambiguousMatches, setAmbiguousMatches] = useState<AmbiguousLyricsMatch[]>([]);
+  const [learningLoading, setLearningLoading] = useState(false);
+  const [learningRecommendations, setLearningRecommendations] = useState<LearningRecommendationsView | null>(null);
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
@@ -373,6 +329,16 @@ export default function ProfileScreen() {
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+  const sectionPadding = responsive.contentPadding;
+  const contentMaxWidth = responsive.contentMaxWidth;
+  const sectionHeaderIconSize = tierValue(responsive.tier, [36, 40, 46, 54, 66, 82, 100]);
+  const sectionTitleIconSize = tierValue(responsive.tier, [72, 80, 92, 108, 132, 164, 200]);
+  const aboutIconWrapSize = tierValue(responsive.tier, [74, 84, 96, 112, 138, 172, 208]);
+  const aboutIconSize = tierValue(responsive.tier, [58, 66, 78, 92, 114, 144, 176]);
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
 
   const apiBaseUrl = useMemo(() => getApiUrl(), []);
   const apiHost = useMemo(() => {
@@ -662,6 +628,79 @@ export default function ProfileScreen() {
     }
   }, [activeSong?.id, setActiveSong, songs, syncingLyrics, updateSong]);
 
+  const handleRefreshLearning = useCallback(async () => {
+    setLearningLoading(true);
+    try {
+      const payload = await fetchLearningRecommendations();
+      const rawRecommendations =
+        payload &&
+        typeof payload === 'object' &&
+        !Array.isArray(payload) &&
+        'recommendations' in payload
+          ? (payload as { recommendations?: unknown }).recommendations
+          : null;
+
+      if (
+        !rawRecommendations ||
+        typeof rawRecommendations !== 'object' ||
+        Array.isArray(rawRecommendations)
+      ) {
+        setLearningRecommendations(null);
+        return;
+      }
+
+      const focusWords = Array.isArray((rawRecommendations as { focusWords?: unknown }).focusWords)
+        ? ((rawRecommendations as { focusWords: unknown[] }).focusWords
+            .filter((value): value is string => typeof value === 'string')
+            .slice(0, 6))
+        : [];
+
+      const globalChallengeWords = Array.isArray(
+        (rawRecommendations as { globalChallengeWords?: unknown }).globalChallengeWords
+      )
+        ? ((rawRecommendations as { globalChallengeWords: unknown[] }).globalChallengeWords
+            .filter((value): value is string => typeof value === 'string')
+            .slice(0, 6))
+        : [];
+
+      const practicePlan = Array.isArray((rawRecommendations as { practicePlan?: unknown }).practicePlan)
+        ? ((rawRecommendations as { practicePlan: unknown[] }).practicePlan
+            .reduce<LearningRecommendationsView['practicePlan']>((accumulator, item) => {
+              if (!item || typeof item !== 'object' || Array.isArray(item)) {
+                return accumulator;
+              }
+              const row = item as Record<string, unknown>;
+              if (typeof row.title !== 'string' || typeof row.reason !== 'string') {
+                return accumulator;
+              }
+
+              accumulator.push({
+                type: row.type === 'timing' ? 'timing' : 'lyrics',
+                title: row.title,
+                reason: row.reason,
+                targetMode: typeof row.targetMode === 'string' ? row.targetMode : undefined,
+              });
+              return accumulator;
+            }, [])
+            .slice(0, 5))
+        : [];
+
+      setLearningRecommendations({
+        focusWords,
+        globalChallengeWords,
+        practicePlan,
+      });
+    } catch (error) {
+      console.error('Learning recommendations fetch failed:', error);
+    } finally {
+      setLearningLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void handleRefreshLearning();
+  }, [handleRefreshLearning, sessions.length]);
+
   const sortedSyncChanges = useMemo(
     () =>
       [...syncChanges].sort((a, b) => {
@@ -690,7 +729,8 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}
       >
-        <View style={styles.statsCard}>
+        <View style={{ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }}>
+        <View style={[styles.statsCard, { marginHorizontal: sectionPadding }]}>
           <LinearGradient
             colors={[Colors.gradientStart + '15', Colors.gradientEnd + '08']}
             start={{ x: 0, y: 0 }}
@@ -714,7 +754,7 @@ export default function ProfileScreen() {
           </LinearGradient>
         </View>
 
-        <View style={styles.section}>
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <Pressable
             onPress={() => {
               setHowToExpanded((current) => !current);
@@ -729,14 +769,21 @@ export default function ProfileScreen() {
             <View style={styles.sectionTitleRow}>
               <Image
                 source={require('@/assets/images/icon-set/howto-icon.png')}
-                style={styles.sectionHeaderIcon}
+                style={[
+                  styles.sectionHeaderIcon,
+                  {
+                    width: sectionHeaderIconSize,
+                    height: sectionHeaderIconSize,
+                    borderRadius: Math.round(sectionHeaderIconSize * 0.33),
+                  },
+                ]}
                 resizeMode="cover"
                 accessible={false}
               />
             </View>
             <Ionicons
               name={howToExpanded ? 'chevron-up' : 'chevron-down'}
-              size={18}
+              size={scaledIcon(11)}
               color={Colors.textTertiary}
             />
           </Pressable>
@@ -744,7 +791,7 @@ export default function ProfileScreen() {
             <HowToUseEaseVerse
               onNavigate={(route) => {
                 Haptics.selectionAsync();
-                router.push(route as any);
+                router.push(route);
               }}
             />
           ) : (
@@ -752,11 +799,63 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        <View style={styles.section}>
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
+          <View style={styles.sectionTitleRow}>
+            <Image
+              source={require('@/assets/images/EasePocket.png')}
+              style={[
+                styles.sectionTitleIcon,
+                {
+                  width: sectionTitleIconSize,
+                  height: sectionTitleIconSize,
+                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                },
+              ]}
+              resizeMode="cover"
+              accessibilityRole="header"
+              accessibilityLabel="EasePocket Timing Trainer"
+            />
+          </View>
+          <View style={styles.settingsCard}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push('/easepocket');
+              }}
+              style={({ pressed }) => [styles.settingRow, pressed && styles.settingRowPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Open EasePocket"
+              accessibilityHint="Opens timing training modes like subdivisions, silent beat, and consonant precision"
+            >
+              <View style={styles.settingLeft}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="pulse-outline" size={scaledIcon(11)} color={Colors.gradientStart} />
+                </View>
+                <Text style={styles.settingLabel}>EasePocket</Text>
+              </View>
+              <View style={styles.settingRight}>
+                <Text style={styles.settingValue}>Timing trainer</Text>
+                <Ionicons name="chevron-forward" size={scaledIcon(11)} color={Colors.textTertiary} />
+              </View>
+            </Pressable>
+          </View>
+          <Text style={styles.modeHint}>
+            Train subdivisions, pocket control, and consonant attacks in milliseconds.
+          </Text>
+        </View>
+
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
               source={require('@/assets/images/icon-set/Language_accent.png')}
-              style={styles.sectionTitleIcon}
+              style={[
+                styles.sectionTitleIcon,
+                {
+                  width: sectionTitleIconSize,
+                  height: sectionTitleIconSize,
+                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                },
+              ]}
               resizeMode="cover"
               accessibilityRole="header"
               accessibilityLabel="Language & Accent"
@@ -781,11 +880,18 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
               source={require('@/assets/images/icon-set/Feedback_intensity_high.png')}
-              style={styles.sectionTitleIcon}
+              style={[
+                styles.sectionTitleIcon,
+                {
+                  width: sectionTitleIconSize,
+                  height: sectionTitleIconSize,
+                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                },
+              ]}
               resizeMode="cover"
               accessibilityRole="header"
               accessibilityLabel="Feedback Intensity"
@@ -802,11 +908,18 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View style={styles.section}>
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
               source={require('@/assets/images/icon-set/Live_mode.png')}
-              style={styles.sectionTitleIcon}
+              style={[
+                styles.sectionTitleIcon,
+                {
+                  width: sectionTitleIconSize,
+                  height: sectionTitleIconSize,
+                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                },
+              ]}
               resizeMode="cover"
               accessibilityRole="header"
               accessibilityLabel="Live Mode"
@@ -827,8 +940,23 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Lyrics Follow Speed</Text>
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
+          <View style={styles.sectionTitleRow}>
+            <Image
+              source={require('@/assets/images/lyrics_flow_speed_icon.png')}
+              style={[
+                styles.sectionTitleIcon,
+                {
+                  width: sectionTitleIconSize,
+                  height: sectionTitleIconSize,
+                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                },
+              ]}
+              resizeMode="contain"
+              accessibilityRole="header"
+              accessibilityLabel="Lyrics Follow Speed"
+            />
+          </View>
           <SegmentedControl<LyricsFollowSpeed>
             options={[
               { key: 'slow', label: 'Slow' },
@@ -843,8 +971,23 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Count-In</Text>
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
+          <View style={styles.sectionTitleRow}>
+            <Image
+              source={require('@/assets/images/count_in_icon.png')}
+              style={[
+                styles.sectionTitleIcon,
+                {
+                  width: sectionTitleIconSize,
+                  height: sectionTitleIconSize,
+                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                },
+              ]}
+              resizeMode="contain"
+              accessibilityRole="header"
+              accessibilityLabel="Count-In"
+            />
+          </View>
           <SegmentedControl<string>
             options={[
               { key: '0', label: 'None' },
@@ -856,11 +999,18 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View style={styles.section}>
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
               source={require('@/assets/images/icon-set/Mindfullness_voice.png')}
-              style={styles.sectionTitleIcon}
+              style={[
+                styles.sectionTitleIcon,
+                {
+                  width: sectionTitleIconSize,
+                  height: sectionTitleIconSize,
+                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                },
+              ]}
               resizeMode="cover"
               accessibilityRole="header"
               accessibilityLabel="Mindfulness Voice"
@@ -879,11 +1029,18 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        <View style={styles.section}>
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
               source={require('@/assets/images/icon-set/Lyrics_sync.png')}
-              style={styles.sectionTitleIcon}
+              style={[
+                styles.sectionTitleIcon,
+                {
+                  width: sectionTitleIconSize,
+                  height: sectionTitleIconSize,
+                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                },
+              ]}
               resizeMode="cover"
               accessibilityRole="header"
               accessibilityLabel="Lyrics Sync"
@@ -984,14 +1141,103 @@ export default function ProfileScreen() {
           )}
         </View>
 
-	        <View style={styles.section}>
-	          <Text style={styles.sectionTitle} accessibilityRole="header">About</Text>
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Smart Practice</Text>
+          <View style={styles.settingsCard}>
+            <SettingRow
+              icon="cpu"
+              label="Refresh Recommendations"
+              value={learningLoading ? 'Analyzing...' : 'Run now'}
+              onPress={learningLoading ? undefined : () => void handleRefreshLearning()}
+              accessibilityHint="Uses your latest sessions and timing drills to generate practice suggestions"
+            />
+            <View style={styles.divider} />
+            <SettingRow
+              icon="target"
+              label="Focus Words"
+              value={String(learningRecommendations?.focusWords.length ?? 0)}
+            />
+            <View style={styles.divider} />
+            <SettingRow
+              icon="activity"
+              label="Practice Plan"
+              value={String(learningRecommendations?.practicePlan.length ?? 0)}
+            />
+          </View>
+
+          {learningRecommendations && (
+            <View style={styles.learningCard}>
+              {learningRecommendations.focusWords.length > 0 && (
+                <View style={styles.learningBlock}>
+                  <Text style={styles.learningTitle}>Priority words</Text>
+                  <View style={styles.learningTagRow}>
+                    {learningRecommendations.focusWords.map((word) => (
+                      <View key={word} style={styles.learningTag}>
+                        <Text style={styles.learningTagText}>{word}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {learningRecommendations.globalChallengeWords.length > 0 && (
+                <View style={styles.learningBlock}>
+                  <Text style={styles.learningTitle}>Global challenge words</Text>
+                  <Text style={styles.learningHint}>
+                    {learningRecommendations.globalChallengeWords.join(', ')}
+                  </Text>
+                </View>
+              )}
+
+              {learningRecommendations.practicePlan.length > 0 && (
+                <View style={styles.learningBlock}>
+                  <Text style={styles.learningTitle}>Next drills</Text>
+                  {learningRecommendations.practicePlan.map((item, index) => (
+                    <Text key={`${item.title}-${index}`} style={styles.learningPlanLine}>
+                      {index + 1}. {item.title} - {item.reason}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
+	        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
+            <View style={styles.sectionTitleRow}>
+              <Image
+                source={require('@/assets/images/about_icon.png')}
+                style={[
+                  styles.sectionTitleIcon,
+                  {
+                    width: sectionTitleIconSize,
+                    height: sectionTitleIconSize,
+                    borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                  },
+                ]}
+                resizeMode="contain"
+                accessibilityRole="header"
+                accessibilityLabel="About"
+              />
+            </View>
 	          <View style={styles.aboutCard}>
 	            <View style={styles.aboutRow}>
-	              <View style={styles.aboutIconWrap}>
+	              <View
+                  style={[
+                    styles.aboutIconWrap,
+                    {
+                      width: aboutIconWrapSize,
+                      height: aboutIconWrapSize,
+                      borderRadius: Math.round(aboutIconWrapSize * 0.3),
+                    },
+                  ]}
+                >
 	                <Image
 	                  source={require('@/assets/images/easeverse_logo_App.png')}
-	                  style={styles.aboutIcon}
+	                  style={[
+                      styles.aboutIcon,
+                      { width: aboutIconSize, height: aboutIconSize },
+                    ]}
 	                  resizeMode="contain"
 	                  accessibilityRole="image"
 	                  accessibilityLabel="EaseVerse app icon"
@@ -1000,9 +1246,26 @@ export default function ProfileScreen() {
 	              <View style={styles.aboutCopy}>
 	                <Text style={styles.aboutTitle}>EaseVerse</Text>
 	                <Text style={styles.aboutText}>
-	                  Live lyric guidance, credible session reviews, and practice loops for vocalists.
-	                  Keep lyrics synced with your team and iterate fast.
+	                  Vocal workflow for writing, recording, timing polish, and collaboration sync.
 	                </Text>
+	              </View>
+	            </View>
+	            <View style={styles.aboutHighlights}>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="musical-notes-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>Live lyrics + BPM-driven count-in and metronome</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="pulse-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>EasePocket timing modes (subdivision, silent beat, consonants, pocket, slow)</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="sync-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>Lyrics Sync with line diffs, BPM updates, and update toasts</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="sparkles-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>Warm Up + Mindfulness with selectable narration voice</Text>
 	              </View>
 	            </View>
 	          </View>
@@ -1011,6 +1274,8 @@ export default function ProfileScreen() {
 	            <SettingRow icon="info" label="Version" value="1.0.0" />
 	            <View style={styles.divider} />
 	            <SettingRow icon="globe" label="API" value={apiHost || 'Unknown'} />
+	            <View style={styles.divider} />
+	            <SettingRow icon="activity" label="Timing Engine" value="EasePocket v1" />
 	            <View style={styles.divider} />
 	            <SettingRow
 	              icon="link"
@@ -1031,7 +1296,8 @@ export default function ProfileScreen() {
 	            <SettingRow icon="shield" label="Privacy" value="Local + optional Postgres" />
 	          </View>
 	        </View>
-	      </ScrollView>
+        </View>
+      </ScrollView>
 	    </View>
 	  );
 	}
@@ -1160,6 +1426,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontFamily: 'Inter_400Regular',
+  },
+  aboutHighlights: {
+    marginTop: 12,
+    gap: 8,
+  },
+  aboutHighlightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  aboutHighlightText: {
+    flex: 1,
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Inter_500Medium',
   },
   settingRow: {
     flexDirection: 'row',
@@ -1328,5 +1610,51 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontFamily: 'Inter_400Regular',
     marginTop: 2,
+  },
+  learningCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    padding: 12,
+    gap: 12,
+  },
+  learningBlock: {
+    gap: 8,
+  },
+  learningTitle: {
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  learningHint: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Inter_400Regular',
+  },
+  learningTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  learningTag: {
+    backgroundColor: Colors.accentSubtle,
+    borderWidth: 1,
+    borderColor: Colors.accentBorder,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  learningTagText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+  },
+  learningPlanLine: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Inter_400Regular',
   },
 });

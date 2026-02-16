@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -28,16 +28,19 @@ import {
   type WarmUpExercise,
   type WarmUpTip,
 } from '@/constants/warmup';
+import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
 type WarmUpPhase = 'intro' | 'exercise' | 'complete';
 
 function TipCard({ tip }: { tip: WarmUpTip }) {
+  const responsive = useResponsiveLayout();
+  const iconSize = scaledIconSize(11, responsive);
   const isDo = tip.type === 'do';
   return (
     <View style={[styles.tipCard, isDo ? styles.tipDo : styles.tipDont]}>
       <Ionicons
         name={isDo ? 'checkmark-circle' : 'close-circle'}
-        size={18}
+        size={iconSize}
         color={isDo ? '#4ADE80' : '#F87171'}
       />
       <Text style={[styles.tipText, isDo ? styles.tipTextDo : styles.tipTextDont]}>
@@ -52,6 +55,11 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
   onComplete: () => void;
   onSkip: () => void;
 }) {
+  const responsive = useResponsiveLayout();
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
   const [timeLeft, setTimeLeft] = useState(exercise.durationSeconds);
   const [isRunning, setIsRunning] = useState(false);
   const [showTips, setShowTips] = useState(true);
@@ -151,7 +159,7 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
               end={{ x: 1, y: 0 }}
               style={styles.timerMainBtnGradient}
             >
-              <Ionicons name="checkmark" size={24} color="#fff" />
+              <Ionicons name="checkmark" size={scaledIcon(14)} color="#fff" />
               <Text style={styles.timerMainBtnText}>Next Exercise</Text>
             </LinearGradient>
           </Pressable>
@@ -169,7 +177,7 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
               end={{ x: 1, y: 0 }}
               style={styles.timerMainBtnGradient}
             >
-              <Ionicons name={isRunning ? 'pause' : 'play'} size={22} color="#fff" />
+              <Ionicons name={isRunning ? 'pause' : 'play'} size={scaledIcon(13)} color="#fff" />
               <Text style={styles.timerMainBtnText}>
                 {isRunning ? 'Pause' : 'Start'}
               </Text>
@@ -183,7 +191,7 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
           accessibilityLabel="Skip exercise"
           accessibilityHint="Moves to the next warm-up exercise"
         >
-          <Feather name="skip-forward" size={18} color={Colors.textSecondary} />
+          <Feather name="skip-forward" size={scaledIcon(11)} color={Colors.textSecondary} />
           <Text style={styles.skipBtnText}>Skip</Text>
         </Pressable>
       </View>
@@ -191,7 +199,7 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
       {showTips && !isRunning && timeLeft > 0 && (
         <View style={styles.instructionBox}>
           <View style={styles.instructionHeader}>
-            <Ionicons name="information-circle" size={18} color={exercise.categoryColor} />
+            <Ionicons name="information-circle" size={scaledIcon(11)} color={exercise.categoryColor} />
             <Text style={styles.instructionTitle}>How to do it</Text>
           </View>
           {exercise.howTo.map((step, i) => (
@@ -218,12 +226,26 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
 
 export default function WarmUpScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
   const [phase, setPhase] = useState<WarmUpPhase>('intro');
   const [currentExIdx, setCurrentExIdx] = useState(0);
   const [completedExercises, setCompletedExercises] = useState<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
+  const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+  const horizontalInset = responsive.contentPadding;
+  const contentMaxWidth = responsive.contentMaxWidth;
+  const sectionWrapStyle = useMemo(
+    () => ({ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }),
+    [contentMaxWidth]
+  );
+  const scaledIcon = useMemo(
+    () => (size: number) => scaledIconSize(size, responsive),
+    [responsive]
+  );
+  const heroCircleSize = tierValue(responsive.tier, [84, 92, 102, 116, 136, 164, 196]);
+  const completeCircleSize = tierValue(responsive.tier, [96, 106, 120, 136, 160, 192, 228]);
   const totalMinutes = Math.ceil(getEstimatedDuration() / 60);
   const currentExercise = warmUpExercises[currentExIdx];
 
@@ -269,7 +291,7 @@ export default function WarmUpScreen() {
   if (phase === 'intro') {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-        <View style={styles.header}>
+        <View style={[styles.header, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <Pressable
             onPress={() => router.back()}
             hitSlop={12}
@@ -278,24 +300,31 @@ export default function WarmUpScreen() {
             accessibilityLabel="Go back"
             accessibilityHint="Returns to the previous screen"
           >
-            <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+            <Ionicons name="arrow-back" size={scaledIcon(14)} color={Colors.textPrimary} />
           </Pressable>
           <Text style={styles.headerTitle} accessibilityRole="header">Vocal Warm-Up</Text>
           <View style={{ width: 44 }} />
         </View>
 
         <ScrollView
-          style={styles.scrollContent}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+          style={[styles.scrollContent, sectionWrapStyle]}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 120 }}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.introHero}>
+          <View style={[styles.introHero, { paddingHorizontal: horizontalInset }]}>
             <View style={styles.heroIconWrap}>
               <LinearGradient
                 colors={[Colors.gradientStart, Colors.gradientEnd]}
-                style={styles.heroIconGradient}
+                style={[
+                  styles.heroIconGradient,
+                  {
+                    width: heroCircleSize,
+                    height: heroCircleSize,
+                    borderRadius: Math.round(heroCircleSize / 2),
+                  },
+                ]}
               >
-                <Ionicons name="fitness" size={36} color="#fff" />
+                <Ionicons name="fitness" size={scaledIcon(20)} color="#fff" />
               </LinearGradient>
             </View>
             <Text style={styles.introTitle}>Protect Your Voice</Text>
@@ -308,7 +337,7 @@ export default function WarmUpScreen() {
             </Text>
           </View>
 
-          <View style={styles.safetySection}>
+          <View style={[styles.safetySection, { paddingHorizontal: horizontalInset }]}>
             <Text style={styles.sectionTitle}>Voice Safety Rules</Text>
             {voiceSafetyRules.map((rule, i) => (
               <View key={i} style={[
@@ -319,7 +348,7 @@ export default function WarmUpScreen() {
                 <View style={styles.safetyIconWrap}>
                   <Ionicons
                     name={rule.icon}
-                    size={20}
+                    size={scaledIcon(12)}
                     color={
                       rule.type === 'danger' ? '#F87171' :
                       rule.type === 'warning' ? '#FBBF24' :
@@ -335,7 +364,7 @@ export default function WarmUpScreen() {
             ))}
           </View>
 
-          <View style={styles.exercisePreview}>
+          <View style={[styles.exercisePreview, { paddingHorizontal: horizontalInset }]}>
             <Text style={styles.sectionTitle}>{"Today's Routine"}</Text>
             {warmUpExercises.map((ex, i) => (
               <View key={ex.id} style={styles.previewItem}>
@@ -355,7 +384,16 @@ export default function WarmUpScreen() {
           </View>
         </ScrollView>
 
-        <View style={[styles.bottomAction, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'web' ? 34 : 0) + 20 }]}>
+        <View
+          style={[
+            styles.bottomAction,
+            sectionWrapStyle,
+            {
+              paddingHorizontal: horizontalInset,
+              paddingBottom: Math.max(insets.bottom, webBottomInset) + 20,
+            },
+          ]}
+        >
           <Pressable
             onPress={handleStart}
             style={styles.startPressable}
@@ -369,7 +407,7 @@ export default function WarmUpScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.startBtn}
             >
-              <Ionicons name="play" size={22} color="#fff" />
+              <Ionicons name="play" size={scaledIcon(13)} color="#fff" />
               <Text style={styles.startBtnText}>Begin Warm-Up</Text>
             </LinearGradient>
           </Pressable>
@@ -381,18 +419,25 @@ export default function WarmUpScreen() {
   if (phase === 'complete') {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-        <View style={styles.header}>
+        <View style={[styles.header, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <View style={{ width: 44 }} />
           <Text style={styles.headerTitle} accessibilityRole="header">All Done</Text>
           <View style={{ width: 44 }} />
         </View>
-        <View style={styles.completeContainer}>
+        <View style={[styles.completeContainer, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <View style={styles.completeIconWrap}>
-            <LinearGradient
-              colors={['#4ADE80', '#22C55E']}
-              style={styles.completeIconGradient}
+              <LinearGradient
+                colors={['#4ADE80', '#22C55E']}
+              style={[
+                styles.completeIconGradient,
+                {
+                  width: completeCircleSize,
+                  height: completeCircleSize,
+                  borderRadius: Math.round(completeCircleSize / 2),
+                },
+              ]}
             >
-              <Ionicons name="checkmark" size={48} color="#fff" />
+              <Ionicons name="checkmark" size={scaledIcon(28)} color="#fff" />
             </LinearGradient>
           </View>
           <Text style={styles.completeTitle}>Voice Warmed Up</Text>
@@ -403,15 +448,15 @@ export default function WarmUpScreen() {
 
           <View style={styles.completeTips}>
             <View style={styles.completeTipCard}>
-              <Ionicons name="water" size={20} color="#60A5FA" />
+              <Ionicons name="water" size={scaledIcon(12)} color="#60A5FA" />
               <Text style={styles.completeTipText}>Take a sip of room-temp water</Text>
             </View>
             <View style={styles.completeTipCard}>
-              <Ionicons name="timer" size={20} color={Colors.gradientStart} />
+              <Ionicons name="timer" size={scaledIcon(12)} color={Colors.gradientStart} />
               <Text style={styles.completeTipText}>{"You're good to sing for the next 1-2 hours"}</Text>
             </View>
             <View style={styles.completeTipCard}>
-              <Ionicons name="snow" size={20} color="#A78BFA" />
+              <Ionicons name="snow" size={scaledIcon(12)} color="#A78BFA" />
               <Text style={styles.completeTipText}>Remember to cool down after singing</Text>
             </View>
           </View>
@@ -429,7 +474,7 @@ export default function WarmUpScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.doneBtn}
             >
-              <Ionicons name="mic" size={22} color="#fff" />
+              <Ionicons name="mic" size={scaledIcon(13)} color="#fff" />
               <Text style={styles.doneBtnText}>Ready to Sing</Text>
             </LinearGradient>
           </Pressable>
@@ -440,7 +485,7 @@ export default function WarmUpScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
           onPress={handleBack}
           hitSlop={12}
@@ -449,7 +494,7 @@ export default function WarmUpScreen() {
           accessibilityLabel="Previous exercise"
           accessibilityHint="Returns to the previous exercise or intro"
         >
-          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+          <Ionicons name="arrow-back" size={scaledIcon(14)} color={Colors.textPrimary} />
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerStep}>
@@ -476,17 +521,17 @@ export default function WarmUpScreen() {
           accessibilityLabel="Close warm-up"
           accessibilityHint="Exits the warm-up flow"
         >
-          <Ionicons name="close" size={24} color={Colors.textSecondary} />
+          <Ionicons name="close" size={scaledIcon(14)} color={Colors.textSecondary} />
         </Pressable>
       </View>
 
       <ScrollView
         ref={scrollRef}
-        style={styles.scrollContent}
+        style={[styles.scrollContent, sectionWrapStyle]}
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.exerciseHeader}>
+        <View style={[styles.exerciseHeader, { paddingHorizontal: horizontalInset }]}>
           <View style={[styles.categoryBadge, { backgroundColor: currentExercise.categoryColor + '20', borderColor: currentExercise.categoryColor + '40' }]}>
             <Text style={[styles.categoryBadgeText, { color: currentExercise.categoryColor }]}>
               {currentExercise.categoryLabel}
@@ -502,9 +547,9 @@ export default function WarmUpScreen() {
           onSkip={handleSkip}
         />
 
-        <View style={styles.tipsSection}>
+        <View style={[styles.tipsSection, { paddingHorizontal: horizontalInset }]}>
           <View style={styles.tipsHeader}>
-            <Ionicons name="checkmark-circle" size={18} color="#4ADE80" />
+            <Ionicons name="checkmark-circle" size={scaledIcon(11)} color="#4ADE80" />
             <Text style={styles.tipsTitle}>Do</Text>
           </View>
           {currentExercise.tips.filter(t => t.type === 'do').map((tip, i) => (
@@ -512,9 +557,9 @@ export default function WarmUpScreen() {
           ))}
         </View>
 
-        <View style={styles.tipsSection}>
+        <View style={[styles.tipsSection, { paddingHorizontal: horizontalInset }]}>
           <View style={styles.tipsHeader}>
-            <Ionicons name="close-circle" size={18} color="#F87171" />
+            <Ionicons name="close-circle" size={scaledIcon(11)} color="#F87171" />
             <Text style={styles.tipsTitleDont}>{"Don't"}</Text>
           </View>
           {currentExercise.tips.filter(t => t.type === 'dont').map((tip, i) => (

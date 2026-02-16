@@ -4,8 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import type { ComponentProps } from 'react';
+import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
+
+type HowToRoute = '/' | '/lyrics' | '/sessions' | '/profile' | '/easepocket';
 
 type LegendItem = {
   label: string;
@@ -16,16 +19,17 @@ type LegendItem = {
 );
 
 type HowToStep = {
-  id: 'sing' | 'lyrics' | 'sessions' | 'profile';
+  id: 'sing' | 'lyrics' | 'sessions' | 'easepocket' | 'profile';
   title: string;
   summary: string;
-  route: string;
+  route: HowToRoute;
   accent: string;
   icon: IoniconName;
   iconImage?: ImageSourcePropType;
   bullets: string[];
   legend: LegendItem[];
   showWarmupIcons?: boolean;
+  showQuickStart?: boolean;
 };
 
 function SnippetFrame({ children }: { children: React.ReactNode }) {
@@ -39,14 +43,28 @@ function IconTiles({
   title: string;
   items: { label: string; source: ImageSourcePropType }[];
 }) {
+  const responsive = useResponsiveLayout();
+  const tileSize = tierValue(responsive.tier, [48, 52, 54, 60, 68, 76, 84]);
+  const tileRadius = Math.round(tileSize * 0.28);
+  const tileWidth = tierValue(responsive.tier, [100, 112, 120, 132, 148, 164, 180]);
+  const labelSize = tierValue(responsive.tier, [11, 12, 12, 13, 13, 14, 15]);
+
   return (
     <SnippetFrame>
       <Text style={styles.snippetTitle}>{title}</Text>
       <View style={styles.iconTileRow}>
         {items.map((item) => (
-          <View key={item.label} style={styles.iconTile}>
-            <Image source={item.source} style={styles.iconTileImage} resizeMode="cover" accessible={false} />
-            <Text style={styles.iconTileLabel}>{item.label}</Text>
+          <View key={item.label} style={[styles.iconTile, { width: tileWidth }]}>
+            <Image
+              source={item.source}
+              style={[
+                styles.iconTileImage,
+                { width: tileSize, height: tileSize, borderRadius: tileRadius },
+              ]}
+              resizeMode="cover"
+              accessible={false}
+            />
+            <Text style={[styles.iconTileLabel, { fontSize: labelSize }]}>{item.label}</Text>
           </View>
         ))}
       </View>
@@ -55,20 +73,41 @@ function IconTiles({
 }
 
 function Legend({ items }: { items: LegendItem[] }) {
+  const responsive = useResponsiveLayout();
+  const legendIconSize = tierValue(responsive.tier, [30, 32, 34, 36, 40, 44, 48]);
+  const legendImageSize = tierValue(responsive.tier, [22, 24, 26, 30, 36, 44, 52]);
+  const legendImageRadius = Math.round(legendImageSize * 0.34);
+
   return (
     <View style={styles.legend}>
       {items.map((item, index) => (
         <View key={`${item.label}-${index}`} style={styles.legendItem}>
-          <View style={styles.legendIcon}>
+          <View
+            style={[
+              styles.legendIcon,
+              { width: legendIconSize, height: legendIconSize, borderRadius: Math.round(legendIconSize * 0.31) },
+            ]}
+          >
             {'iconImage' in item ? (
               <Image
                 source={item.iconImage}
-                style={styles.legendIconImage}
-                resizeMode="cover"
+                style={[
+                  styles.legendIconImage,
+                  {
+                    width: legendImageSize,
+                    height: legendImageSize,
+                    borderRadius: legendImageRadius,
+                  },
+                ]}
+                resizeMode="contain"
                 accessible={false}
               />
             ) : (
-              <Ionicons name={item.icon} size={18} color={Colors.gradientMid} />
+              <Ionicons
+                name={item.icon}
+                size={tierValue(responsive.tier, [16, 17, 18, 19, 21, 23, 25])}
+                color={Colors.gradientMid}
+              />
             )}
           </View>
           <View style={styles.legendCopy}>
@@ -92,6 +131,9 @@ function PrimaryButton({
   accent: string;
   hint?: string;
 }) {
+  const responsive = useResponsiveLayout();
+  const arrowSize = scaledIconSize(10, responsive);
+
   return (
     <Pressable
       onPress={onPress}
@@ -107,44 +149,77 @@ function PrimaryButton({
         style={styles.primaryBtnGradient}
       >
         <Text style={styles.primaryBtnText}>{label}</Text>
-        <Ionicons name="arrow-forward" size={16} color="#111" />
+        <Ionicons name="arrow-forward" size={arrowSize} color="#111" />
       </LinearGradient>
     </Pressable>
   );
 }
 
-export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: string) => void }) {
+export default function HowToUseEaseVerse({
+  onNavigate,
+}: {
+  onNavigate: (route: HowToRoute) => void;
+}) {
+  const responsive = useResponsiveLayout();
   const [expanded, setExpanded] = useState<HowToStep['id'] | null>('sing');
+  const introIconSize = tierValue(responsive.tier, [34, 36, 38, 42, 48, 56, 64]);
+  const stepIconSize = tierValue(responsive.tier, [36, 38, 40, 44, 50, 56, 62]);
+  const tabPillIconSize = tierValue(responsive.tier, [20, 22, 24, 26, 30, 34, 38]);
+  const warmupIconSize = tierValue(responsive.tier, [22, 24, 24, 26, 30, 34, 38]);
+  const sectionMaxWidth = responsive.cardMaxWidth;
 
   const steps = useMemo<HowToStep[]>(
     () => [
       {
         id: 'sing',
         title: 'Sing',
-        summary: 'Record a take with live lyric guidance (and optional metronome).',
+        summary: 'Record takes with count-in, live lyric tracking, and metronome sync.',
         route: '/',
         accent: Colors.gradientStart,
         icon: 'mic',
         iconImage: require('@/assets/images/icon-set/Singing.png'),
         bullets: [
-          'Pick a song (tap the title at the top).',
-          'Set Tempo (BPM) in Lyrics to sync count-in and the metronome.',
-          'Tap Record, sing, then tap Stop.',
-          'Review your session and open the Practice Loop.',
+          'If no song is loaded, use the quick overlay: Warm Up, Mindfulness, or Add Lyrics.',
+          'Pick your song from the title dropdown, then confirm Tempo (BPM).',
+          'Count-In (0/2/4) and metronome both follow the active song BPM.',
+          'Tap Record, sing, then Stop to open Session Review instantly.',
+          'Use Practice Loop to drill hard lines after each take.',
         ],
         legend: [
-          { icon: 'mic', label: 'Record', description: 'Starts a new take.' },
-          { icon: 'stop-circle', label: 'Stop', description: 'Ends the take and opens Session Review.' },
+          {
+            iconImage: require('@/assets/images/nosong_state.png'),
+            label: 'No song state',
+            description: 'Shows Warm Up, Mindfulness, and Add Lyrics quick actions.',
+          },
+          {
+            iconImage: require('@/assets/images/record_icon.png'),
+            label: 'Record',
+            description: 'Starts a new take.',
+          },
+          {
+            iconImage: require('@/assets/images/Stop_icon.png'),
+            label: 'Stop',
+            description: 'Ends the take and opens Session Review.',
+          },
           { icon: 'chevron-down', label: 'Song picker', description: 'Switch the active song/lyrics.' },
-          { icon: 'timer-outline', label: 'Metronome', description: 'Toggles a click track at the song BPM.' },
-          { icon: 'flag', label: 'Marker', description: 'Adds a marker while recording.' },
+          {
+            iconImage: require('@/assets/images/metronome_icon.png'),
+            label: 'Metronome',
+            description: 'Toggles a click track at the song BPM.',
+          },
+          {
+            iconImage: require('@/assets/images/flag_icon.png'),
+            label: 'Marker',
+            description: 'Adds a marker while recording.',
+          },
         ],
         showWarmupIcons: true,
+        showQuickStart: true,
       },
       {
         id: 'lyrics',
         title: 'Lyrics',
-        summary: 'Write lyrics, set BPM, structure sections, and keep them live-ready.',
+        summary: 'Write lyrics, detect BPM, and prep your structure for recording.',
         route: '/lyrics',
         accent: Colors.successUnderline,
         icon: 'document-text',
@@ -152,8 +227,8 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
         bullets: [
           'Write or import lyrics for your song.',
           'Set Tempo (BPM) or Tap to detect BPM quickly.',
-          'Auto-save keeps the Sing screen ready.',
-          'BPM drives count-in and the metronome while you record.',
+          'Auto-save keeps the Sing screen ready in real time.',
+          'BPM drives count-in, metronome, and EasePocket timing grids.',
           'Use Genre to tune coaching defaults for the style.',
         ],
         legend: [
@@ -191,49 +266,120 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
         ],
       },
       {
+        id: 'easepocket',
+        title: 'EasePocket',
+        summary: 'Train internal timing, pocket placement, and consonant precision.',
+        route: '/easepocket',
+        accent: Colors.gradientEnd,
+        icon: 'pulse',
+        iconImage: require('@/assets/images/EasePocket.png'),
+        bullets: [
+          'Choose mode: Subdivision Lab, Silent Beat, Consonant Precision, Pocket Control, or Slow Mastery.',
+          'Set BPM from the song, or override BPM for practice drills.',
+          'Set beats per bar (2/4) and choose grid when needed.',
+          'In Consonant Precision, record a short phrase and tap Stop + Analyze.',
+          'Review On-Time %, Mean ms, Offset, and saved drill history.',
+        ],
+        legend: [
+          {
+            iconImage: require('@/assets/images/EasePocket.png'),
+            label: 'Modes',
+            description: 'Switch between five timing training modes.',
+          },
+          {
+            iconImage: require('@/assets/images/bpm_icon.png'),
+            label: 'BPM',
+            description: 'Controls click speed and timing grid spacing.',
+          },
+          {
+            iconImage: require('@/assets/images/two_beats.png'),
+            label: '2/4 Beats',
+            description: 'Sets bar accents for count feel and drill flow.',
+          },
+          { icon: 'grid-outline', label: 'Grid', description: 'Choose Beat / 8th / 16th when available.' },
+          { icon: 'mic-outline', label: 'Consonant pass', description: 'Record and score attack timing in ms.' },
+        ],
+      },
+      {
         id: 'profile',
         title: 'Profile',
-        summary: 'Tune coaching, live tracking speed, voice, and sync settings.',
+        summary: 'Tune coaching, count-in, voice, and collaboration sync.',
         route: '/profile',
         accent: Colors.gradientMid,
         icon: 'person',
         iconImage: require('@/assets/images/icon-set/Profile.png'),
         bullets: [
           'Set Language and Accent Goal for coaching tone.',
-          'Adjust Live Mode and Lyrics Follow Speed for live tracking.',
+          'Adjust Live Mode and Lyrics Follow Speed for live tracking behavior.',
+          'Choose Count-In: None, 2 beats, or 4 beats.',
           'Choose Mindfulness Voice (Female/Male) for spoken guidance.',
-          'Use Lyrics Sync to pull the latest collab drafts (including BPM) and see differences.',
+          'Use Lyrics Sync to pull latest collab drafts, update lyrics/BPM, and see diffs.',
         ],
         legend: [
           { icon: 'globe-outline', label: 'Language', description: 'Affects live recognition and pronunciation coaching.' },
           { icon: 'flash-outline', label: 'Live mode', description: 'Stability vs Speed tracking.' },
-          { icon: 'speedometer-outline', label: 'Lyrics speed', description: 'How fast the highlighted word advances.' },
+          {
+            iconImage: require('@/assets/images/lyrics_flow_speed_icon.png'),
+            label: 'Lyrics speed',
+            description: 'How fast the highlighted word advances.',
+          },
+          {
+            iconImage: require('@/assets/images/count_in_icon.png'),
+            label: 'Count-in',
+            description: 'Choose 0, 2, or 4 beats before recording starts.',
+          },
           { icon: 'volume-high-outline', label: 'Mindfulness voice', description: 'Select a male/female voice for narration.' },
-          { icon: 'sync-outline', label: 'Lyrics sync', description: 'Pulls latest lyrics + BPM and shows what changed.' },
+          { icon: 'sync-outline', label: 'Lyrics sync', description: 'Pulls latest lyrics + BPM, shows diffs, and fires a synced toast.' },
+          {
+            iconImage: require('@/assets/images/about_icon.png'),
+            label: 'About',
+            description: 'Overview of features, API links, and version info.',
+          },
         ],
       },
     ],
     []
   );
 
-  const tabJump: Array<
-    | { id: HowToStep['id']; label: string; route: string; icon: IoniconName }
-    | { id: HowToStep['id']; label: string; route: string; image: ImageSourcePropType }
-  > = [
+  const tabJump: (
+    | { id: HowToStep['id']; label: string; route: HowToRoute; icon: IoniconName }
+    | { id: HowToStep['id']; label: string; route: HowToRoute; image: ImageSourcePropType }
+  )[] = [
     { id: 'sing', label: 'Sing', image: require('@/assets/images/icon-set/Singing.png'), route: '/' },
     { id: 'lyrics', label: 'Lyrics', image: require('@/assets/images/icon-set/Lyrics.png'), route: '/lyrics' },
     { id: 'sessions', label: 'Sessions', image: require('@/assets/images/icon-set/sessions.png'), route: '/sessions' },
+    { id: 'easepocket', label: 'EasePocket', image: require('@/assets/images/EasePocket.png'), route: '/easepocket' },
     { id: 'profile', label: 'Profile', image: require('@/assets/images/icon-set/Profile.png'), route: '/profile' },
   ];
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        { width: '100%' as const, maxWidth: sectionMaxWidth, alignSelf: 'center' as const },
+      ]}
+    >
       <View style={styles.introCard}>
         <View style={styles.introHeader}>
-          <View style={styles.introIcon}>
+          <View
+            style={[
+              styles.introIcon,
+              {
+                width: introIconSize,
+                height: introIconSize,
+                borderRadius: Math.round(introIconSize * 0.3),
+              },
+            ]}
+          >
             <Image
               source={require('@/assets/images/icon-set/howto-icon.png')}
-              style={styles.howToIcon}
+              style={[
+                styles.howToIcon,
+                {
+                  width: introIconSize,
+                  height: introIconSize,
+                },
+              ]}
               accessibilityRole="image"
               accessibilityLabel="How to use EaseVerse"
             />
@@ -241,8 +387,8 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
           <View style={styles.introCopy}>
             <Text style={styles.introTitle}>Quick Tour</Text>
             <Text style={styles.introText}>
-              Tap an icon to jump, or expand a card to learn what each button means. Pro tip: set a
-              song Tempo (BPM) in Lyrics to sync count-in and the metronome.
+              Tap an icon to jump, or expand a card to learn every control. Best flow: add lyrics,
+              set BPM, record in Sing, then use EasePocket to tighten timing.
             </Text>
           </View>
         </View>
@@ -259,9 +405,25 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                 accessibilityHint="Navigates to this screen"
               >
                 {'icon' in item ? (
-                  <Ionicons name={item.icon} size={16} color={Colors.textSecondary} />
+                  <Ionicons
+                    name={item.icon}
+                    size={tierValue(responsive.tier, [16, 17, 18, 20, 22, 24, 26])}
+                    color={Colors.textSecondary}
+                  />
                 ) : (
-                  <Image source={item.image} style={styles.tabPillImage} resizeMode="cover" accessible={false} />
+                  <Image
+                    source={item.image}
+                    style={[
+                      styles.tabPillImage,
+                      {
+                        width: tabPillIconSize,
+                        height: tabPillIconSize,
+                        borderRadius: Math.round(tabPillIconSize * 0.28),
+                      },
+                    ]}
+                    resizeMode="cover"
+                    accessible={false}
+                  />
                 )}
               </Pressable>
             ))}
@@ -284,6 +446,11 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                 <View
                   style={[
                     styles.stepIcon,
+                    {
+                      width: stepIconSize,
+                      height: stepIconSize,
+                      borderRadius: Math.round(stepIconSize * 0.32),
+                    },
                     step.iconImage
                       ? styles.stepIconImageWrap
                       : { backgroundColor: step.accent + '22', borderColor: step.accent + '55' },
@@ -292,12 +459,15 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                   {step.iconImage ? (
                     <Image
                       source={step.iconImage}
-                      style={styles.stepIconImage}
+                      style={[
+                        styles.stepIconImage,
+                        { width: stepIconSize, height: stepIconSize },
+                      ]}
                       resizeMode="cover"
                       accessible={false}
                     />
                   ) : (
-                    <Ionicons name={step.icon} size={18} color={step.accent} />
+                    <Ionicons name={step.icon} size={scaledIconSize(11, responsive)} color={step.accent} />
                   )}
                 </View>
                 <View style={styles.stepCopy}>
@@ -306,7 +476,7 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                 </View>
                 <Ionicons
                   name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={18}
+                  size={scaledIconSize(11, responsive)}
                   color={Colors.textTertiary}
                 />
               </Pressable>
@@ -321,6 +491,41 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                     ))}
                   </View>
 
+                  {step.showQuickStart && (
+                    <SnippetFrame>
+                      <Text style={styles.snippetTitle}>60-second workflow</Text>
+                      <Text style={styles.workflowLine}>1. Add lyrics + BPM in Lyrics.</Text>
+                      <Text style={styles.workflowLine}>2. (Optional) Warm Up or Mindfulness.</Text>
+                      <Text style={styles.workflowLine}>3. Record in Sing with count-in/metronome.</Text>
+                      <Text style={styles.workflowLine}>4. Open Session Review and Practice Loop.</Text>
+                      <Text style={styles.workflowLine}>5. Run EasePocket drills for timing polish.</Text>
+                    </SnippetFrame>
+                  )}
+
+                  {step.id === 'sing' && (
+                    <IconTiles
+                      title="Sing controls"
+                      items={[
+                        {
+                          label: 'Record',
+                          source: require('@/assets/images/record_icon.png'),
+                        },
+                        {
+                          label: 'Stop',
+                          source: require('@/assets/images/Stop_icon.png'),
+                        },
+                        {
+                          label: 'Metronome',
+                          source: require('@/assets/images/metronome_icon.png'),
+                        },
+                        {
+                          label: 'Marker',
+                          source: require('@/assets/images/flag_icon.png'),
+                        },
+                      ]}
+                    />
+                  )}
+
                   {step.id === 'profile' && (
                     <IconTiles
                       title="Profile icons"
@@ -328,6 +533,14 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                         {
                           label: 'Live mode',
                           source: require('@/assets/images/icon-set/Live_mode.png'),
+                        },
+                        {
+                          label: 'Lyrics speed',
+                          source: require('@/assets/images/lyrics_flow_speed_icon.png'),
+                        },
+                        {
+                          label: 'Count-in',
+                          source: require('@/assets/images/count_in_icon.png'),
                         },
                         {
                           label: 'Feedback',
@@ -341,18 +554,46 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                           label: 'Lyrics sync',
                           source: require('@/assets/images/icon-set/Lyrics_sync.png'),
                         },
+                        {
+                          label: 'About',
+                          source: require('@/assets/images/about_icon.png'),
+                        },
+                      ]}
+                    />
+                  )}
+
+                  {step.id === 'easepocket' && (
+                    <IconTiles
+                      title="EasePocket controls"
+                      items={[
+                        {
+                          label: 'BPM',
+                          source: require('@/assets/images/bpm_icon.png'),
+                        },
+                        {
+                          label: '2 beats',
+                          source: require('@/assets/images/two_beats.png'),
+                        },
+                        {
+                          label: '4 beats',
+                          source: require('@/assets/images/four_beats.png'),
+                        },
+                        {
+                          label: 'Trainer',
+                          source: require('@/assets/images/EasePocket.png'),
+                        },
                       ]}
                     />
                   )}
 
                   {step.showWarmupIcons && (
                     <SnippetFrame>
-                      <Text style={styles.snippetTitle}>Warm-up shortcuts</Text>
+                      <Text style={styles.snippetTitle}>Quick shortcuts</Text>
                       <View style={styles.warmupRow}>
                         <View style={styles.warmupItem}>
                           <Image
                             source={require('@/assets/images/warmup-icon.png')}
-                            style={styles.warmupIcon}
+                            style={[styles.warmupIcon, { width: warmupIconSize, height: warmupIconSize }]}
                             accessibilityRole="image"
                             accessibilityLabel="Warm up shortcut icon"
                           />
@@ -361,18 +602,27 @@ export default function HowToUseEaseVerse({ onNavigate }: { onNavigate: (route: 
                         <View style={styles.warmupItem}>
                           <Image
                             source={require('@/assets/images/mindfulness-icon.png')}
-                            style={styles.warmupIcon}
+                            style={[styles.warmupIcon, { width: warmupIconSize, height: warmupIconSize }]}
                             accessibilityRole="image"
                             accessibilityLabel="Mindfulness shortcut icon"
                           />
                           <Text style={styles.warmupText}>Mindfulness</Text>
+                        </View>
+                        <View style={styles.warmupItem}>
+                          <Image
+                            source={require('@/assets/images/EasePocket.png')}
+                            style={[styles.warmupIcon, { width: warmupIconSize, height: warmupIconSize }]}
+                            accessibilityRole="image"
+                            accessibilityLabel="EasePocket timing trainer icon"
+                          />
+                          <Text style={styles.warmupText}>EasePocket</Text>
                         </View>
                       </View>
                     </SnippetFrame>
                   )}
 
                   <SnippetFrame>
-                    <Text style={styles.snippetTitle}>Icon legend</Text>
+                    <Text style={styles.snippetTitle}>What each icon means</Text>
                     <Legend items={step.legend} />
                   </SnippetFrame>
 
@@ -541,6 +791,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: 'Inter_400Regular',
   },
+  workflowLine: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Inter_500Medium',
+  },
   snippetTitle: {
     color: Colors.textSecondary,
     fontSize: 12,
@@ -551,6 +807,7 @@ const styles = StyleSheet.create({
   warmupRow: {
     flexDirection: 'row',
     gap: 14,
+    flexWrap: 'wrap',
   },
   warmupItem: {
     flexDirection: 'row',
@@ -562,7 +819,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderGlass,
     backgroundColor: 'rgba(255,255,255,0.02)',
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 140,
     minHeight: 44,
   },
   warmupIcon: {

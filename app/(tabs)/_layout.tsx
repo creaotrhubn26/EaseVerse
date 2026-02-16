@@ -2,9 +2,17 @@ import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
-import { Image, Platform, StyleSheet, View } from "react-native";
-import React from "react";
+import { Platform, StyleSheet, View, type ImageSourcePropType } from "react-native";
+import React, { useEffect } from "react";
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import Colors from "@/constants/colors";
+import { useResponsiveLayout } from "@/lib/responsive";
 
 const tabIconSources = {
   sing: require("@/assets/images/icon-set/Singing.png"),
@@ -12,6 +20,76 @@ const tabIconSources = {
   sessions: require("@/assets/images/icon-set/sessions.png"),
   profile: require("@/assets/images/icon-set/Profile.png"),
 } as const;
+
+function AnimatedTabIcon({
+  source,
+  focused,
+  size,
+}: {
+  source: ImageSourcePropType;
+  focused: boolean;
+  size: number;
+}) {
+  const focusProgress = useSharedValue(focused ? 1 : 0);
+
+  useEffect(() => {
+    focusProgress.value = withTiming(focused ? 1 : 0, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [focusProgress, focused]);
+
+  const wrapStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(focusProgress.value, [0, 1], [0, -2]) },
+      { scale: interpolate(focusProgress.value, [0, 1], [1, 1.08]) },
+    ],
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(focusProgress.value, [0, 1], [0, 0.7]),
+    transform: [{ scale: interpolate(focusProgress.value, [0, 1], [0.92, 1.06]) }],
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.tabIconWrap,
+        {
+          width: size + 14,
+          height: size + 14,
+          borderRadius: Math.round((size + 14) * 0.36),
+        },
+        wrapStyle,
+      ]}
+    >
+      <Animated.View
+        style={[
+          styles.tabIconGlow,
+          {
+            width: size + 4,
+            height: size + 4,
+            borderRadius: Math.round((size + 4) * 0.34),
+          },
+          glowStyle,
+        ]}
+      />
+      <Animated.Image
+        source={source}
+        style={[
+          styles.tabIcon,
+          {
+            width: size,
+            height: size,
+            opacity: focused ? 1 : 0.6,
+          },
+        ]}
+        resizeMode="contain"
+        accessible={false}
+      />
+    </Animated.View>
+  );
+}
 
 function NativeTabLayout() {
   return (
@@ -39,6 +117,8 @@ function NativeTabLayout() {
 function ClassicTabLayout() {
   const isWeb = Platform.OS === "web";
   const isIOS = Platform.OS === "ios";
+  const responsive = useResponsiveLayout();
+  const tabIconSize = responsive.navIconSize;
 
   return (
     <Tabs
@@ -57,7 +137,7 @@ function ClassicTabLayout() {
           borderTopWidth: isWeb ? 1 : 0,
           borderTopColor: Colors.borderGlass,
           elevation: 0,
-          ...(isWeb ? { height: 84 } : {}),
+          ...(isWeb ? { height: responsive.navBarHeight } : {}),
         },
         tabBarBackground: () =>
           isIOS ? (
@@ -81,11 +161,10 @@ function ClassicTabLayout() {
         options={{
           title: "Sing",
           tabBarIcon: ({ focused }) => (
-            <Image
+            <AnimatedTabIcon
               source={tabIconSources.sing}
-              style={[styles.tabIcon, { opacity: focused ? 1 : 0.55 }]}
-              resizeMode="cover"
-              accessible={false}
+              focused={focused}
+              size={tabIconSize}
             />
           ),
         }}
@@ -95,11 +174,10 @@ function ClassicTabLayout() {
         options={{
           title: "Lyrics",
           tabBarIcon: ({ focused }) => (
-            <Image
+            <AnimatedTabIcon
               source={tabIconSources.lyrics}
-              style={[styles.tabIcon, { opacity: focused ? 1 : 0.55 }]}
-              resizeMode="cover"
-              accessible={false}
+              focused={focused}
+              size={tabIconSize}
             />
           ),
         }}
@@ -109,11 +187,10 @@ function ClassicTabLayout() {
         options={{
           title: "Sessions",
           tabBarIcon: ({ focused }) => (
-            <Image
+            <AnimatedTabIcon
               source={tabIconSources.sessions}
-              style={[styles.tabIcon, { opacity: focused ? 1 : 0.55 }]}
-              resizeMode="cover"
-              accessible={false}
+              focused={focused}
+              size={tabIconSize}
             />
           ),
         }}
@@ -123,11 +200,10 @@ function ClassicTabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ focused }) => (
-            <Image
+            <AnimatedTabIcon
               source={tabIconSources.profile}
-              style={[styles.tabIcon, { opacity: focused ? 1 : 0.55 }]}
-              resizeMode="cover"
-              accessible={false}
+              focused={focused}
+              size={tabIconSize}
             />
           ),
         }}
@@ -144,9 +220,13 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  tabIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
+  tabIconWrap: {
+    alignItems: "center",
+    justifyContent: "center",
   },
+  tabIconGlow: {
+    position: "absolute",
+    backgroundColor: Colors.accentGlow,
+  },
+  tabIcon: {},
 });

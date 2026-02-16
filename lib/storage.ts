@@ -5,6 +5,35 @@ const SONGS_KEY = '@lyricflow_songs';
 const SESSIONS_KEY = '@lyricflow_sessions';
 const SETTINGS_KEY = '@lyricflow_settings';
 const LYRICS_SNAPSHOTS_KEY = '@easeverse_lyrics_snapshots';
+const EASEPOCKET_PREFS_KEY = '@easeverse_easepocket_prefs';
+const EASEPOCKET_HISTORY_KEY = '@easeverse_easepocket_history';
+const LEARNING_USER_ID_KEY = '@easeverse_learning_user_id';
+
+export type EasePocketMode = 'subdivision' | 'silent' | 'consonant' | 'pocket' | 'slow';
+export type EasePocketGrid = 'beat' | '8th' | '16th';
+
+export type EasePocketPrefs = {
+  grid: EasePocketGrid;
+  beatsPerBar: 2 | 4;
+  lastBpmOverride?: number;
+};
+
+export type EasePocketHistoryItem = {
+  id: string;
+  mode: EasePocketMode;
+  createdAt: number;
+  bpm: number;
+  grid: EasePocketGrid;
+  beatsPerBar: 2 | 4;
+  label: string;
+  stats: {
+    eventCount: number;
+    onTimePct: number;
+    meanAbsMs: number;
+    stdDevMs: number;
+    avgOffsetMs: number;
+  };
+};
 
 export type LyricsSnapshotRecord = {
   lyrics: string;
@@ -157,6 +186,60 @@ export async function saveLyricsSnapshots(
   await AsyncStorage.setItem(LYRICS_SNAPSHOTS_KEY, JSON.stringify(snapshots));
 }
 
+const defaultEasePocketPrefs: EasePocketPrefs = {
+  grid: '16th',
+  beatsPerBar: 4,
+};
+
+export async function getEasePocketPrefs(): Promise<EasePocketPrefs> {
+  const data = await AsyncStorage.getItem(EASEPOCKET_PREFS_KEY);
+  if (!data) {
+    return defaultEasePocketPrefs;
+  }
+  const parsed = safeParseJson(data);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    await AsyncStorage.removeItem(EASEPOCKET_PREFS_KEY);
+    return defaultEasePocketPrefs;
+  }
+  return { ...defaultEasePocketPrefs, ...(parsed as Partial<EasePocketPrefs>) };
+}
+
+export async function saveEasePocketPrefs(prefs: EasePocketPrefs): Promise<void> {
+  await AsyncStorage.setItem(EASEPOCKET_PREFS_KEY, JSON.stringify(prefs));
+}
+
+export async function getEasePocketHistory(): Promise<EasePocketHistoryItem[]> {
+  const data = await AsyncStorage.getItem(EASEPOCKET_HISTORY_KEY);
+  if (!data) {
+    return [];
+  }
+  const parsed = safeParseJson(data);
+  if (!Array.isArray(parsed)) {
+    await AsyncStorage.removeItem(EASEPOCKET_HISTORY_KEY);
+    return [];
+  }
+  return parsed as EasePocketHistoryItem[];
+}
+
+export async function addEasePocketHistoryItem(item: EasePocketHistoryItem): Promise<void> {
+  const history = await getEasePocketHistory();
+  history.unshift(item);
+  // Keep history bounded so AsyncStorage doesn't grow indefinitely.
+  const capped = history.slice(0, 80);
+  await AsyncStorage.setItem(EASEPOCKET_HISTORY_KEY, JSON.stringify(capped));
+}
+
 export function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+}
+
+export async function getOrCreateLearningUserId(): Promise<string> {
+  const existing = await AsyncStorage.getItem(LEARNING_USER_ID_KEY);
+  if (existing && existing.trim().length > 0) {
+    return existing.trim();
+  }
+
+  const next = `evu_${generateId()}`;
+  await AsyncStorage.setItem(LEARNING_USER_ID_KEY, next);
+  return next;
 }

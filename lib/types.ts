@@ -14,7 +14,14 @@ export interface LyricLine {
 
 export interface SongSection {
   id: string;
-  type: 'verse' | 'chorus' | 'bridge' | 'intro' | 'outro';
+  type:
+    | 'verse'
+    | 'pre-chorus'
+    | 'chorus'
+    | 'bridge'
+    | 'final-chorus'
+    | 'intro'
+    | 'outro';
   label: string;
   lines: string[];
 }
@@ -50,6 +57,7 @@ export interface Session {
   favorite: boolean;
   insights: SessionInsight;
   lyrics: string;
+  transcript?: string;
 }
 
 export type SignalQuality = 'good' | 'ok' | 'poor';

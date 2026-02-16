@@ -16,17 +16,27 @@ import Colors from '@/constants/colors';
 import SwipeableSessionCard from '@/components/SwipeableSessionCard';
 import LogoHeader from '@/components/LogoHeader';
 import { useApp } from '@/lib/AppContext';
+import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
 type FilterKey = 'latest' | 'best' | 'flagged';
 
 export default function SessionsScreen() {
   const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
   const { sessions, toggleFavorite, removeSession } = useApp();
   const [filter, setFilter] = useState<FilterKey>('latest');
   const [refreshing, setRefreshing] = useState(false);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+  const horizontalInset = responsive.contentPadding;
+  const contentMaxWidth = responsive.contentMaxWidth;
+  const sectionWrapStyle = useMemo(
+    () => ({ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }),
+    [contentMaxWidth]
+  );
+  const emptyIconSize = tierValue(responsive.tier, [40, 42, 44, 48, 54, 62, 72]);
+  const filterIconSize = scaledIconSize(10, responsive);
 
   const filteredSessions = useMemo(() => {
     let list = [...sessions];
@@ -61,7 +71,7 @@ export default function SessionsScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <LogoHeader />
-      <View style={styles.header}>
+      <View style={[styles.header, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Text style={styles.headerTitle} accessibilityRole="header">Sessions</Text>
         <View style={styles.headerStats}>
           <View style={styles.statPill}>
@@ -77,7 +87,7 @@ export default function SessionsScreen() {
         </View>
       </View>
 
-      <View style={styles.filterRow}>
+      <View style={[styles.filterRow, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         {filters.map(f => (
           <Pressable
             key={f.key}
@@ -93,7 +103,7 @@ export default function SessionsScreen() {
           >
             <Ionicons
               name={f.icon}
-              size={14}
+              size={filterIconSize}
               color={filter === f.key ? Colors.gradientStart : Colors.textTertiary}
             />
             <Text
@@ -113,7 +123,10 @@ export default function SessionsScreen() {
         keyExtractor={item => item.id}
         scrollEnabled={filteredSessions.length > 0}
         contentContainerStyle={{
-          paddingHorizontal: 20,
+          width: '100%' as const,
+          maxWidth: contentMaxWidth,
+          alignSelf: 'center',
+          paddingHorizontal: horizontalInset,
           paddingBottom: Math.max(insets.bottom, webBottomInset) + 100,
           gap: 10,
         }}
@@ -136,7 +149,7 @@ export default function SessionsScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <View style={styles.emptyIconContainer}>
-              <Ionicons name="mic-off-outline" size={44} color={Colors.textTertiary} />
+              <Ionicons name="mic-off-outline" size={emptyIconSize} color={Colors.textTertiary} />
             </View>
             <Text style={styles.emptyTitle}>No sessions yet</Text>
             <Text style={styles.emptySubtext}>

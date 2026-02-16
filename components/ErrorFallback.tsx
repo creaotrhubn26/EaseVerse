@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import { scaledIconSize, useResponsiveLayout } from "@/lib/responsive";
 
 export type ErrorFallbackProps = {
   error: Error;
@@ -22,6 +23,9 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
+  const responsive = useResponsiveLayout();
+  const topIconSize = scaledIconSize(12, responsive);
+  const closeIconSize = scaledIconSize(14, responsive);
 
   const theme = {
     background: isDark ? "#000000" : "#FFFFFF",
@@ -73,7 +77,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
             },
           ]}
         >
-          <Feather name="alert-circle" size={20} color={theme.text} />
+          <Feather name="alert-circle" size={topIconSize} color={theme.text} />
         </Pressable>
       ) : null}
 
@@ -139,7 +143,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                     { opacity: pressed ? 0.6 : 1 },
                   ]}
                 >
-                  <Feather name="x" size={24} color={theme.text} />
+                  <Feather name="x" size={closeIconSize} color={theme.text} />
                 </Pressable>
               </View>
 

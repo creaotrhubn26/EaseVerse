@@ -8,12 +8,27 @@ import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { elevenLabsTextToSpeech } from "./elevenlabs";
 import {
+  EasePocketWorkerTaskError,
+  scoreConsonantPrecisionInWorker,
+} from "./easepocket/worker";
+import {
   textToSpeech,
   openai,
   speechToText,
+  ensureWavFormat,
   ensureCompatibleFormat,
   hasOpenAiCredentials,
 } from "./replit_integrations/audio/client";
+import {
+  createLearningStore,
+  normalizeLearningEasePocketInput,
+  normalizeLearningSessionInput,
+  resolveLearningUserId,
+} from "./learning/store";
+import {
+  createCollabLyricsRealtimeHub,
+  type CollabLyricsRealtimeHub,
+} from "./collab-ws";
 
 const supportedVoices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] as const;
 const voiceSchema = z.enum(supportedVoices);
@@ -56,6 +71,14 @@ const sessionScoreRequestSchema = z.object({
   accentGoal: z.string().trim().min(1).max(32).optional(),
 });
 
+const easePocketConsonantRequestSchema = z.object({
+  audioBase64: z.string().min(50).max(15_000_000),
+  bpm: z.number().int().min(40).max(300),
+  grid: z.enum(["beat", "8th", "16th"]).optional(),
+  toleranceMs: z.number().int().min(5).max(60).optional(),
+  maxEvents: z.number().int().min(20).max(300).optional(),
+});
+
 const bpmSchema = z.preprocess((value) => {
   if (value === undefined) {
     return undefined;
@@ -86,6 +109,48 @@ const collabLyricsUpsertSchema = z.object({
   updatedAt: z.string().datetime().optional(),
 });
 
+const learningSessionIngestSchema = z.object({
+  userId: z.string().trim().min(1).max(120).optional(),
+  sessionId: z.string().trim().min(1).max(120),
+  songId: z.string().trim().max(120).optional(),
+  genre: z.string().trim().max(48).optional(),
+  title: z.string().trim().max(240).optional(),
+  createdAt: z.string().datetime().optional(),
+  durationSeconds: z.number().int().min(1).max(3600),
+  lyrics: z.string().trim().min(1).max(20000),
+  transcript: z.string().max(50000).optional(),
+  insights: z.object({
+    textAccuracy: z.number().min(0).max(100),
+    pronunciationClarity: z.number().min(0).max(100),
+    timingConsistency: z.enum(["low", "medium", "high"]),
+    topToFix: z
+      .array(
+        z.object({
+          word: z.string().trim().min(1).max(80),
+          reason: z.string().trim().min(1).max(220),
+        })
+      )
+      .max(12),
+  }),
+});
+
+const learningEasePocketIngestSchema = z.object({
+  userId: z.string().trim().min(1).max(120).optional(),
+  eventId: z.string().trim().min(1).max(120),
+  mode: z.enum(["subdivision", "silent", "consonant", "pocket", "slow"]),
+  bpm: z.number().int().min(40).max(300),
+  grid: z.enum(["beat", "8th", "16th"]),
+  beatsPerBar: z.union([z.literal(2), z.literal(4)]),
+  createdAt: z.string().datetime().optional(),
+  stats: z.object({
+    eventCount: z.number().int().min(0).max(5000),
+    onTimePct: z.number().min(0).max(100),
+    meanAbsMs: z.number().min(0).max(2000),
+    stdDevMs: z.number().min(0).max(2000),
+    avgOffsetMs: z.number().min(-2000).max(2000),
+  }),
+});
+
 type CollabLyricsRecord = {
   externalTrackId: string;
   projectId?: string;
@@ -109,6 +174,7 @@ const collabLyricsPool = collabLyricsDbUrl
     })
   : null;
 let collabLyricsTableReadyPromise: Promise<void> | null = null;
+const learningStore = createLearningStore(collabLyricsPool);
 
 function collabRecordTimeMs(record: CollabLyricsRecord): number {
   const updatedAtMs = Date.parse(record.updatedAt);
@@ -126,6 +192,8 @@ function sortCollabLyricsRecords(records: CollabLyricsRecord[]): CollabLyricsRec
 type RateWindowState = { count: number; windowStart: number };
 const pronounceRateWindow = new Map<string, RateWindowState>();
 const scoringRateWindow = new Map<string, RateWindowState>();
+const easePocketRateWindow = new Map<string, RateWindowState>();
+const learningRateWindow = new Map<string, RateWindowState>();
 const rateLimiterCleanupState = new WeakMap<Map<string, RateWindowState>, number>();
 const RATE_LIMITER_CLEANUP_INTERVAL_MS = 5 * 60_000;
 
@@ -394,6 +462,24 @@ function getClientKey(req: Request): string {
   return req.ip || req.socket.remoteAddress || "unknown";
 }
 
+function getLearningUserId(
+  req: Request,
+  fallbackClientKey: string,
+  bodyUserId?: string
+): string {
+  const headerUserId =
+    req.header("x-easeverse-user-id") || req.header("x-user-id") || undefined;
+  const queryUserId =
+    typeof req.query.userId === "string" ? req.query.userId.trim() : undefined;
+
+  return resolveLearningUserId({
+    bodyUserId,
+    headerUserId,
+    queryUserId,
+    fallbackKey: fallbackClientKey,
+  });
+}
+
 function pruneRateWindow(
   bucket: Map<string, RateWindowState>,
   windowMs: number,
@@ -496,6 +582,11 @@ function getApiCatalog(req: Request) {
       },
       {
         method: "POST",
+        path: "/api/v1/easepocket/consonant-score",
+        description: "EasePocket consonant precision timing score (ms-aligned)",
+      },
+      {
+        method: "POST",
         path: "/api/v1/collab/lyrics",
         description: "Upsert collaborative lyric draft by external track id",
       },
@@ -503,6 +594,37 @@ function getApiCatalog(req: Request) {
         method: "GET",
         path: "/api/v1/collab/lyrics/:externalTrackId",
         description: "Get latest collaborative lyric draft for a track",
+      },
+      {
+        method: "WS",
+        path: "/api/v1/ws",
+        description:
+          "Realtime collaborative lyric updates (query filters: source, projectId, externalTrackId)",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/learning/session",
+        description: "Persist singing session outcomes for adaptive coaching",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/learning/easepocket",
+        description: "Persist EasePocket timing drill outcomes for adaptive coaching",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/learning/profile",
+        description: "Get a user learning profile snapshot",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/learning/recommendations",
+        description: "Get personalized practice recommendations",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/learning/global-model",
+        description: "Get aggregate global difficulty + tip effectiveness model",
       },
     ],
   };
@@ -565,6 +687,12 @@ function getOpenApiSpec(req: Request) {
           responses: { "200": { description: "Session scoring result" } },
         },
       },
+      "/api/v1/easepocket/consonant-score": {
+        post: {
+          summary: "Score consonant transients against a tempo grid (EasePocket)",
+          responses: { "200": { description: "Consonant timing score" } },
+        },
+      },
       "/api/v1/collab/lyrics": {
         get: {
           summary: "List collaborative lyric drafts",
@@ -582,6 +710,53 @@ function getOpenApiSpec(req: Request) {
             "200": { description: "Lyric draft found" },
             "404": { description: "Lyric draft not found" },
           },
+        },
+      },
+      "/api/v1/ws": {
+        get: {
+          summary: "WebSocket upgrade endpoint for collaborative lyric updates",
+          description:
+            "Upgrade this endpoint to a WebSocket connection for realtime lyric update events.",
+          responses: {
+            "101": { description: "Switching Protocols" },
+            "401": { description: "Unauthorized" },
+          },
+        },
+      },
+      "/api/v1/learning/session": {
+        post: {
+          summary: "Ingest a scored singing session for ML-driven coaching",
+          responses: { "200": { description: "Learning ingest result" } },
+        },
+      },
+      "/api/v1/learning/easepocket": {
+        post: {
+          summary: "Ingest an EasePocket drill result for timing learning",
+          responses: { "200": { description: "Learning ingest result" } },
+        },
+      },
+      "/api/v1/learning/profile": {
+        get: {
+          summary: "Get adaptive coaching profile for the requesting user",
+          responses: {
+            "200": { description: "Learning profile result" },
+            "404": { description: "Profile not found" },
+          },
+        },
+      },
+      "/api/v1/learning/recommendations": {
+        get: {
+          summary: "Get personalized practice recommendations",
+          responses: {
+            "200": { description: "Recommendations result" },
+            "404": { description: "Recommendations unavailable" },
+          },
+        },
+      },
+      "/api/v1/learning/global-model": {
+        get: {
+          summary: "Get global word difficulty and tip effectiveness model",
+          responses: { "200": { description: "Global model result" } },
         },
       },
     },
@@ -604,6 +779,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerChatRoutes(app, "/api/chat");
   registerAudioRoutes(app, "/api/audio");
   registerImageRoutes(app, "/api/image");
+  let collabRealtimeHub: CollabLyricsRealtimeHub | null = null;
 
   app.use("/api/v1", (req: Request, res: Response, next) => {
     if (!enforceOptionalApiKey(req, res, "EXTERNAL_API_KEY")) {
@@ -805,6 +981,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
+  const handleEasePocketConsonantScore = async (req: Request, res: Response) => {
+    try {
+      const clientKey = getClientKey(req);
+      if (isRateLimited(easePocketRateWindow, clientKey, 20, 60_000)) {
+        return res.status(429).json({ error: "Rate limit exceeded. Try again shortly." });
+      }
+
+      const parsedBody = easePocketConsonantRequestSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+
+      const { audioBase64, bpm, grid, toleranceMs, maxEvents } = parsedBody.data;
+      let wavBuffer: Buffer;
+      try {
+        const rawAudio = Buffer.from(audioBase64, "base64");
+        wavBuffer = await ensureWavFormat(rawAudio);
+      } catch {
+        return res.status(400).json({
+          error:
+            "Invalid or unsupported audio input. Record a short take and retry.",
+        });
+      }
+
+      const result = await scoreConsonantPrecisionInWorker({
+        wavBuffer,
+        bpm,
+        grid: grid ?? "16th",
+        toleranceMs,
+        maxEvents,
+      });
+
+      return res.json({
+        ok: true,
+        durationSeconds: result.durationSeconds,
+        ...result.score,
+      });
+    } catch (error) {
+      if (error instanceof EasePocketWorkerTaskError) {
+        const status =
+          error.code === "invalid_audio" ||
+          error.code === "too_short" ||
+          error.code === "too_long"
+            ? 400
+            : 503;
+        return res.status(status).json({ error: error.message });
+      }
+      console.error("EasePocket consonant score error:", error);
+      return res.status(500).json({ error: "Failed to score consonant timing" });
+    }
+  };
+
   const handleCollabLyricsUpsert = async (req: Request, res: Response) => {
     try {
       const parsedBody = collabLyricsUpsertSchema.safeParse(req.body);
@@ -829,6 +1057,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const persistedRecord = await upsertCollabLyricsRecord(draftRecord);
+      collabRealtimeHub?.publish({
+        externalTrackId: persistedRecord.externalTrackId,
+        title: persistedRecord.title,
+        projectId: persistedRecord.projectId,
+        source: persistedRecord.source,
+        artist: persistedRecord.artist,
+        bpm: persistedRecord.bpm,
+        updatedAt: persistedRecord.updatedAt,
+        collaborators: persistedRecord.collaborators,
+      });
       return res.json({
         ok: true,
         storage: collabLyricsPool ? "postgres" : "memory",
@@ -837,6 +1075,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Collab lyrics upsert error:", error);
       return res.status(500).json({ error: "Failed to upsert lyric draft" });
+    }
+  };
+
+  const handleLearningSessionIngest = async (req: Request, res: Response) => {
+    try {
+      const clientKey = getClientKey(req);
+      if (isRateLimited(learningRateWindow, clientKey, 80, 60_000)) {
+        return res.status(429).json({ error: "Rate limit exceeded. Try again shortly." });
+      }
+
+      const parsedBody = learningSessionIngestSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+
+      const userId = getLearningUserId(req, clientKey, parsedBody.data.userId);
+      const normalized = normalizeLearningSessionInput({
+        userId,
+        sessionId: parsedBody.data.sessionId,
+        songId: parsedBody.data.songId,
+        genre: parsedBody.data.genre,
+        title: parsedBody.data.title,
+        createdAt: parsedBody.data.createdAt ?? new Date().toISOString(),
+        durationSeconds: parsedBody.data.durationSeconds,
+        lyrics: parsedBody.data.lyrics,
+        transcript: parsedBody.data.transcript,
+        insights: parsedBody.data.insights,
+      });
+
+      const result = await learningStore.ingestSession(normalized);
+      return res.json({ ok: true, ...result });
+    } catch (error) {
+      console.error("Learning session ingest error:", error);
+      return res.status(500).json({ error: "Failed to ingest learning session" });
+    }
+  };
+
+  const handleLearningEasePocketIngest = async (req: Request, res: Response) => {
+    try {
+      const clientKey = getClientKey(req);
+      if (isRateLimited(learningRateWindow, clientKey, 80, 60_000)) {
+        return res.status(429).json({ error: "Rate limit exceeded. Try again shortly." });
+      }
+
+      const parsedBody = learningEasePocketIngestSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+
+      const userId = getLearningUserId(req, clientKey, parsedBody.data.userId);
+      const normalized = normalizeLearningEasePocketInput({
+        userId,
+        eventId: parsedBody.data.eventId,
+        mode: parsedBody.data.mode,
+        bpm: parsedBody.data.bpm,
+        grid: parsedBody.data.grid,
+        beatsPerBar: parsedBody.data.beatsPerBar,
+        createdAt: parsedBody.data.createdAt ?? new Date().toISOString(),
+        stats: parsedBody.data.stats,
+      });
+
+      const result = await learningStore.ingestEasePocket(normalized);
+      return res.json({ ok: true, ...result });
+    } catch (error) {
+      console.error("Learning EasePocket ingest error:", error);
+      return res.status(500).json({ error: "Failed to ingest EasePocket learning event" });
+    }
+  };
+
+  const handleLearningProfileGet = async (req: Request, res: Response) => {
+    try {
+      const clientKey = getClientKey(req);
+      const userId = getLearningUserId(req, clientKey);
+      const profile = await learningStore.getUserProfile(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "Learning profile not found" });
+      }
+      return res.json({ ok: true, userId, profile });
+    } catch (error) {
+      console.error("Learning profile error:", error);
+      return res.status(500).json({ error: "Failed to fetch learning profile" });
+    }
+  };
+
+  const handleLearningRecommendationsGet = async (req: Request, res: Response) => {
+    try {
+      const clientKey = getClientKey(req);
+      const userId = getLearningUserId(req, clientKey);
+      const recommendations = await learningStore.getRecommendations(userId);
+      if (!recommendations) {
+        return res.status(404).json({ error: "Recommendations unavailable for this user" });
+      }
+      return res.json({ ok: true, userId, recommendations });
+    } catch (error) {
+      console.error("Learning recommendations error:", error);
+      return res.status(500).json({ error: "Failed to fetch recommendations" });
+    }
+  };
+
+  const handleLearningGlobalModelGet = async (req: Request, res: Response) => {
+    try {
+      const parsedLimit = Number.parseInt(String(req.query.limit || "20"), 10);
+      const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(100, parsedLimit)) : 20;
+      const model = await learningStore.getGlobalModel(limit);
+      return res.json({
+        ok: true,
+        words: model.words,
+        tips: model.tips,
+      });
+    } catch (error) {
+      console.error("Learning global model error:", error);
+      return res.status(500).json({ error: "Failed to fetch global model" });
     }
   };
 
@@ -908,6 +1258,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/v1/collab/lyrics", handleCollabLyricsUpsert);
+  app.post("/api/v1/learning/session", handleLearningSessionIngest);
+  app.post("/api/v1/learning/easepocket", handleLearningEasePocketIngest);
+  app.get("/api/v1/learning/profile", handleLearningProfileGet);
+  app.get("/api/v1/learning/recommendations", handleLearningRecommendationsGet);
+  app.get("/api/v1/learning/global-model", handleLearningGlobalModelGet);
 
   app.post("/api/tts", handleTts);
   app.post("/api/v1/tts", handleTts);
@@ -928,7 +1283,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     handleSessionScore(req, res, { enforceServiceApiKey: false })
   );
 
+  app.post("/api/v1/easepocket/consonant-score", handleEasePocketConsonantScore);
+
   const httpServer = createServer(app);
+  const allowedRealtimeOrigins = new Set<string>();
+  const allowAllOrigins = process.env.CORS_ALLOW_ALL === "true";
+  const configuredOrigins = process.env.CORS_ALLOW_ORIGINS
+    ? process.env.CORS_ALLOW_ORIGINS.split(",")
+    : [];
+  for (const origin of configuredOrigins) {
+    const trimmed = origin.trim();
+    if (trimmed) {
+      allowedRealtimeOrigins.add(trimmed);
+    }
+  }
+
+  const replitDevDomain = process.env.REPLIT_DEV_DOMAIN?.trim();
+  if (replitDevDomain) {
+    allowedRealtimeOrigins.add(`https://${replitDevDomain}`);
+  }
+  const replitDomains = process.env.REPLIT_DOMAINS
+    ? process.env.REPLIT_DOMAINS.split(",")
+    : [];
+  for (const domain of replitDomains) {
+    const trimmed = domain.trim();
+    if (trimmed) {
+      allowedRealtimeOrigins.add(`https://${trimmed}`);
+    }
+  }
+
+  collabRealtimeHub = createCollabLyricsRealtimeHub({
+    server: httpServer,
+    path: "/api/v1/ws",
+    expectedApiKey: process.env.EXTERNAL_API_KEY?.trim(),
+    allowAllOrigins,
+    allowedOrigins: Array.from(allowedRealtimeOrigins),
+  });
+  httpServer.on("close", () => {
+    collabRealtimeHub?.close();
+    collabRealtimeHub = null;
+  });
 
   return httpServer;
 }

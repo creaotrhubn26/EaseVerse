@@ -151,6 +151,18 @@ export async function ensureCompatibleFormat(
 }
 
 /**
+ * Ensure audio is WAV (used by non-OpenAI DSP pipelines).
+ * Unlike `ensureCompatibleFormat`, this will convert MP3 inputs too.
+ */
+export async function ensureWavFormat(audioBuffer: Buffer): Promise<Buffer> {
+  const detected = detectAudioFormat(audioBuffer);
+  if (detected === "wav") {
+    return audioBuffer;
+  }
+  return await convertToWav(audioBuffer);
+}
+
+/**
  * Voice Chat: User speaks, LLM responds with audio (audio-in, audio-out).
  * Uses gpt-audio model via Replit AI Integrations.
  * Note: Browser records WebM/opus - convert to WAV using ffmpeg before calling this.

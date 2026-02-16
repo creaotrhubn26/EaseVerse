@@ -8,6 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
+import { scaledIconSize, useResponsiveLayout } from '@/lib/responsive';
 
 interface CoachPillProps {
   hint: string | null;
@@ -15,8 +16,10 @@ interface CoachPillProps {
 }
 
 export default function CoachPill({ hint, visible }: CoachPillProps) {
+  const responsive = useResponsiveLayout();
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(8);
+  const iconSize = scaledIconSize(12, responsive);
 
   useEffect(() => {
     if (visible && hint) {
@@ -38,7 +41,7 @@ export default function CoachPill({ hint, visible }: CoachPillProps) {
   return (
     <Animated.View style={[styles.pill, animStyle]}>
       <View style={styles.iconWrap}>
-        <Feather name="zap" size={14} color={Colors.gradientStart} />
+        <Feather name="zap" size={iconSize} color={Colors.gradientStart} />
       </View>
       <Text style={styles.text}>{hint}</Text>
     </Animated.View>

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AudioModule, useAudioPlayer } from 'expo-audio';
 import Colors from '@/constants/colors';
 import type { ComponentProps } from 'react';
+import { scaledIconSize, useResponsiveLayout } from '@/lib/responsive';
 
 type ToastVariant = 'success' | 'error' | 'info';
 type ToastSound = 'none' | 'lyricsUpdated';
@@ -34,6 +35,7 @@ export default function Toast({
   onHide,
   duration = 2200,
 }: ToastProps) {
+  const responsive = useResponsiveLayout();
   const insets = useSafeAreaInsets();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-20)).current;
@@ -108,6 +110,7 @@ export default function Toast({
   if (!visible) return null;
 
   const config = variantConfig[variant];
+  const iconSize = scaledIconSize(14, responsive);
 
   return (
     <Animated.View
@@ -122,7 +125,7 @@ export default function Toast({
       accessibilityLabel={message}
     >
       <View style={styles.toast}>
-        <Ionicons name={config.icon} size={20} color={config.color} />
+        <Ionicons name={config.icon} size={iconSize} color={config.color} />
         <Text style={styles.message}>{message}</Text>
       </View>
     </Animated.View>

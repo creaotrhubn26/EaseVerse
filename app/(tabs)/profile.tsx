@@ -9,6 +9,7 @@ import {
   Image,
   ActivityIndicator,
   Linking,
+  type ImageSourcePropType,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -296,7 +297,7 @@ function SegmentedControl<T extends string>({
   value,
   onChange,
 }: {
-  options: { key: T; label: string }[];
+  options: { key: T; label: string; iconImage?: ImageSourcePropType }[];
   value: T;
   onChange: (key: T) => void;
 }) {
@@ -315,14 +316,23 @@ function SegmentedControl<T extends string>({
           accessibilityHint="Updates this setting"
           accessibilityState={{ selected: value === opt.key }}
         >
-          <Text
-            style={[
-              styles.segmentText,
-              value === opt.key && styles.segmentTextActive,
-            ]}
-          >
-            {opt.label}
-          </Text>
+          {opt.iconImage ? (
+            <Image
+              source={opt.iconImage}
+              style={[styles.segmentIcon, { opacity: value === opt.key ? 1 : 0.6 }]}
+              resizeMode="contain"
+              accessible={false}
+            />
+          ) : (
+            <Text
+              style={[
+                styles.segmentText,
+                value === opt.key && styles.segmentTextActive,
+              ]}
+            >
+              {opt.label}
+            </Text>
+          )}
         </Pressable>
       ))}
     </View>
@@ -838,8 +848,8 @@ export default function ProfileScreen() {
           <SegmentedControl<string>
             options={[
               { key: '0', label: 'None' },
-              { key: '2', label: '2 beats' },
-              { key: '4', label: '4 beats' },
+              { key: '2', label: '2 beats', iconImage: require('@/assets/images/two_beats.png') },
+              { key: '4', label: '4 beats', iconImage: require('@/assets/images/four_beats.png') },
             ]}
             value={String(settings.countIn)}
             onChange={v => updateSettings({ countIn: Number(v) as 0 | 2 | 4 })}
@@ -1207,11 +1217,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   segmentActive: {
     backgroundColor: Colors.accentSubtle,
     borderWidth: 1,
     borderColor: Colors.accentBorder,
+  },
+  segmentIcon: {
+    width: 44,
+    height: 30,
   },
   segmentText: {
     color: Colors.textTertiary,

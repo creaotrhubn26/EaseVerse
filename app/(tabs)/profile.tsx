@@ -868,8 +868,8 @@ export default function ProfileScreen() {
           </View>
           <SegmentedControl<NarrationVoice>
             options={[
-              { key: 'female', label: 'Female' },
-              { key: 'male', label: 'Male' },
+              { key: 'female', label: 'Female', iconImage: require('@/assets/images/Female.png') },
+              { key: 'male', label: 'Male', iconImage: require('@/assets/images/Male.png') },
             ]}
             value={settings.narrationVoice}
             onChange={(v) => updateSettings({ narrationVoice: v })}

@@ -6,6 +6,15 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
  * @returns {string} The API base URL
  */
 export function getApiUrl(): string {
+  const runtimeOverride = (globalThis as { __E2E_API_BASE__?: string }).__E2E_API_BASE__;
+  if (runtimeOverride) {
+    try {
+      return new URL(runtimeOverride).href;
+    } catch {
+      // Fall through to env resolution.
+    }
+  }
+
   const explicitApiUrl = process.env.EXPO_PUBLIC_API_URL;
   if (explicitApiUrl) {
     try {

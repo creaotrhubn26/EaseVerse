@@ -39,6 +39,38 @@ type CollabRealtimeMessage = {
   type?: string;
 };
 
+const AUTO_LYRICS_SYNC_THROTTLE_MS = 30_000;
+const AUTO_LYRICS_SYNC_THROTTLE_KEY = 'easeverse:autoLyricsSyncLastRunAt';
+
+function loadAutoLyricsSyncLastRunAt(): number {
+  if (typeof window === 'undefined') {
+    return 0;
+  }
+
+  try {
+    const value = window.sessionStorage.getItem(AUTO_LYRICS_SYNC_THROTTLE_KEY);
+    if (!value) {
+      return 0;
+    }
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function persistAutoLyricsSyncLastRunAt(timestampMs: number): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(AUTO_LYRICS_SYNC_THROTTLE_KEY, String(timestampMs));
+  } catch {
+    // Ignore storage persistence failures.
+  }
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [songs, setSongs] = useState<Song[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -55,11 +87,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const sessionsHydratedRef = useRef(false);
   const songsRef = useRef<Song[]>([]);
   const autoLyricsSyncInFlightRef = useRef(false);
   const autoLyricsSyncQueuedRef = useRef(false);
+  const autoLyricsSyncLastRunAtRef = useRef(0);
   const runAutoLyricsSyncRef = useRef<() => void>(() => undefined);
   const apiBaseUrl = useMemo(() => getApiUrl(), []);
+
+  useEffect(() => {
+    autoLyricsSyncLastRunAtRef.current = loadAutoLyricsSyncLastRunAt();
+  }, []);
 
   const queuePersist = useCallback((task: () => Promise<void>) => {
     persistQueueRef.current = persistQueueRef.current
@@ -77,6 +115,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     songsRef.current = songs;
   }, [songs]);
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+    if (!sessionsHydratedRef.current) {
+      sessionsHydratedRef.current = true;
+      return;
+    }
+    void queuePersist(() => Storage.saveSessions(sessions));
+  }, [isLoading, queuePersist, sessions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -277,12 +326,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [updateSong]);
 
   const runAutoLyricsSync = useCallback(() => {
+    const now = Date.now();
+    if (now - autoLyricsSyncLastRunAtRef.current < AUTO_LYRICS_SYNC_THROTTLE_MS) {
+      return;
+    }
+
     if (autoLyricsSyncInFlightRef.current) {
       autoLyricsSyncQueuedRef.current = true;
       return;
     }
 
     autoLyricsSyncInFlightRef.current = true;
+    autoLyricsSyncLastRunAtRef.current = now;
+    persistAutoLyricsSyncLastRunAt(now);
     void (async () => {
       try {
         await syncCollaborativeLyricsInBackground();

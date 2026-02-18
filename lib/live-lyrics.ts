@@ -9,6 +9,17 @@ type WordPosition = {
   text: string;
 };
 
+type ParsedLyrics = {
+  lyrics: string;
+  lines: string[];
+  wordsByLine: string[][];
+  positions: WordPosition[];
+  expectedTokens: string[];
+};
+
+const LYRICS_CACHE_MAX = 6;
+const lyricsCache: ParsedLyrics[] = [];
+
 export type LiveLyricProgress = {
   activeFlatIndex: number;
   activeLineIndex: number;
@@ -21,18 +32,42 @@ function tokenizeWords(text: string): string[] {
   return (text.toLowerCase().match(WORD_RE) || []).filter(Boolean);
 }
 
-function buildWordPositions(lyrics: string): WordPosition[] {
+function parseLyrics(lyrics: string): ParsedLyrics {
+  const cached = lyricsCache.find((entry) => entry.lyrics === lyrics);
+  if (cached) {
+    return cached;
+  }
+
   const lines = lyrics.split('\n').filter((line) => line.trim().length > 0);
+  const wordsByLine = lines.map((line) =>
+    line.split(' ').filter((word) => word.trim().length > 0)
+  );
   const positions: WordPosition[] = [];
 
-  lines.forEach((line, lineIndex) => {
-    const words = line.split(' ').filter((word) => word.trim().length > 0);
+  wordsByLine.forEach((words, lineIndex) => {
     words.forEach((word, wordIndex) => {
       positions.push({ lineIndex, wordIndex, text: word });
     });
   });
 
-  return positions;
+  const expectedTokens = positions
+    .map((position) => tokenizeWords(position.text)[0])
+    .filter(Boolean);
+
+  const parsed: ParsedLyrics = {
+    lyrics,
+    lines,
+    wordsByLine,
+    positions,
+    expectedTokens,
+  };
+
+  lyricsCache.unshift(parsed);
+  if (lyricsCache.length > LYRICS_CACHE_MAX) {
+    lyricsCache.pop();
+  }
+
+  return parsed;
 }
 
 function lowerBound(sorted: number[], target: number): number {
@@ -115,8 +150,9 @@ export function getLiveLyricProgress(
   liveMode: LiveMode,
   followSpeed: LyricsFollowSpeed = 'normal'
 ): LiveLyricProgress {
-  const positions = buildWordPositions(lyrics);
-  const expectedTokens = positions.map((position) => tokenizeWords(position.text)[0]).filter(Boolean);
+  const parsed = parseLyrics(lyrics);
+  const positions = parsed.positions;
+  const expectedTokens = parsed.expectedTokens;
   if (expectedTokens.length === 0) {
     return {
       activeFlatIndex: -1,
@@ -197,11 +233,13 @@ export function buildLiveLyricLines(params: {
   genre?: GenreId;
 }): LyricLine[] {
   const { lyrics, activeFlatIndex, confirmedIndices, genre } = params;
-  const lines = lyrics.split('\n').filter((line) => line.trim().length > 0);
+  const parsed = parseLyrics(lyrics);
+  const lines = parsed.lines;
   let flatIndex = 0;
 
   return lines.map((line, lineIndex) => {
-    const words = line.split(' ').filter((word) => word.trim().length > 0);
+    const words = parsed.wordsByLine[lineIndex] ??
+      line.split(' ').filter((word) => word.trim().length > 0);
     return {
       id: `line-${lineIndex}`,
       words: words.map((word, wordIndex) => {

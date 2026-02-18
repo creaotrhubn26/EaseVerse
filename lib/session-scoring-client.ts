@@ -6,6 +6,13 @@ interface SessionScoringResponse {
   insights: SessionInsight;
 }
 
+export type WhisperStatus = {
+  state: 'idle' | 'loading' | 'ready' | 'error';
+  lastError?: string | null;
+  startedAt?: string | null;
+  readyAt?: string | null;
+};
+
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -70,6 +77,27 @@ export async function analyzeSessionRecording(params: {
     return data;
   } catch (error) {
     console.error('Session scoring request failed:', error);
+    return null;
+  }
+}
+
+export async function fetchWhisperStatus(): Promise<WhisperStatus | null> {
+  try {
+    const url = new URL('/api/v1/whisper/status', getApiUrl());
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: getApiHeaders(),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const data = (await response.json()) as { state?: WhisperStatus['state'] } & WhisperStatus;
+    if (!data?.state) {
+      return null;
+    }
+    return data;
+  } catch (error) {
+    console.warn('Whisper status request failed:', error);
     return null;
   }
 }

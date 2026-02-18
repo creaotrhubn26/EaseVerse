@@ -14,6 +14,7 @@ export interface RecordingState {
   hasPermission: boolean | null;
   audioLevel: number;
   duration: number;
+  error: string | null;
 }
 
 export function useRecording() {
@@ -22,6 +23,7 @@ export function useRecording() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const meteringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const durationRef = useRef(0);
@@ -75,9 +77,15 @@ export function useRecording() {
     try {
       const { granted } = await requestRecordingPermissionsAsync();
       setHasPermission(granted);
+      if (!granted) {
+        setError('Microphone permission is required.');
+      } else {
+        setError(null);
+      }
       return granted;
     } catch {
       setHasPermission(false);
+      setError('Microphone permission is required.');
       return false;
     }
   }, []);
@@ -137,6 +145,7 @@ export function useRecording() {
       setDuration(0);
       setIsRecording(true);
       setIsPaused(false);
+      setError(null);
       startMetering();
       return true;
     } catch (err) {
@@ -153,9 +162,11 @@ export function useRecording() {
         setAudioLevel(0);
         setIsRecording(true);
         setIsPaused(false);
+        setError('Recording unavailable. Live transcript only.');
         startMetering();
         return true;
       }
+      setError('Recording failed to start. Check microphone access.');
       return false;
     }
   }, [hasPermission, requestPermission, startMetering, recorder]);
@@ -176,6 +187,7 @@ export function useRecording() {
       setAudioLevel(0);
     } catch (err) {
       console.error('Failed to pause recording:', err);
+      setError('Recording pause failed.');
     }
   }, [stopMetering, recorder]);
 
@@ -193,6 +205,7 @@ export function useRecording() {
       startMetering();
     } catch (err) {
       console.error('Failed to resume recording:', err);
+      setError('Recording resume failed.');
     }
   }, [startMetering, recorder]);
 
@@ -230,6 +243,7 @@ export function useRecording() {
       return { uri, durationSeconds: elapsed };
     } catch (err) {
       console.error('Failed to stop recording:', err);
+      setError('Recording stop failed.');
       recordingActiveRef.current = false;
       setIsRecording(false);
       setIsPaused(false);
@@ -255,6 +269,7 @@ export function useRecording() {
     audioLevel,
     duration,
     durationRef,
+    error,
     start,
     stop,
     pause,

@@ -1,6 +1,14 @@
 import { test, expect } from '@playwright/test';
 
-test('E2E workflow: Lyrics -> Sync -> Sing -> Review -> Practice Loop', async ({ page, request }) => {
+test('E2E workflow: Lyrics -> Sync -> Sing -> Review -> Practice Loop', async ({ page, request, context }) => {
+  const apiBase =
+    process.env.E2E_API_BASE ||
+    process.env.EXPO_PUBLIC_API_URL ||
+    `http://127.0.0.1:${process.env.E2E_PORT || '5051'}`;
+  await page.addInitScript((value) => {
+    (window as Window & { __E2E_API_BASE__?: string }).__E2E_API_BASE__ = value;
+  }, apiBase);
+  await context.grantPermissions(['microphone']);
   const songTitle = `Workflow Song ${Date.now()}`;
   const initialLyrics = 'Hello world\nThis is test';
   const updatedLyrics = `${initialLyrics}\nNew line from collab`;
@@ -19,11 +27,11 @@ test('E2E workflow: Lyrics -> Sync -> Sing -> Review -> Practice Loop', async ({
   });
   expect(seed.ok()).toBeTruthy();
 
-  // Start from the app root, then navigate via tabs (more stable than deep-linking).
+  // Start from the app root to initialize app state and injected API base.
   await page.goto('/');
 
   // Create a song locally.
-  await page.getByRole('tab', { name: /Lyrics/ }).click();
+  await page.goto('/lyrics');
   await expect(page.getByPlaceholder('Song title')).toBeVisible({ timeout: 10_000 });
   await page.getByPlaceholder('Song title').fill(songTitle);
   await page.getByPlaceholder('Write your lyrics here...').fill(initialLyrics);
@@ -32,7 +40,7 @@ test('E2E workflow: Lyrics -> Sync -> Sing -> Review -> Practice Loop', async ({
   await expect(page.getByText('Saved & ready for live')).toBeVisible({ timeout: 10_000 });
 
   // Update settings + sync in Profile.
-  await page.getByRole('tab', { name: /Profile/ }).click();
+  await page.goto('/profile');
   await expect(page.getByRole('heading', { name: 'Lyrics Sync' })).toBeVisible({ timeout: 10_000 });
 
   // Verify lyrics updated from sync.
@@ -40,13 +48,13 @@ test('E2E workflow: Lyrics -> Sync -> Sing -> Review -> Practice Loop', async ({
   await expect(syncButton).toBeVisible({ timeout: 10_000 });
   await syncButton.evaluate((el) => (el as HTMLElement).click());
 
-  await page.getByRole('tab', { name: /Lyrics/ }).click();
+  await page.goto('/lyrics');
   await expect(page.getByPlaceholder('Write your lyrics here...')).toHaveValue(updatedLyrics, {
     timeout: 20_000,
   });
 
   // Sing and create a session.
-  await page.getByRole('tab', { name: /Sing/ }).click();
+  await page.goto('/');
   await expect(page.getByRole('heading', { name: songTitle })).toBeVisible({ timeout: 10_000 });
 
   await page.getByTestId('record-button').click();

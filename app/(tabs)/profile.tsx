@@ -71,6 +71,7 @@ type LearningRecommendationsView = {
 };
 
 const DIFF_PREVIEW_LIMIT = 18;
+const DIFF_MAX_CELLS = 200000;
 
 function buildLineDiff(
   previousLyrics: string,
@@ -82,51 +83,80 @@ function buildLineDiff(
   const n = previousLines.length;
   const m = nextLines.length;
 
-  const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i -= 1) {
-    for (let j = m - 1; j >= 0; j -= 1) {
-      if (previousLines[i] === nextLines[j]) {
-        dp[i][j] = 1 + dp[i + 1][j + 1];
-      } else {
-        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
-      }
-    }
-  }
-
   const rawLines: DiffLine[] = [];
-  let i = 0;
-  let j = 0;
   let addedLines = 0;
   let removedLines = 0;
 
-  while (i < n && j < m) {
-    if (previousLines[i] === nextLines[j]) {
-      rawLines.push({ type: 'context', text: previousLines[i] });
+  if (n * m > DIFF_MAX_CELLS) {
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (previousLines[i] === nextLines[j]) {
+        rawLines.push({ type: 'context', text: previousLines[i] });
+      } else {
+        rawLines.push({ type: 'removed', text: previousLines[i] });
+        rawLines.push({ type: 'added', text: nextLines[j] });
+        removedLines += 1;
+        addedLines += 1;
+      }
       i += 1;
       j += 1;
-      continue;
     }
 
-    if (dp[i + 1][j] >= dp[i][j + 1]) {
+    while (i < n) {
       rawLines.push({ type: 'removed', text: previousLines[i] });
       removedLines += 1;
       i += 1;
-    } else {
+    }
+    while (j < m) {
       rawLines.push({ type: 'added', text: nextLines[j] });
       addedLines += 1;
       j += 1;
     }
-  }
+  } else {
+    const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i -= 1) {
+      for (let j = m - 1; j >= 0; j -= 1) {
+        if (previousLines[i] === nextLines[j]) {
+          dp[i][j] = 1 + dp[i + 1][j + 1];
+        } else {
+          dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+    }
 
-  while (i < n) {
-    rawLines.push({ type: 'removed', text: previousLines[i] });
-    removedLines += 1;
-    i += 1;
-  }
-  while (j < m) {
-    rawLines.push({ type: 'added', text: nextLines[j] });
-    addedLines += 1;
-    j += 1;
+    let i = 0;
+    let j = 0;
+
+    while (i < n && j < m) {
+      if (previousLines[i] === nextLines[j]) {
+        rawLines.push({ type: 'context', text: previousLines[i] });
+        i += 1;
+        j += 1;
+        continue;
+      }
+
+      if (dp[i + 1][j] >= dp[i][j + 1]) {
+        rawLines.push({ type: 'removed', text: previousLines[i] });
+        removedLines += 1;
+        i += 1;
+      } else {
+        rawLines.push({ type: 'added', text: nextLines[j] });
+        addedLines += 1;
+        j += 1;
+      }
+    }
+
+    while (i < n) {
+      rawLines.push({ type: 'removed', text: previousLines[i] });
+      removedLines += 1;
+      i += 1;
+    }
+    while (j < m) {
+      rawLines.push({ type: 'added', text: nextLines[j] });
+      addedLines += 1;
+      j += 1;
+    }
   }
 
   const changedIndices = rawLines
@@ -1246,36 +1276,104 @@ export default function ProfileScreen() {
 	              <View style={styles.aboutCopy}>
 	                <Text style={styles.aboutTitle}>EaseVerse</Text>
 	                <Text style={styles.aboutText}>
-	                  Vocal workflow for writing, recording, timing polish, and collaboration sync.
+	                  A complete vocal training system that removes cognitive resistance between thought and expression. From handwritten lyrics to millisecond-precise timing analysis.
 	                </Text>
 	              </View>
 	            </View>
+	            
+	            <Text style={[styles.aboutSectionTitle, { marginTop: 20 }]}>Core Features</Text>
 	            <View style={styles.aboutHighlights}>
 	              <View style={styles.aboutHighlightRow}>
 	                <Ionicons name="musical-notes-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Live lyrics + BPM-driven count-in and metronome</Text>
+	                <Text style={styles.aboutHighlightText}>Live lyric tracking with BPM-synced count-in and metronome</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="document-text-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>Smart lyrics editor with auto-save, section parsing, and 16 genre profiles</Text>
 	              </View>
 	              <View style={styles.aboutHighlightRow}>
 	                <Ionicons name="pulse-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>EasePocket timing modes (subdivision, silent beat, consonants, pocket, slow)</Text>
+	                <Text style={styles.aboutHighlightText}>EasePocket: 5 timing modes (Subdivision, Silent Beat, Consonant, Pocket, Slow Mastery)</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="trophy-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>Session scoring with pronunciation coaching and practice loop for difficult phrases</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="create-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>iPad Apple Pencil: Handwriting → text conversion (Scribble) + visual annotations (Ink On)</Text>
 	              </View>
 	              <View style={styles.aboutHighlightRow}>
 	                <Ionicons name="sync-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Lyrics Sync with line diffs, BPM updates, and update toasts</Text>
+	                <Text style={styles.aboutHighlightText}>Real-time collaboration with WebSocket sync and line-by-line diff visualization</Text>
 	              </View>
 	              <View style={styles.aboutHighlightRow}>
 	                <Ionicons name="sparkles-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Warm Up + Mindfulness with selectable narration voice</Text>
+	                <Text style={styles.aboutHighlightText}>Warm Up exercises + Mindfulness sessions with AI-powered narration</Text>
+	              </View>
+	            </View>
+	            
+	            <Text style={styles.aboutSectionTitle}>AI Technology Stack</Text>
+	            <View style={styles.aboutHighlights}>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="logo-google" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>Gemini 2.5 Flash: Pronunciation coaching with 1M requests/day capacity</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="mic-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>Whisper STT: Local speech-to-text transcription</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="volume-high-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>ElevenLabs TTS: Premium voice synthesis for pronunciation playback</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="analytics-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>ML Learning Engine: Adaptive recommendations based on practice patterns</Text>
+	              </View>
+	            </View>
+	            
+	            <Text style={styles.aboutSectionTitle}>iPad Exclusive Features</Text>
+	            <View style={styles.aboutHighlights}>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="create" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>Paper Mode: 36 lined guides (34px spacing) for natural handwriting</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="albums-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>iOS Scribble Integration: Automatic handwriting-to-text conversion</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="brush" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>Ink On: Pen (6 colors, 4 widths), Highlighter, Eraser with pressure sensitivity</Text>
+	              </View>
+	              <View style={styles.aboutHighlightRow}>
+	                <Ionicons name="refresh-circle-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
+	                <Text style={styles.aboutHighlightText}>60-state undo/redo for drawings, stylus priority mode, session persistence</Text>
 	              </View>
 	            </View>
 	          </View>
 
 	          <View style={styles.settingsCard}>
-	            <SettingRow icon="info" label="Version" value="1.0.0" />
+	            <SettingRow icon="info" label="Version" value="1.0.0 (Feb 2026)" />
 	            <View style={styles.divider} />
-	            <SettingRow icon="globe" label="API" value={apiHost || 'Unknown'} />
+	            <SettingRow icon="globe" label="API Server" value={apiHost || 'Unknown'} />
+	            <View style={styles.divider} />
+	            <SettingRow icon="code" label="Frontend" value="React Native + Expo" />
+	            <View style={styles.divider} />
+	            <SettingRow icon="cpu" label="Backend" value="Node.js + Express" />
+	            <View style={styles.divider} />
+	            <SettingRow icon="zap" label="AI Coaching" value="Gemini 2.5 Flash" />
+	            <View style={styles.divider} />
+	            <SettingRow icon="mic" label="Speech-to-Text" value="Whisper Base EN" />
+	            <View style={styles.divider} />
+	            <SettingRow icon="speaker" label="Text-to-Speech" value="ElevenLabs" />
 	            <View style={styles.divider} />
 	            <SettingRow icon="activity" label="Timing Engine" value="EasePocket v1" />
+	            <View style={styles.divider} />
+	            <SettingRow icon="bar-chart" label="ML Learning" value="Rule-based Adaptive" />
+	            <View style={styles.divider} />
+	            <SettingRow icon="edit" label="iPad Pencil" value="Scribble + Ink On" />
 	            <View style={styles.divider} />
 	            <SettingRow
 	              icon="link"
@@ -1442,6 +1540,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontFamily: 'Inter_500Medium',
+  },
+  aboutSectionTitle: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: 16,
+    marginBottom: 8,
   },
   settingRow: {
     flexDirection: 'row',

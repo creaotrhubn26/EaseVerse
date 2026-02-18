@@ -3,6 +3,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "strict": true,
+    "module": "ESNext",
+    "forceConsistentCasingInFileNames": true,
     "allowImportingTsExtensions": true,
     "paths": {
       "@/*": [

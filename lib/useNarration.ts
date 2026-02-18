@@ -9,6 +9,7 @@ export type NarrationState = 'idle' | 'loading' | 'playing' | 'error';
 export function useNarration() {
   const { settings } = useApp();
   const [state, setState] = useState<NarrationState>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const requestIdRef = useRef(0);
   const isSpeakingRef = useRef(false);
   const onDoneRef = useRef<(() => void) | undefined>(undefined);
@@ -23,6 +24,7 @@ export function useNarration() {
   const finishPlayback = useCallback(() => {
     isSpeakingRef.current = false;
     setState('idle');
+    setErrorMessage(null);
     wasPlayingRef.current = false;
     const cb = onDoneRef.current;
     onDoneRef.current = undefined;
@@ -93,9 +95,11 @@ export function useNarration() {
         }
         isSpeakingRef.current = false;
         setState('error');
+        setErrorMessage('Voice playback failed. Try again.');
         setTimeout(() => {
           if (requestIdRef.current === requestId) {
             setState('idle');
+            setErrorMessage(null);
           }
         }, 1200);
       };
@@ -134,6 +138,7 @@ export function useNarration() {
       // Ignore stop errors.
     }
     setState('idle');
+    setErrorMessage(null);
   }, [cleanupWebPlayback, player]);
 
   const speak = useCallback(async (text: string, onDone?: () => void) => {
@@ -153,6 +158,7 @@ export function useNarration() {
     if (requestIdRef.current !== thisRequestId) return;
 
     setState('loading');
+    setErrorMessage(null);
 
     try {
       const baseUrl = getApiUrl();
@@ -216,9 +222,11 @@ export function useNarration() {
           if (!started) {
             isSpeakingRef.current = false;
             setState('error');
+            setErrorMessage('Voice playback failed. Try again.');
             setTimeout(() => {
               if (requestIdRef.current === thisRequestId) {
                 setState('idle');
+                setErrorMessage(null);
               }
             }, 1200);
           }
@@ -232,9 +240,11 @@ export function useNarration() {
           if (!started) {
             isSpeakingRef.current = false;
             setState('error');
+            setErrorMessage('Voice playback failed. Try again.');
             setTimeout(() => {
               if (requestIdRef.current === thisRequestId) {
                 setState('idle');
+                setErrorMessage(null);
               }
             }, 1200);
           }
@@ -259,9 +269,11 @@ export function useNarration() {
       console.error('Narration error:', err);
       isSpeakingRef.current = false;
       setState('error');
+      setErrorMessage('Voice playback failed. Try again.');
       setTimeout(() => {
         if (requestIdRef.current === thisRequestId) {
           setState('idle');
+          setErrorMessage(null);
         }
       }, 2000);
     }
@@ -287,5 +299,5 @@ export function useNarration() {
     onAllDone?.();
   }, [speak]);
 
-  return { state, speak, speakSequence, stop, isSpeaking: isSpeakingRef };
+  return { state, speak, speakSequence, stop, isSpeaking: isSpeakingRef, errorMessage };
 }

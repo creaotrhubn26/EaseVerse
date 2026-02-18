@@ -29,6 +29,13 @@ import {
   createCollabLyricsRealtimeHub,
   type CollabLyricsRealtimeHub,
 } from "./collab-ws";
+import {
+  transcribeWithWhisper,
+  isWhisperAvailable,
+  getWhisperStatus,
+  preloadWhisper,
+} from "./whisper-stt";
+import { getPronunciationCoaching, isGeminiAvailable } from "./gemini-coach";
 
 const supportedVoices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] as const;
 const voiceSchema = z.enum(supportedVoices);
@@ -109,6 +116,59 @@ const collabLyricsUpsertSchema = z.object({
   updatedAt: z.string().datetime().optional(),
 });
 
+const dawMarkerSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  label: z.string().trim().min(1).max(160),
+  positionMs: z.number().int().min(0).max(14_400_000),
+  sectionType: z
+    .enum([
+      "verse",
+      "pre-chorus",
+      "chorus",
+      "bridge",
+      "final-chorus",
+      "intro",
+      "outro",
+      "custom",
+    ])
+    .optional(),
+  color: z.string().trim().max(24).optional(),
+});
+
+const dawTakeScoreSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  takeName: z.string().trim().max(160).optional(),
+  durationMs: z.number().int().min(0).max(14_400_000).optional(),
+  textAccuracy: z.number().min(0).max(100).optional(),
+  pronunciationClarity: z.number().min(0).max(100).optional(),
+  timingConsistency: z.enum(["low", "medium", "high"]).optional(),
+  overallScore: z.number().min(0).max(100).optional(),
+  recordedAt: z.string().datetime().optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+const dawPronunciationFeedbackSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  word: z.string().trim().min(1).max(80),
+  phonetic: z.string().trim().max(120).optional(),
+  tip: z.string().trim().max(220).optional(),
+  severity: z.enum(["low", "medium", "high"]).optional(),
+  positionMs: z.number().int().min(0).max(14_400_000).optional(),
+  takeId: z.string().trim().max(120).optional(),
+  createdAt: z.string().datetime().optional(),
+});
+
+const collabProToolsSyncUpsertSchema = z.object({
+  externalTrackId: z.string().trim().min(1).max(160),
+  projectId: z.string().trim().max(160).optional(),
+  source: z.string().trim().max(120).optional(),
+  bpm: bpmSchema,
+  markers: z.array(dawMarkerSchema).max(500).optional(),
+  takeScores: z.array(dawTakeScoreSchema).max(300).optional(),
+  pronunciationFeedback: z.array(dawPronunciationFeedbackSchema).max(800).optional(),
+  updatedAt: z.string().datetime().optional(),
+});
+
 const learningSessionIngestSchema = z.object({
   userId: z.string().trim().min(1).max(120).optional(),
   sessionId: z.string().trim().min(1).max(120),
@@ -164,7 +224,24 @@ type CollabLyricsRecord = {
   receivedAt: string;
 };
 
+type DawMarker = z.infer<typeof dawMarkerSchema>;
+type DawTakeScore = z.infer<typeof dawTakeScoreSchema>;
+type DawPronunciationFeedback = z.infer<typeof dawPronunciationFeedbackSchema>;
+
+type CollabProToolsSyncRecord = {
+  externalTrackId: string;
+  projectId?: string;
+  source: string;
+  bpm?: number;
+  markers: DawMarker[];
+  takeScores: DawTakeScore[];
+  pronunciationFeedback: DawPronunciationFeedback[];
+  updatedAt: string;
+  receivedAt: string;
+};
+
 const collabLyricsStore = new Map<string, CollabLyricsRecord>();
+const collabProToolsSyncStore = new Map<string, CollabProToolsSyncRecord>();
 const collabLyricsDbUrl = process.env.DATABASE_URL?.trim();
 const collabLyricsPool = collabLyricsDbUrl
   ? new Pool({
@@ -174,6 +251,7 @@ const collabLyricsPool = collabLyricsDbUrl
     })
   : null;
 let collabLyricsTableReadyPromise: Promise<void> | null = null;
+let collabProToolsTableReadyPromise: Promise<void> | null = null;
 const learningStore = createLearningStore(collabLyricsPool);
 
 function collabRecordTimeMs(record: CollabLyricsRecord): number {
@@ -187,6 +265,356 @@ function collabRecordTimeMs(record: CollabLyricsRecord): number {
 
 function sortCollabLyricsRecords(records: CollabLyricsRecord[]): CollabLyricsRecord[] {
   return [...records].sort((a, b) => collabRecordTimeMs(b) - collabRecordTimeMs(a));
+}
+
+function buildProToolsSyncKey(externalTrackId: string, projectId?: string): string {
+  const normalizedProjectId = projectId?.trim() || "__default__";
+  return `${normalizedProjectId}::${externalTrackId}`;
+}
+
+function normalizeProjectIdForStorage(projectId?: string): string {
+  const normalized = projectId?.trim();
+  return normalized && normalized.length > 0 ? normalized : "__default__";
+}
+
+function denormalizeProjectIdFromStorage(projectIdKey?: string | null): string | undefined {
+  if (!projectIdKey || projectIdKey === "__default__") {
+    return undefined;
+  }
+  return projectIdKey;
+}
+
+function proToolsSyncRecordTimeMs(record: CollabProToolsSyncRecord): number {
+  const updatedAtMs = Date.parse(record.updatedAt);
+  if (Number.isFinite(updatedAtMs)) {
+    return updatedAtMs;
+  }
+  const receivedAtMs = Date.parse(record.receivedAt);
+  return Number.isFinite(receivedAtMs) ? receivedAtMs : 0;
+}
+
+function sortProToolsSyncRecords(
+  records: CollabProToolsSyncRecord[]
+): CollabProToolsSyncRecord[] {
+  return [...records].sort((a, b) => proToolsSyncRecordTimeMs(b) - proToolsSyncRecordTimeMs(a));
+}
+
+function parseJsonArrayLike<T>(input: unknown): T[] {
+  if (Array.isArray(input)) {
+    return input as T[];
+  }
+  if (typeof input === "string" && input.trim().length > 0) {
+    try {
+      const parsed = JSON.parse(input);
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function mapProToolsSyncDbRow(row: any): CollabProToolsSyncRecord {
+  const rawBpm = row.bpm;
+  const bpm =
+    rawBpm === null || rawBpm === undefined
+      ? undefined
+      : (() => {
+          const parsed = typeof rawBpm === "number" ? rawBpm : Number(rawBpm);
+          return Number.isFinite(parsed) ? Math.round(parsed) : undefined;
+        })();
+
+  return {
+    externalTrackId: String(row.external_track_id),
+    projectId: denormalizeProjectIdFromStorage(row.project_id),
+    source: row.source ? String(row.source) : "protools-companion",
+    bpm,
+    markers: parseJsonArrayLike<DawMarker>(row.markers),
+    takeScores: parseJsonArrayLike<DawTakeScore>(row.take_scores),
+    pronunciationFeedback: parseJsonArrayLike<DawPronunciationFeedback>(row.pronunciation_feedback),
+    updatedAt: new Date(row.updated_at || new Date().toISOString()).toISOString(),
+    receivedAt: new Date(row.received_at || new Date().toISOString()).toISOString(),
+  };
+}
+
+async function ensureCollabProToolsTable(): Promise<void> {
+  if (!collabLyricsPool) {
+    return;
+  }
+  if (!collabProToolsTableReadyPromise) {
+    collabProToolsTableReadyPromise = (async () => {
+      const tableExistsResult = await collabLyricsPool.query(
+        `
+          SELECT to_regclass('public.collab_protools_sync') AS table_name
+        `
+      );
+
+      const tableName = tableExistsResult.rows[0]?.table_name;
+      if (!tableName) {
+        throw new Error(
+          "Missing required table public.collab_protools_sync. Run migrations/0001_collab_protools_sync.sql (or npm run db:push)."
+        );
+      }
+
+      const requiredColumns = [
+        "external_track_id",
+        "project_id",
+        "source",
+        "bpm",
+        "markers",
+        "take_scores",
+        "pronunciation_feedback",
+        "updated_at",
+        "received_at",
+        "created_at",
+      ];
+
+      const columnsResult = await collabLyricsPool.query(
+        `
+          SELECT column_name
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'collab_protools_sync'
+        `
+      );
+
+      const presentColumns = new Set(
+        columnsResult.rows
+          .map((row: { column_name?: unknown }) =>
+            typeof row.column_name === "string" ? row.column_name : undefined
+          )
+          .filter((value): value is string => Boolean(value))
+      );
+
+      const missingColumns = requiredColumns.filter((column) => !presentColumns.has(column));
+      if (missingColumns.length > 0) {
+        throw new Error(
+          `collab_protools_sync is missing columns: ${missingColumns.join(", ")}. Apply latest migration before starting API.`
+        );
+      }
+    })();
+  }
+
+  return collabProToolsTableReadyPromise;
+}
+
+async function upsertProToolsSyncRecord(record: CollabProToolsSyncRecord): Promise<{
+  item: CollabProToolsSyncRecord;
+  stale: boolean;
+}> {
+  const key = buildProToolsSyncKey(record.externalTrackId, record.projectId);
+  const existingInMemory = collabProToolsSyncStore.get(key);
+
+  if (existingInMemory) {
+    const incomingMs = proToolsSyncRecordTimeMs(record);
+    const existingMs = proToolsSyncRecordTimeMs(existingInMemory);
+    if (incomingMs < existingMs) {
+      return { item: existingInMemory, stale: true };
+    }
+  }
+
+  collabProToolsSyncStore.set(key, record);
+
+  if (!collabLyricsPool) {
+    return { item: record, stale: false };
+  }
+
+  try {
+    await ensureCollabProToolsTable();
+    const projectIdKey = normalizeProjectIdForStorage(record.projectId);
+    const dbResult = await collabLyricsPool.query(
+      `
+        INSERT INTO collab_protools_sync (
+          external_track_id,
+          project_id,
+          source,
+          bpm,
+          markers,
+          take_scores,
+          pronunciation_feedback,
+          updated_at,
+          received_at
+        )
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::timestamptz, $9::timestamptz)
+        ON CONFLICT (external_track_id, project_id)
+        DO UPDATE SET
+          source = EXCLUDED.source,
+          bpm = EXCLUDED.bpm,
+          markers = EXCLUDED.markers,
+          take_scores = EXCLUDED.take_scores,
+          pronunciation_feedback = EXCLUDED.pronunciation_feedback,
+          updated_at = EXCLUDED.updated_at,
+          received_at = EXCLUDED.received_at
+        WHERE collab_protools_sync.updated_at <= EXCLUDED.updated_at
+        RETURNING *
+      `,
+      [
+        record.externalTrackId,
+        projectIdKey,
+        record.source,
+        record.bpm ?? null,
+        JSON.stringify(record.markers),
+        JSON.stringify(record.takeScores),
+        JSON.stringify(record.pronunciationFeedback),
+        record.updatedAt,
+        record.receivedAt,
+      ]
+    );
+
+    if (dbResult.rows.length > 0) {
+      const persisted = mapProToolsSyncDbRow(dbResult.rows[0]);
+      collabProToolsSyncStore.set(key, persisted);
+      return { item: persisted, stale: false };
+    }
+
+    const latestResult = await collabLyricsPool.query(
+      `
+        SELECT *
+        FROM collab_protools_sync
+        WHERE external_track_id = $1 AND project_id = $2
+        LIMIT 1
+      `,
+      [record.externalTrackId, projectIdKey]
+    );
+
+    if (latestResult.rows.length > 0) {
+      const latest = mapProToolsSyncDbRow(latestResult.rows[0]);
+      collabProToolsSyncStore.set(key, latest);
+      return { item: latest, stale: true };
+    }
+
+    return { item: record, stale: false };
+  } catch (error) {
+    console.error("Pro Tools sync DB upsert failed. Falling back to in-memory store.", error);
+    return { item: record, stale: false };
+  }
+}
+
+async function getProToolsSyncRecord(
+  externalTrackId: string,
+  projectId?: string
+): Promise<CollabProToolsSyncRecord | undefined> {
+  if (collabLyricsPool) {
+    try {
+      await ensureCollabProToolsTable();
+
+      if (projectId?.trim()) {
+        const dbResult = await collabLyricsPool.query(
+          `
+            SELECT *
+            FROM collab_protools_sync
+            WHERE external_track_id = $1 AND project_id = $2
+            LIMIT 1
+          `,
+          [externalTrackId, normalizeProjectIdForStorage(projectId)]
+        );
+        if (dbResult.rows.length > 0) {
+          const row = mapProToolsSyncDbRow(dbResult.rows[0]);
+          collabProToolsSyncStore.set(buildProToolsSyncKey(row.externalTrackId, row.projectId), row);
+          return row;
+        }
+      } else {
+        const dbResult = await collabLyricsPool.query(
+          `
+            SELECT *
+            FROM collab_protools_sync
+            WHERE external_track_id = $1
+            ORDER BY updated_at DESC
+            LIMIT 1
+          `,
+          [externalTrackId]
+        );
+        if (dbResult.rows.length > 0) {
+          const row = mapProToolsSyncDbRow(dbResult.rows[0]);
+          collabProToolsSyncStore.set(buildProToolsSyncKey(row.externalTrackId, row.projectId), row);
+          return row;
+        }
+      }
+    } catch (error) {
+      console.error("Pro Tools sync DB fetch failed. Falling back to in-memory store.", error);
+    }
+  }
+
+  if (projectId?.trim()) {
+    return collabProToolsSyncStore.get(buildProToolsSyncKey(externalTrackId, projectId));
+  }
+
+  let latest: CollabProToolsSyncRecord | undefined;
+  for (const record of collabProToolsSyncStore.values()) {
+    if (record.externalTrackId !== externalTrackId) {
+      continue;
+    }
+    if (!latest || proToolsSyncRecordTimeMs(record) >= proToolsSyncRecordTimeMs(latest)) {
+      latest = record;
+    }
+  }
+  return latest;
+}
+
+async function listProToolsSyncRecords(filters: {
+  projectId?: string;
+  source?: string;
+  externalTrackId?: string;
+}): Promise<CollabProToolsSyncRecord[]> {
+  const projectId = filters.projectId?.trim();
+  const source = filters.source?.trim();
+  const externalTrackId = filters.externalTrackId?.trim();
+
+  if (collabLyricsPool) {
+    try {
+      await ensureCollabProToolsTable();
+
+      const whereClauses: string[] = [];
+      const params: any[] = [];
+
+      if (projectId) {
+        params.push(normalizeProjectIdForStorage(projectId));
+        whereClauses.push(`project_id = $${params.length}`);
+      }
+      if (source) {
+        params.push(source);
+        whereClauses.push(`source = $${params.length}`);
+      }
+      if (externalTrackId) {
+        params.push(externalTrackId);
+        whereClauses.push(`external_track_id = $${params.length}`);
+      }
+
+      const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+      const dbResult = await collabLyricsPool.query(
+        `
+          SELECT *
+          FROM collab_protools_sync
+          ${whereSql}
+          ORDER BY updated_at DESC
+        `,
+        params
+      );
+
+      const items = dbResult.rows.map(mapProToolsSyncDbRow);
+      for (const item of items) {
+        collabProToolsSyncStore.set(buildProToolsSyncKey(item.externalTrackId, item.projectId), item);
+      }
+      return items;
+    } catch (error) {
+      console.error("Pro Tools sync DB list failed. Falling back to in-memory store.", error);
+    }
+  }
+
+  const filtered = Array.from(collabProToolsSyncStore.values()).filter((item) => {
+    if (projectId && item.projectId !== projectId) {
+      return false;
+    }
+    if (source && item.source !== source) {
+      return false;
+    }
+    if (externalTrackId && item.externalTrackId !== externalTrackId) {
+      return false;
+    }
+    return true;
+  });
+
+  return sortProToolsSyncRecords(filtered);
 }
 
 type RateWindowState = { count: number; windowStart: number };
@@ -525,10 +953,17 @@ function isRateLimited(
 function enforceOptionalApiKey(
   req: Request,
   res: Response,
-  envVarName: string
+  envVarName: string,
+  options?: { required?: boolean }
 ): boolean {
   const expectedKey = process.env[envVarName];
   if (!expectedKey) {
+    if (options?.required) {
+      res
+        .status(503)
+        .json({ error: `${envVarName} is required but not configured.` });
+      return false;
+    }
     return true;
   }
 
@@ -559,7 +994,7 @@ function getApiCatalog(req: Request) {
     auth: {
       header: "x-api-key or Authorization: Bearer <token>",
       note:
-        "Set EXTERNAL_API_KEY on the server to require external API authentication.",
+        "Set EXTERNAL_API_KEY on the server to require external API authentication. Set REQUIRE_API_KEYS=true to enforce keys in production.",
     },
     endpoints: [
       { method: "GET", path: "/api/v1", description: "API discovery document" },
@@ -594,6 +1029,21 @@ function getApiCatalog(req: Request) {
         method: "GET",
         path: "/api/v1/collab/lyrics/:externalTrackId",
         description: "Get latest collaborative lyric draft for a track",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/collab/protools",
+        description: "Upsert Pro Tools companion sync payload for a track",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/collab/protools",
+        description: "List Pro Tools companion sync payloads",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/collab/protools/:externalTrackId",
+        description: "Get latest Pro Tools companion sync payload for a track",
       },
       {
         method: "WS",
@@ -712,6 +1162,25 @@ function getOpenApiSpec(req: Request) {
           },
         },
       },
+      "/api/v1/collab/protools": {
+        get: {
+          summary: "List Pro Tools companion sync payloads",
+          responses: { "200": { description: "Pro Tools sync payloads" } },
+        },
+        post: {
+          summary: "Upsert Pro Tools companion sync payload",
+          responses: { "200": { description: "Upsert result" } },
+        },
+      },
+      "/api/v1/collab/protools/{externalTrackId}": {
+        get: {
+          summary: "Get Pro Tools companion sync payload by external track id",
+          responses: {
+            "200": { description: "Sync payload found" },
+            "404": { description: "Sync payload not found" },
+          },
+        },
+      },
       "/api/v1/ws": {
         get: {
           summary: "WebSocket upgrade endpoint for collaborative lyric updates",
@@ -764,13 +1233,14 @@ function getOpenApiSpec(req: Request) {
 }
 
 function ensureAiConfigured(res: Response): boolean {
-  if (hasOpenAiCredentials) {
+  // Accept either OpenAI or Gemini/Whisper (free alternatives)
+  if (hasOpenAiCredentials || isGeminiAvailable() || isWhisperAvailable()) {
     return true;
   }
 
   res.status(503).json({
     error:
-      "AI service is not configured. Set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY.",
+      "AI service is not configured. Set GEMINI_API_KEY (free) or OPENAI_API_KEY.",
   });
   return false;
 }
@@ -780,13 +1250,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAudioRoutes(app, "/api/audio");
   registerImageRoutes(app, "/api/image");
   let collabRealtimeHub: CollabLyricsRealtimeHub | null = null;
+  const learningDbRequired = process.env.REQUIRE_LEARNING_DB === "true";
+  const requireApiKeys = process.env.REQUIRE_API_KEYS === "true";
+
+  if (process.env.WHISPER_PRELOAD !== "false") {
+    void preloadWhisper();
+  }
+
+  if (collabLyricsPool) {
+    await ensureCollabProToolsTable();
+  }
 
   app.use("/api/v1", (req: Request, res: Response, next) => {
-    if (!enforceOptionalApiKey(req, res, "EXTERNAL_API_KEY")) {
+    if (!enforceOptionalApiKey(req, res, "EXTERNAL_API_KEY", { required: requireApiKeys })) {
       return;
     }
     next();
   });
+
+  const ensureLearningStoreReady = (res: Response): boolean => {
+    if (!learningDbRequired) {
+      return true;
+    }
+    if (collabLyricsPool) {
+      return true;
+    }
+    res.status(503).json({
+      error: "Learning storage is unavailable. Configure DATABASE_URL to persist data.",
+    });
+    return false;
+  };
 
   const handleTts = async (req: Request, res: Response) => {
     try {
@@ -861,7 +1354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const enforceServiceApiKey = options?.enforceServiceApiKey ?? true;
       if (
         enforceServiceApiKey &&
-        !enforceOptionalApiKey(req, res, "PRONOUNCE_API_KEY")
+        !enforceOptionalApiKey(req, res, "PRONOUNCE_API_KEY", { required: requireApiKeys })
       ) {
         return;
       }
@@ -881,48 +1374,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const languageHint = language?.trim() || "English";
       const accentHint = accentGoal?.trim();
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              `You are a vocal pronunciation coach for singers. Return strict JSON with keys: phonetic, tip, slow. Tip must be in ${languageHint}.`,
-          },
-          {
-            role: "user",
-            content: contextLine
-              ? `Word: "${word}" in lyric line: "${contextLine}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`
-              : `Word: "${word}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`,
-          },
-        ],
-        temperature: 0.2,
-        max_tokens: 150,
-      });
-
-      const content = completion.choices[0]?.message?.content;
       let resolved = { phonetic: word, tip: "Enunciate clearly", slow: word };
-      if (content) {
+
+      // Try Gemini first (free tier alternative)
+      if (isGeminiAvailable()) {
         try {
-          const rawJson = JSON.parse(content);
-          const parsedResult = pronounceResultSchema.safeParse(rawJson);
-          if (parsedResult.success) {
-            resolved = parsedResult.data;
+          resolved = await getPronunciationCoaching({
+            word,
+            context: contextLine,
+            language: languageHint,
+            accentGoal: accentHint,
+          });
+        } catch (geminiError) {
+          console.warn('Gemini pronunciation failed, trying OpenAI fallback:', geminiError);
+          
+          // Fall back to OpenAI if Gemini fails
+          if (hasOpenAiCredentials) {
+            const completion = await openai.chat.completions.create({
+              model: "gpt-4o-mini",
+              response_format: { type: "json_object" },
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    `You are a vocal pronunciation coach for singers. Return strict JSON with keys: phonetic, tip, slow. Tip must be in ${languageHint}.`,
+                },
+                {
+                  role: "user",
+                  content: contextLine
+                    ? `Word: "${word}" in lyric line: "${contextLine}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`
+                    : `Word: "${word}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`,
+                },
+              ],
+              temperature: 0.2,
+              max_tokens: 150,
+            });
+
+            const content = completion.choices[0]?.message?.content;
+            if (content) {
+              try {
+                const rawJson = JSON.parse(content);
+                const parsedResult = pronounceResultSchema.safeParse(rawJson);
+                if (parsedResult.success) {
+                  resolved = parsedResult.data;
+                }
+              } catch {
+                // Keep fallback values
+              }
+            }
           }
-        } catch {
-          // Keep fallback values when model output is malformed.
+        }
+      } else if (hasOpenAiCredentials) {
+        // Use OpenAI if Gemini not available
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                `You are a vocal pronunciation coach for singers. Return strict JSON with keys: phonetic, tip, slow. Tip must be in ${languageHint}.`,
+            },
+            {
+              role: "user",
+              content: contextLine
+                ? `Word: "${word}" in lyric line: "${contextLine}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`
+                : `Word: "${word}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`,
+            },
+          ],
+          temperature: 0.2,
+          max_tokens: 150,
+        });
+
+        const content = completion.choices[0]?.message?.content;
+        if (content) {
+          try {
+            const rawJson = JSON.parse(content);
+            const parsedResult = pronounceResultSchema.safeParse(rawJson);
+            if (parsedResult.success) {
+              resolved = parsedResult.data;
+            }
+          } catch {
+            // Keep fallback values
+          }
         }
       }
 
-      const audioBuffer = await textToSpeech(resolved.slow, "nova", "mp3");
+      // Try to generate TTS audio, but make it optional (only fail if coaching also failed)
+      let audioBase64: string | undefined;
+      try {
+        const audioBuffer = await textToSpeech(resolved.slow, "nova", "mp3");
+        audioBase64 = audioBuffer.toString("base64");
+      } catch (ttsError) {
+        console.warn("TTS audio generation failed, returning coaching only:", ttsError instanceof Error ? ttsError.message : String(ttsError));
+      }
 
       res.json({
         word,
         phonetic: resolved.phonetic,
         tip: resolved.tip,
         slow: resolved.slow,
-        audioBase64: audioBuffer.toString("base64"),
+        ...(audioBase64 && { audioBase64 }),
       });
     } catch (error) {
       console.error("Pronounce error:", error);
@@ -943,7 +1495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const enforceServiceApiKey = options?.enforceServiceApiKey ?? true;
       if (
         enforceServiceApiKey &&
-        !enforceOptionalApiKey(req, res, "SESSION_SCORING_API_KEY")
+        !enforceOptionalApiKey(req, res, "SESSION_SCORING_API_KEY", { required: requireApiKeys })
       ) {
         return;
       }
@@ -962,11 +1514,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rawAudio = Buffer.from(audioBase64, "base64");
       const { buffer: compatibleAudio, format } = await ensureCompatibleFormat(rawAudio);
       const normalizedLanguage = language ? language.split("-")[0] : undefined;
-      const transcript = await speechToText(
-        compatibleAudio,
-        format === "wav" || format === "mp3" ? format : "wav",
-        normalizedLanguage ? { language: normalizedLanguage } : undefined
-      );
+      
+      let transcript = "";
+
+      // Try Whisper first (free, open source)
+      if (isWhisperAvailable()) {
+        try {
+          transcript = await transcribeWithWhisper(
+            compatibleAudio,
+            {
+              language: normalizedLanguage,
+              task: 'transcribe',
+            }
+          );
+        } catch (whisperError) {
+          console.warn('Whisper transcription failed, trying OpenAI fallback:', whisperError);
+          
+          // Fall back to OpenAI if Whisper fails
+          if (hasOpenAiCredentials) {
+            transcript = await speechToText(
+              compatibleAudio,
+              format === "wav" || format === "mp3" ? format : "wav",
+              normalizedLanguage ? { language: normalizedLanguage } : undefined
+            );
+          }
+        }
+      } else if (hasOpenAiCredentials) {
+        // Use OpenAI if Whisper not available
+        transcript = await speechToText(
+          compatibleAudio,
+          format === "wav" || format === "mp3" ? format : "wav",
+          normalizedLanguage ? { language: normalizedLanguage } : undefined
+        );
+      }
 
       const score = buildSessionScoring({
         expectedLyrics: lyrics,
@@ -1080,6 +1660,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const handleLearningSessionIngest = async (req: Request, res: Response) => {
     try {
+      if (!ensureLearningStoreReady(res)) {
+        return;
+      }
       const clientKey = getClientKey(req);
       if (isRateLimited(learningRateWindow, clientKey, 80, 60_000)) {
         return res.status(429).json({ error: "Rate limit exceeded. Try again shortly." });
@@ -1114,6 +1697,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const handleLearningEasePocketIngest = async (req: Request, res: Response) => {
     try {
+      if (!ensureLearningStoreReady(res)) {
+        return;
+      }
       const clientKey = getClientKey(req);
       if (isRateLimited(learningRateWindow, clientKey, 80, 60_000)) {
         return res.status(429).json({ error: "Rate limit exceeded. Try again shortly." });
@@ -1146,6 +1732,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const handleLearningProfileGet = async (req: Request, res: Response) => {
     try {
+      if (!ensureLearningStoreReady(res)) {
+        return;
+      }
       const clientKey = getClientKey(req);
       const userId = getLearningUserId(req, clientKey);
       const profile = await learningStore.getUserProfile(userId);
@@ -1161,6 +1750,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const handleLearningRecommendationsGet = async (req: Request, res: Response) => {
     try {
+      if (!ensureLearningStoreReady(res)) {
+        return;
+      }
       const clientKey = getClientKey(req);
       const userId = getLearningUserId(req, clientKey);
       const recommendations = await learningStore.getRecommendations(userId);
@@ -1176,6 +1768,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const handleLearningGlobalModelGet = async (req: Request, res: Response) => {
     try {
+      if (!ensureLearningStoreReady(res)) {
+        return;
+      }
       const parsedLimit = Number.parseInt(String(req.query.limit || "20"), 10);
       const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(100, parsedLimit)) : 20;
       const model = await learningStore.getGlobalModel(limit);
@@ -1187,6 +1782,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Learning global model error:", error);
       return res.status(500).json({ error: "Failed to fetch global model" });
+    }
+  };
+
+  const handleCollabProToolsSyncUpsert = async (req: Request, res: Response) => {
+    try {
+      const parsedBody = collabProToolsSyncUpsertSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+
+      const data = parsedBody.data;
+      const receivedAt = new Date().toISOString();
+      const existing = await getProToolsSyncRecord(data.externalTrackId, data.projectId);
+
+      const syncRecord: CollabProToolsSyncRecord = {
+        externalTrackId: data.externalTrackId,
+        projectId: data.projectId,
+        source: data.source ?? existing?.source ?? "protools-companion",
+        bpm: data.bpm ?? existing?.bpm,
+        markers: data.markers ?? existing?.markers ?? [],
+        takeScores: data.takeScores ?? existing?.takeScores ?? [],
+        pronunciationFeedback:
+          data.pronunciationFeedback ?? existing?.pronunciationFeedback ?? [],
+        updatedAt: data.updatedAt ?? new Date().toISOString(),
+        receivedAt,
+      };
+
+      const persisted = await upsertProToolsSyncRecord(syncRecord);
+      if (persisted.stale) {
+        return res.status(409).json({
+          error: "Stale Pro Tools sync payload rejected",
+          code: "stale_write",
+          item: persisted.item,
+        });
+      }
+
+      return res.json({
+        ok: true,
+        storage: collabLyricsPool ? "postgres" : "memory",
+        item: persisted.item,
+      });
+    } catch (error) {
+      console.error("Pro Tools sync upsert error:", error);
+      return res.status(500).json({ error: "Failed to upsert Pro Tools sync payload" });
     }
   };
 
@@ -1212,6 +1851,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/v1/openapi.json", (req: Request, res: Response) => {
     res.json(getOpenApiSpec(req));
+  });
+
+  app.get("/api/v1/whisper/status", (_req: Request, res: Response) => {
+    res.json({ ok: true, ...getWhisperStatus() });
   });
 
   app.get("/api/v1/collab/lyrics", async (req: Request, res: Response) => {
@@ -1257,7 +1900,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/v1/collab/protools", async (req: Request, res: Response) => {
+    try {
+      const projectIdQuery =
+        typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
+      const sourceQuery =
+        typeof req.query.source === "string" ? req.query.source.trim() : "";
+      const externalTrackIdQuery =
+        typeof req.query.externalTrackId === "string"
+          ? req.query.externalTrackId.trim()
+          : "";
+
+      const items = await listProToolsSyncRecords({
+        projectId: projectIdQuery || undefined,
+        source: sourceQuery || undefined,
+        externalTrackId: externalTrackIdQuery || undefined,
+      });
+
+      return res.json({
+        ok: true,
+        storage: collabLyricsPool ? "postgres" : "memory",
+        count: items.length,
+        items,
+      });
+    } catch (error) {
+      console.error("Pro Tools sync list error:", error);
+      return res.status(500).json({ error: "Failed to list Pro Tools sync payloads" });
+    }
+  });
+
+  app.get("/api/v1/collab/protools/:externalTrackId", async (req: Request, res: Response) => {
+    try {
+      const externalTrackId = String(req.params.externalTrackId || "").trim();
+      const projectIdQuery =
+        typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
+      const item = await getProToolsSyncRecord(externalTrackId, projectIdQuery || undefined);
+
+      if (!item) {
+        return res.status(404).json({ error: "Pro Tools sync payload not found" });
+      }
+
+      return res.json({
+        ok: true,
+        storage: collabLyricsPool ? "postgres" : "memory",
+        item,
+      });
+    } catch (error) {
+      console.error("Pro Tools sync get error:", error);
+      return res.status(500).json({ error: "Failed to fetch Pro Tools sync payload" });
+    }
+  });
+
   app.post("/api/v1/collab/lyrics", handleCollabLyricsUpsert);
+  app.post("/api/v1/collab/protools", handleCollabProToolsSyncUpsert);
   app.post("/api/v1/learning/session", handleLearningSessionIngest);
   app.post("/api/v1/learning/easepocket", handleLearningEasePocketIngest);
   app.get("/api/v1/learning/profile", handleLearningProfileGet);

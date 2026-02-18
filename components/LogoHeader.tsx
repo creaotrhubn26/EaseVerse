@@ -17,7 +17,7 @@ export default function LogoHeader({ variant = 'compact', style }: LogoHeaderPro
   return (
     <View style={[styles.logoHeader, { height: variantHeight[variant] }, style]}>
       <Image
-        source={require('@/assets/images/easeverse_logo.png')}
+        source={require('@/assets/images/easeverse_logo_App.png')}
         style={styles.logo}
         resizeMode="contain"
         accessibilityRole="image"

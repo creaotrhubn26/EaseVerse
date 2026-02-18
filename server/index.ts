@@ -92,6 +92,13 @@ function configureTrustProxy(app: express.Application) {
 }
 
 function setupCors(app: express.Application) {
+  const isDev = process.env.NODE_ENV !== "production";
+  const allowAllConfigured = process.env.CORS_ALLOW_ALL === "true";
+  const allowAllOrigins = allowAllConfigured && isDev;
+  if (allowAllConfigured && !isDev) {
+    console.warn("CORS_ALLOW_ALL ignored in production. Set CORS_ALLOW_ORIGINS instead.");
+  }
+
   app.use((req, res, next) => {
     const origins = new Set<string>();
     const externalOrigins = process.env.CORS_ALLOW_ORIGINS
@@ -99,7 +106,6 @@ function setupCors(app: express.Application) {
           .map((origin: string) => origin.trim())
           .filter((origin: string) => Boolean(origin))
       : [];
-    const allowAllOrigins = process.env.CORS_ALLOW_ALL === "true";
 
     if (process.env.REPLIT_DEV_DOMAIN) {
       origins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
@@ -119,8 +125,10 @@ function setupCors(app: express.Application) {
 
     // Allow localhost origins for Expo web development (any port)
     const isLocalhost =
-      origin?.startsWith("http://localhost:") ||
-      origin?.startsWith("http://127.0.0.1:");
+      !!origin &&
+      isDev &&
+      (origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:"));
 
     if (origin && (allowAllOrigins || origins.has(origin) || isLocalhost)) {
       res.header("Access-Control-Allow-Origin", allowAllOrigins ? "*" : origin);

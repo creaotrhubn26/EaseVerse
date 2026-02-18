@@ -230,6 +230,8 @@ export default function HowToUseEaseVerse({
           'Auto-save keeps the Sing screen ready in real time.',
           'BPM drives count-in, metronome, and EasePocket timing grids.',
           'Use Genre to tune coaching defaults for the style.',
+          '📝 iPad + Apple Pencil: Enable Paper Mode → write by hand → text appears automatically via iOS Scribble.',
+          '🎨 Ink On (iPad): Add visual annotations with pen, highlighter, and eraser tools over your typed lyrics.',
         ],
         legend: [
           { icon: 'add-circle-outline', label: 'New song', description: 'Clears the current draft and starts fresh.' },
@@ -241,6 +243,8 @@ export default function HowToUseEaseVerse({
           { icon: 'pulse-outline', label: 'Tap', description: 'Tap repeatedly to detect BPM.' },
           { icon: 'layers-outline', label: 'Structure', description: 'Helps you see sections like Verse/Chorus.' },
           { icon: 'download-outline', label: 'Import', description: 'Paste in lyrics from another source.' },
+          { icon: 'create-outline', label: 'Paper Mode (iPad)', description: 'Lined notebook with Apple Pencil handwriting → text conversion.' },
+          { icon: 'brush-outline', label: 'Ink On (iPad)', description: 'Draw annotations: pen (6 colors), highlighter, eraser. 60 undo states.' },
         ],
       },
       {

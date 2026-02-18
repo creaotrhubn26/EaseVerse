@@ -24,12 +24,13 @@ import LiveLyricsCanvas from '@/components/LiveLyricsCanvas';
 import VUMeter from '@/components/VUMeter';
 import SongPickerModal from '@/components/SongPickerModal';
 import LogoHeader from '@/components/LogoHeader';
+import Toast from '@/components/Toast';
 import { useApp } from '@/lib/AppContext';
 import { buildLiveLyricLines, getLiveLyricProgress } from '@/lib/live-lyrics';
-import { generateId } from '@/lib/storage';
+import * as Storage from '@/lib/storage';
 import { resolveSpeechRecognitionLang, resolveSttLanguageCode } from '@/lib/language';
 import { useRecording } from '@/lib/useRecording';
-import { analyzeSessionRecording } from '@/lib/session-scoring-client';
+import { analyzeSessionRecording, fetchWhisperStatus } from '@/lib/session-scoring-client';
 import { ingestSessionLearningEvent } from '@/lib/learning-client';
 import { buildSessionScoring } from '@shared/session-scoring';
 import type { LyricLine, SignalQuality, Session } from '@/lib/types';
@@ -127,6 +128,11 @@ export default function SingScreen() {
   const [quality, setQuality] = useState<SignalQuality>('good');
   const [coachHint, setCoachHint] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('Ready to sing');
+  const [analysisStatus, setAnalysisStatus] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ visible: boolean; message: string }>(
+    { visible: false, message: '' }
+  );
+  const lastToastErrorRef = useRef<string | null>(null);
   const [countInRemaining, setCountInRemaining] = useState<number | null>(null);
   const [lines, setLines] = useState<LyricLine[]>([]);
   const [showSongPicker, setShowSongPicker] = useState(false);
@@ -450,10 +456,12 @@ export default function SingScreen() {
   ]);
 
   useEffect(() => {
-    if (countInRemaining !== null) {
+    if (recording.error) {
+      setStatusText(recording.error);
+    } else if (countInRemaining !== null) {
       setStatusText(`Starting in ${countInRemaining}...`);
     } else if (isAnalyzing) {
-      setStatusText('Analyzing take...');
+      setStatusText(analysisStatus ?? 'Analyzing take...');
     } else if (isRecording && !isPaused) {
       setStatusText(
         liveTrackingSupported ? 'Listening with live word tracking...' : 'Listening...'
@@ -463,7 +471,14 @@ export default function SingScreen() {
     } else {
       setStatusText('Ready to sing');
     }
-  }, [countInRemaining, isAnalyzing, isPaused, isRecording, liveTrackingSupported]);
+  }, [analysisStatus, countInRemaining, isAnalyzing, isPaused, isRecording, liveTrackingSupported, recording.error]);
+
+  useEffect(() => {
+    if (!recording.error) return;
+    if (recording.error === lastToastErrorRef.current) return;
+    lastToastErrorRef.current = recording.error;
+    setToast({ visible: true, message: recording.error });
+  }, [recording.error]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -499,6 +514,13 @@ export default function SingScreen() {
     if (elapsed >= 3) {
       try {
         setIsAnalyzing(true);
+        setAnalysisStatus(null);
+        const whisperStatus = await fetchWhisperStatus();
+        if (whisperStatus?.state === 'loading' || whisperStatus?.state === 'idle') {
+          setAnalysisStatus('Preparing speech model...');
+        } else if (whisperStatus?.state === 'error') {
+          setAnalysisStatus('Speech model unavailable. Using fallback.');
+        }
         const recordingUri = result.uri;
         let resolvedInsights: Session['insights'] | null = null;
         let resolvedTranscript = liveTranscript.trim();
@@ -554,7 +576,7 @@ export default function SingScreen() {
         }
 
         const session: Session = {
-          id: generateId(),
+          id: Storage.generateId(),
           songId: activeSong?.id,
           genre,
           title: `${activeSong?.title || 'Recording'} - Take`,
@@ -567,10 +589,13 @@ export default function SingScreen() {
           transcript: resolvedTranscript || undefined,
         };
         addSession(session);
+        // Persist immediately so a hard navigation doesn't drop the new session.
+        await Storage.saveSession(session);
         void ingestSessionLearningEvent({ session });
         router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
       } finally {
         setIsAnalyzing(false);
+        setAnalysisStatus(null);
       }
     }
 
@@ -623,7 +648,10 @@ export default function SingScreen() {
       }
 
       setCountInRemaining(null);
-      await recording.start();
+      const started = await recording.start();
+      if (!started) {
+        setCountInRemaining(null);
+      }
     } else {
       await recording.togglePause();
     }
@@ -661,6 +689,12 @@ export default function SingScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        variant="error"
+        onHide={() => setToast((current) => ({ ...current, visible: false }))}
+      />
       <LogoHeader />
       <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <View style={styles.songSelectorSlot}>

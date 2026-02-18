@@ -594,7 +594,12 @@ export default function MindfulnessScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const { settings, updateSettings } = useApp();
-  const { speak: speakNarration, stop: stopNarration, state: narrationState } = useNarration();
+  const {
+    speak: speakNarration,
+    stop: stopNarration,
+    state: narrationState,
+    errorMessage: narrationError,
+  } = useNarration();
   const [currentPhase, setCurrentPhase] = useState<MindfulnessPhase>('mood');
   const [selectedMood, setSelectedMood] = useState<MoodLevel | null>(null);
   const [selectedBreathing, setSelectedBreathing] = useState<BreathingPattern | null>(null);
@@ -925,9 +930,15 @@ export default function MindfulnessScreen() {
         <Pressable
           style={styles.nextAffirmationBtn}
           onPress={() => {
+            stopNarration();
             const next = moodAffirmations[Math.floor(Math.random() * moodAffirmations.length)];
-            setCurrentAffirmation(next?.text || affirmations[0].text);
+            const newAffirmation = next?.text || affirmations[0].text;
+            setCurrentAffirmation(newAffirmation);
             Haptics.selectionAsync();
+            // Narrate the new affirmation after a short delay
+            setTimeout(() => {
+              narrateIfEnabled(newAffirmation).catch(() => {});
+            }, 300);
           }}
           accessibilityRole="button"
           accessibilityLabel="Get another affirmation"
@@ -1118,6 +1129,12 @@ export default function MindfulnessScreen() {
         <View style={styles.narrationLoading}>
           <Ionicons name="mic" size={scaledIcon(8)} color={Colors.gradientStart} />
           <Text style={styles.narrationLoadingText}>Generating voice...</Text>
+        </View>
+      )}
+      {narrationState === 'error' && narrationError && (
+        <View style={styles.narrationError}>
+          <Ionicons name="alert-circle" size={scaledIcon(8)} color={Colors.gradientStart} />
+          <Text style={styles.narrationErrorText}>{narrationError}</Text>
         </View>
       )}
 
@@ -1766,6 +1783,23 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   narrationLoadingText: {
+    color: Colors.gradientStart,
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+  },
+  narrationError: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    zIndex: 10,
+  },
+  narrationErrorText: {
     color: Colors.gradientStart,
     fontSize: 11,
     fontFamily: 'Inter_400Regular',

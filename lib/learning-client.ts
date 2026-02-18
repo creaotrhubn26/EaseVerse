@@ -8,6 +8,13 @@ type LearningIngestResponse = {
   deduplicated: boolean;
 };
 
+const isLearningDisabled = () => {
+  const runtime = (globalThis as { __E2E_DISABLE_LEARNING__?: boolean }).__E2E_DISABLE_LEARNING__;
+  if (runtime) return true;
+  const envFlag = process.env.EXPO_PUBLIC_DISABLE_LEARNING;
+  return envFlag === "true" || envFlag === "1";
+};
+
 async function readJsonIfPresent<T>(response: Response, context: string): Promise<T | null> {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   if (!contentType.includes("application/json")) {
@@ -30,6 +37,10 @@ export async function ingestSessionLearningEvent(params: {
 }): Promise<LearningIngestResponse | null> {
   const { session } = params;
   if (!session.id || !session.lyrics.trim()) {
+    return null;
+  }
+
+  if (isLearningDisabled()) {
     return null;
   }
 
@@ -71,6 +82,10 @@ export async function ingestEasePocketLearningEvent(params: {
     return null;
   }
 
+  if (isLearningDisabled()) {
+    return null;
+  }
+
   try {
     const userId = await Storage.getOrCreateLearningUserId();
     const url = new URL("/api/v1/learning/easepocket", getApiUrl());
@@ -100,6 +115,9 @@ export async function ingestEasePocketLearningEvent(params: {
 }
 
 export async function fetchLearningRecommendations(): Promise<unknown | null> {
+  if (isLearningDisabled()) {
+    return null;
+  }
   try {
     const userId = await Storage.getOrCreateLearningUserId();
     const url = new URL("/api/v1/learning/recommendations", getApiUrl());

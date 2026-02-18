@@ -59,12 +59,100 @@ Move from thought to lyric seamlessly
 
 It is not an AI that writes for you.
 It is a system that helps you write better — with less resistance.
+## 📝 iPad Apple Pencil Lyrics Writing
 
+**Transform your iPad into a professional lyrics notebook with Apple Pencil support.**
+
+EaseVerse on iPad provides a natural handwriting experience for songwriters who prefer pen-on-paper creativity with digital convenience.
+
+### ✨ Features
+
+#### **1. Paper Mode (iPad Only)**
+- **36 lined guides** (34px spacing) mimicking a physical notebook
+- Toggle on/off for clean or guided writing
+- Optimized for Apple Pencil handwriting alignment
+- Automatic iPad detection (feature hidden on phones)
+
+#### **2. iOS Scribble Integration**
+- **Write naturally with Apple Pencil → Text appears automatically**
+- Built-in iPadOS handwriting recognition (no setup required)
+- Write "Verse 1", "Chorus", etc. and watch it convert to typed text
+- Full sentence support with line breaks
+- Auto-save after 700ms (no manual saving needed)
+
+#### **3. Ink On - Visual Annotations**
+- **Pen Tool**: 6 colors, 4 widths (2.2-6px), pressure-sensitive
+- **Highlighter Tool**: Semi-transparent yellow for marking key phrases
+- **Eraser Tool**: 4 sizes (16-46px) for precise or quick cleanup
+- **Undo/Redo**: 60-state history for complete creative freedom
+- **Stylus Priority**: Prevents accidental finger marks while writing
+- **Pressure Sensitivity**: Stroke width adapts to pencil pressure (0.75x-1.55x)
+
+### 🎯 How to Use
+
+#### **Basic Workflow: Write Lyrics**
+1. Open **EaseVerse** app on iPad
+2. Navigate to **Lyrics** tab
+3. See "Apple Pencil" badge → Tap **"Paper Mode On"**
+4. Start writing with Apple Pencil
+5. Watch handwriting convert to text automatically ✨
+
+#### **Add Visual Annotations**
+1. After writing text, tap **"Ink On"** toggle
+2. Select tool:
+   - **Pen**: Circle important words, draw breath marks
+   - **Highlighter**: Mark hook lines, repeated phrases
+   - **Eraser**: Remove unwanted annotations
+3. Use toolbar to change colors, widths, toggle pressure sensitivity
+4. Tap **Undo** (↶) / **Redo** (↷) to manage changes
+
+#### **Section Headers (Auto-Detected)**
+Write these headers and they'll be recognized in **Structure** tab:
+- `Verse 1`, `Verse 2`, etc. (auto-numbered)
+- `Pre-Chorus`
+- `Chorus`
+- `Bridge`
+- `Final Chorus`
+- `Intro`, `Outro`
+
+#### **Pro Tips**
+- **Stylus Priority ON** (default): Only Apple Pencil draws, finger scrolls
+- **Pressure Sensitivity ON** (default): Natural handwriting feel
+- **Paper Mode**: Use lined guides for neat handwriting
+- **Scribble First, Ink Later**: Write all text first, then annotate
+
+### 📱 Availability
+- **Required**: iPad with Apple Pencil (any generation)
+- **OS**: iPadOS with Scribble support (iOS 14+)
+- **Hidden on**: iPhone (feature auto-detects device)
+
+### 📋 Testing
+See [docs/ipad-apple-pencil-test-guide.md](docs/ipad-apple-pencil-test-guide.md) for comprehensive testing instructions.
+
+### 🎨 Real-World Example
+
+**Write a song naturally:**
+```
+1. Paper Mode ON → See lined guides
+2. Write with Apple Pencil: "Verse 1"
+3. Write lyrics: "The melody starts to fade away..."
+4. Text appears automatically (no typing!)
+5. Ink On → Circle "fade away" with blue pen
+6. Highlight "melody" with yellow highlighter
+7. Switch to Structure tab → See Verse 1 recognized
+8. Back to Lyrics → Write "Chorus"
+9. Continue writing naturally...
+```
+
+**Result**: Professional lyrics with visual annotations, all saved automatically.
+
+---
 ## Setup (Don’t Commit Keys)
 
 Create a local `.env` (it is gitignored) and add:
 
 ```bash
+# Required for TTS (pronunciation audio)
 ELEVENLABS_API_KEY=...
 
 # Optional (recommended for deterministic voices):
@@ -75,10 +163,23 @@ ELEVENLABS_VOICE_ID_MALE=...
 ELEVENLABS_MODEL_ID=eleven_multilingual_v2
 ELEVENLABS_TTS_CACHE_DIR=server_cache/elevenlabs_tts
 
-# For AI icon generation (one of these):
-OPENAI_API_KEY=...
+# FREE AI Services (recommended):
+GEMINI_API_KEY=...  # Free tier: 15 req/min, 1M/day - pronunciation coaching
+# WHISPER_MODEL=Xenova/whisper-base.en  # Optional: defaults to whisper-base.en
+# WHISPER_CACHE_DIR=~/.cache/whisper  # Optional: model cache location
+
+# OpenAI (optional fallback when free services unavailable):
+OPENAI_API_KEY=...  # Only needed as fallback
+
+# For AI icon generation:
 # AI_INTEGRATIONS_OPENAI_API_KEY=...
 ```
+
+**Cost Breakdown:**
+- ElevenLabs: $22/month (required for TTS)
+- Gemini: FREE (1M requests/day)
+- Whisper: FREE (runs locally)
+- **Total: $22/month** (TTS only!)
 
 ## AI Icon Generation
 
@@ -135,7 +236,65 @@ EaseVerse now exposes a versioned integration API at ` /api/v1 `.
 - `POST /api/v1/session-score`
 - `POST /api/v1/collab/lyrics`
 - `GET /api/v1/collab/lyrics`
+- `POST /api/v1/collab/protools`
+- `GET /api/v1/collab/protools`
+- `GET /api/v1/collab/protools/:externalTrackId`
 - `WS /api/v1/ws` (realtime lyric updates)
+
+### Pro Tools Companion Sync (Phase 1)
+
+Use these endpoints for a desktop Pro Tools companion bridge.
+
+- `POST /api/v1/collab/protools` upserts DAW sync payloads for one `externalTrackId`.
+- `GET /api/v1/collab/protools` lists sync payloads (optional filters: `projectId`, `source`, `externalTrackId`).
+- `GET /api/v1/collab/protools/:externalTrackId` gets latest payload for one track (optional `projectId`).
+
+Payload shape (high level):
+
+- `externalTrackId` (required)
+- `projectId` (optional)
+- `source` (optional; defaults to `protools-companion`)
+- `bpm` (optional)
+- `markers[]` (`id`, `label`, `positionMs`, optional `sectionType`, `color`)
+- `takeScores[]` (`id`, optional score fields + timing consistency)
+- `pronunciationFeedback[]` (`id`, `word`, optional `tip`, `phonetic`, severity)
+
+Example upsert:
+
+```bash
+curl -X POST "https://YOUR_DOMAIN/api/v1/collab/protools" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_EXTERNAL_API_KEY" \
+  -d '{
+    "externalTrackId": "pt-track-001",
+    "projectId": "album-a",
+    "source": "protools-companion",
+    "bpm": 120,
+    "markers": [
+      { "id": "m1", "label": "Verse 1", "positionMs": 12000, "sectionType": "verse" }
+    ],
+    "takeScores": [
+      {
+        "id": "take-01",
+        "takeName": "Lead Vox Comp",
+        "textAccuracy": 88,
+        "pronunciationClarity": 84,
+        "timingConsistency": "medium",
+        "overallScore": 86
+      }
+    ],
+    "pronunciationFeedback": [
+      {
+        "id": "pf-1",
+        "word": "beautiful",
+        "tip": "Keep the t crisp, then lighten the l",
+        "severity": "medium",
+        "positionMs": 17500,
+        "takeId": "take-01"
+      }
+    ]
+  }'
+```
 
 ### Realtime Lyrics WebSocket
 

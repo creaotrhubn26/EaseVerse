@@ -117,6 +117,10 @@ export async function saveSession(session: Session): Promise<void> {
   await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
 }
 
+export async function saveSessions(sessions: Session[]): Promise<void> {
+  await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+}
+
 export async function deleteSession(id: string): Promise<void> {
   const sessions = await getSessions();
   await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions.filter(s => s.id !== id)));

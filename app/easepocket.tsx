@@ -24,6 +24,7 @@ import { analyzeConsonantPrecision, type EasePocketGrid as ApiGrid } from "@/lib
 import { ingestEasePocketLearningEvent } from "@/lib/learning-client";
 import * as Storage from "@/lib/storage";
 import { scaledIconSize, tierValue, useResponsiveLayout } from "@/lib/responsive";
+import Toast from "@/components/Toast";
 
 type ModeId = Storage.EasePocketMode;
 type Grid = Storage.EasePocketGrid;
@@ -173,6 +174,11 @@ export default function EasePocketScreen() {
   const [tapStats, setTapStats] = useState<TapStats | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [consonantScore, setConsonantScore] = useState<Awaited<ReturnType<typeof analyzeConsonantPrecision>>>(null);
+  const [toast, setToast] = useState<{ visible: boolean; message: string }>({
+    visible: false,
+    message: "",
+  });
+  const lastToastErrorRef = useRef<string | null>(null);
 
   const startEpochRef = useRef<number | null>(null);
   const isRunningRef = useRef(false);
@@ -256,6 +262,13 @@ export default function EasePocketScreen() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!recording.error) return;
+    if (recording.error === lastToastErrorRef.current) return;
+    lastToastErrorRef.current = recording.error;
+    setToast({ visible: true, message: recording.error });
+  }, [recording.error]);
+
   const hardStop = useCallback(() => {
     setIsRunning(false);
     isRunningRef.current = false;
@@ -270,7 +283,15 @@ export default function EasePocketScreen() {
     stopPhaseTimeouts();
     stopSubdivisionScheduler();
     stopPocketPromptScheduler();
-  }, [stopPhaseTimeouts, stopPocketPromptScheduler, stopSubdivisionScheduler, stopTick]);
+    
+    // Stop metronome to prevent lingering clicks
+    try {
+      metronomePlayer.pause();
+      void metronomePlayer.seekTo(0).catch(() => undefined);
+    } catch {
+      // Ignore metronome cleanup failures
+    }
+  }, [stopPhaseTimeouts, stopPocketPromptScheduler, stopSubdivisionScheduler, stopTick, metronomePlayer]);
 
   useEffect(() => {
     isRunningRef.current = isRunning;
@@ -604,13 +625,22 @@ export default function EasePocketScreen() {
     hardStop();
     setSubDiv(4);
     setPocketTarget("center");
-  }, [hardStop, mode]);
+    
+    // Stop recording if switching away from consonant mode
+    if (recording.isRecording) {
+      void recording.stop();
+    }
+  }, [hardStop, mode, recording]);
 
   useEffect(() => {
     return () => {
       hardStop();
+      // Stop recording on unmount if active
+      if (recording.isRecording) {
+        void recording.stop();
+      }
     };
-  }, [hardStop]);
+  }, [hardStop, recording]);
 
   const startOrStop = useCallback(() => {
     if (isRunning) {
@@ -629,7 +659,10 @@ export default function EasePocketScreen() {
       setTapStats(null);
       setFeedbackText("Recording...");
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await recording.start();
+      const started = await recording.start();
+      if (!started) {
+        setFeedbackText(recording.error ?? "Recording failed. Check mic permission.");
+      }
       return;
     }
 
@@ -724,6 +757,12 @@ export default function EasePocketScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0) }]}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        variant="error"
+        onHide={() => setToast((current) => ({ ...current, visible: false }))}
+      />
       <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
           onPress={() => router.back()}

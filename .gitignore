@@ -28,6 +28,7 @@ android/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+server-output.log
 
 # macOS
 .DS_Store

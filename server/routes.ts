@@ -50,11 +50,13 @@ const elevenLabsVoiceSchema = z.enum(["female", "male"]);
 const elevenLabsTtsRequestSchema = z.object({
   text: z.string().trim().min(1).max(2000),
   voice: elevenLabsVoiceSchema.optional(),
+  genre: z.string().trim().max(48).optional(),
 });
 
 const pronounceRequestSchema = z.object({
   word: z.string().trim().min(1).max(60),
   context: z.string().trim().max(280).optional(),
+  genre: z.string().trim().max(48).optional(),
   language: z.string().trim().max(40).optional(),
   accentGoal: z.string().trim().max(32).optional(),
 });
@@ -253,6 +255,72 @@ const collabLyricsPool = collabLyricsDbUrl
 let collabLyricsTableReadyPromise: Promise<void> | null = null;
 let collabProToolsTableReadyPromise: Promise<void> | null = null;
 const learningStore = createLearningStore(collabLyricsPool);
+
+type ElevenLabsVoiceSettings = {
+  stability: number;
+  similarity_boost: number;
+  style: number;
+  use_speaker_boost: boolean;
+};
+
+function normalizeGenreKey(value?: string): string {
+  return (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function resolveGenreVoiceSettings(genre?: string): ElevenLabsVoiceSettings {
+  switch (normalizeGenreKey(genre)) {
+    case "jazz":
+    case "classical":
+    case "soul":
+      return {
+        stability: 0.7,
+        similarity_boost: 0.75,
+        style: 0.15,
+        use_speaker_boost: true,
+      };
+    case "rock":
+    case "hiphop":
+      return {
+        stability: 0.42,
+        similarity_boost: 0.82,
+        style: 0.65,
+        use_speaker_boost: true,
+      };
+    case "rnb":
+      return {
+        stability: 0.5,
+        similarity_boost: 0.8,
+        style: 0.45,
+        use_speaker_boost: true,
+      };
+    case "country":
+      return {
+        stability: 0.58,
+        similarity_boost: 0.78,
+        style: 0.34,
+        use_speaker_boost: true,
+      };
+    case "pop":
+    default:
+      return {
+        stability: 0.55,
+        similarity_boost: 0.75,
+        style: 0.25,
+        use_speaker_boost: true,
+      };
+  }
+}
+
+function resolveVoiceByAccentAndGenre(accentGoal?: string, genre?: string): "male" | "female" {
+  const accent = accentGoal?.toLowerCase() ?? "";
+  if (accent.includes("female")) return "female";
+  if (accent.includes("male")) return "male";
+
+  const genreKey = normalizeGenreKey(genre);
+  if (genreKey === "rock" || genreKey === "hiphop") return "male";
+  if (genreKey === "rnb" || genreKey === "soul" || genreKey === "pop") return "female";
+  return "female";
+}
 
 function collabRecordTimeMs(record: CollabLyricsRecord): number {
   const updatedAtMs = Date.parse(record.updatedAt);
@@ -980,7 +1048,7 @@ function getBaseUrl(req: Request): string {
   const forwardedProto = req.header("x-forwarded-proto");
   const protocol = forwardedProto || req.protocol || "http";
   const forwardedHost = req.header("x-forwarded-host");
-  const host = forwardedHost || req.get("host") || "localhost:5000";
+  const host = forwardedHost || req.get("host") || "localhost:5059";
   return `${protocol}://${host}`;
 }
 
@@ -1320,15 +1388,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid request body" });
       }
 
-      const { text, voice } = parsedBody.data;
-      const resolvedVoice = voice ?? "female";
+      const { text, voice, genre } = parsedBody.data;
+      const resolvedVoice = voice ?? resolveVoiceByAccentAndGenre(undefined, genre);
       const modelId = process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2";
+      const voiceSettings = resolveGenreVoiceSettings(genre);
 
       const result = await elevenLabsTextToSpeech({
         apiKey,
         text,
         voice: resolvedVoice,
         modelId,
+        voiceSettings,
       });
 
       res.setHeader("Content-Type", "audio/mpeg");
@@ -1369,7 +1439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid request body" });
       }
 
-      const { word, context, language, accentGoal } = parsedBody.data;
+      const { word, context, genre, language, accentGoal } = parsedBody.data;
       const contextLine = context || "";
       const languageHint = language?.trim() || "English";
       const accentHint = accentGoal?.trim();
@@ -1460,10 +1530,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Try to generate TTS audio, but make it optional (only fail if coaching also failed)
+      // Prefer ElevenLabs for more natural pronunciation playback when configured.
+      // Fall back to default TTS so pronunciation guidance still returns audio when possible.
       let audioBase64: string | undefined;
       try {
-        const audioBuffer = await textToSpeech(resolved.slow, "nova", "mp3");
+        const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY?.trim();
+        const elevenLabsModelId = process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2";
+
+        let audioBuffer: Buffer;
+        const ttsText = word;
+        if (elevenLabsApiKey) {
+          const elevenLabsVoice = resolveVoiceByAccentAndGenre(accentHint, genre);
+          const voiceSettings = resolveGenreVoiceSettings(genre);
+          const result = await elevenLabsTextToSpeech({
+            apiKey: elevenLabsApiKey,
+            text: ttsText,
+            voice: elevenLabsVoice,
+            modelId: elevenLabsModelId,
+            voiceSettings,
+          });
+          audioBuffer = result.audio;
+        } else {
+          audioBuffer = await textToSpeech(ttsText, "nova", "mp3");
+        }
         audioBase64 = audioBuffer.toString("base64");
       } catch (ttsError) {
         console.warn("TTS audio generation failed, returning coaching only:", ttsError instanceof Error ? ttsError.message : String(ttsError));
@@ -1872,6 +1961,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json({
         ok: true,
         storage: collabLyricsPool ? "postgres" : "memory",
+        appliedFilters: {
+          projectId: projectIdQuery || null,
+          source: sourceQuery || null,
+        },
         count: items.length,
         items,
       });

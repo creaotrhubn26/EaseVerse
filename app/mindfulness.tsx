@@ -25,6 +25,7 @@ import * as Haptics from 'expo-haptics';
 import { useNarration } from '@/lib/useNarration';
 import { AudioModule } from 'expo-audio';
 import { useApp } from '@/lib/AppContext';
+import { goBackWithFallback } from '@/lib/navigation';
 import type { NarrationVoice } from '@/lib/types';
 import Colors from '@/constants/colors';
 import {
@@ -998,7 +999,7 @@ export default function MindfulnessScreen() {
         style={styles.doneBtn}
         onPress={() => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          router.back();
+          goBackWithFallback(router, '/');
         }}
         accessibilityRole="button"
         accessibilityLabel="Go sing"
@@ -1026,7 +1027,7 @@ export default function MindfulnessScreen() {
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={[styles.header, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackWithFallback(router, '/')}
           hitSlop={12}
           style={styles.headerIconButton}
           accessibilityRole="button"

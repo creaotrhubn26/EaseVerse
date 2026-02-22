@@ -15,6 +15,38 @@ const isLearningDisabled = () => {
   return envFlag === "true" || envFlag === "1";
 };
 
+const loggedLearningNetworkWarnings = new Set<string>();
+const LEARNING_NETWORK_BACKOFF_MS = 30_000;
+let learningNetworkBackoffUntil = 0;
+
+function isFetchNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if (error.name === "AbortError") {
+    return false;
+  }
+  // Browser fetch uses TypeError for connection/CORS/offline failures.
+  return error.name === "TypeError" || /failed to fetch/i.test(error.message);
+}
+
+function warnLearningNetworkOnce(scope: string, error: unknown) {
+  if (loggedLearningNetworkWarnings.has(scope)) {
+    return;
+  }
+  loggedLearningNetworkWarnings.add(scope);
+  console.warn(`${scope} is unavailable. Check API server/CORS at ${getApiUrl()}`, error);
+}
+
+function shouldSkipLearningRequestDuringBackoff(): boolean {
+  return Date.now() < learningNetworkBackoffUntil;
+}
+
+function markLearningNetworkFailure(scope: string, error: unknown) {
+  learningNetworkBackoffUntil = Date.now() + LEARNING_NETWORK_BACKOFF_MS;
+  warnLearningNetworkOnce(scope, error);
+}
+
 async function readJsonIfPresent<T>(response: Response, context: string): Promise<T | null> {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   if (!contentType.includes("application/json")) {
@@ -43,6 +75,9 @@ export async function ingestSessionLearningEvent(params: {
   if (isLearningDisabled()) {
     return null;
   }
+  if (shouldSkipLearningRequestDuringBackoff()) {
+    return null;
+  }
 
   try {
     const userId = await Storage.getOrCreateLearningUserId();
@@ -67,8 +102,13 @@ export async function ingestSessionLearningEvent(params: {
     if (!response.ok) {
       return null;
     }
+    learningNetworkBackoffUntil = 0;
     return await readJsonIfPresent<LearningIngestResponse>(response, "Learning session ingest");
   } catch (error) {
+    if (isFetchNetworkError(error)) {
+      markLearningNetworkFailure("Learning session ingest", error);
+      return null;
+    }
     console.error("Learning session ingest request failed:", error);
     return null;
   }
@@ -83,6 +123,9 @@ export async function ingestEasePocketLearningEvent(params: {
   }
 
   if (isLearningDisabled()) {
+    return null;
+  }
+  if (shouldSkipLearningRequestDuringBackoff()) {
     return null;
   }
 
@@ -107,8 +150,13 @@ export async function ingestEasePocketLearningEvent(params: {
     if (!response.ok) {
       return null;
     }
+    learningNetworkBackoffUntil = 0;
     return await readJsonIfPresent<LearningIngestResponse>(response, "Learning EasePocket ingest");
   } catch (error) {
+    if (isFetchNetworkError(error)) {
+      markLearningNetworkFailure("Learning EasePocket ingest", error);
+      return null;
+    }
     console.error("Learning EasePocket ingest request failed:", error);
     return null;
   }
@@ -116,6 +164,9 @@ export async function ingestEasePocketLearningEvent(params: {
 
 export async function fetchLearningRecommendations(): Promise<unknown | null> {
   if (isLearningDisabled()) {
+    return null;
+  }
+  if (shouldSkipLearningRequestDuringBackoff()) {
     return null;
   }
   try {
@@ -129,8 +180,13 @@ export async function fetchLearningRecommendations(): Promise<unknown | null> {
     if (!response.ok) {
       return null;
     }
+    learningNetworkBackoffUntil = 0;
     return await readJsonIfPresent<unknown>(response, "Learning recommendations request");
   } catch (error) {
+    if (isFetchNetworkError(error)) {
+      markLearningNetworkFailure("Learning recommendations", error);
+      return null;
+    }
     console.error("Learning recommendations request failed:", error);
     return null;
   }

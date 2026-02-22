@@ -74,11 +74,11 @@ export function useResponsiveLayout(): ResponsiveLayout {
 
       const navIconBase = tierValue(tier, [32, 36, 40, 46, 54, 62, 70]);
       const navBarBase = tierValue(tier, [86, 92, 98, 108, 120, 136, 150]);
-      const highResNavBoost = isWeb ? 1 + (highResScale - 1) * 0.5 : 1;
+      const highResNavBoost = isWeb ? 1 + (highResScale - 1) * 0.8 : 1;
       const navIconSize = Math.round(navIconBase * highResNavBoost);
       const navBarHeight = Math.round(navBarBase * highResNavBoost);
       const iconScaleBase = tierValue(tier, [1.15, 1.24, 1.34, 1.5, 1.72, 1.95, 2.15]);
-      const highResIconBoost = isWeb ? 1 + (highResScale - 1) * 0.55 : 1;
+      const highResIconBoost = isWeb ? 1 + (highResScale - 1) * 0.8 : 1;
       const iconScale = iconScaleBase * highResIconBoost;
 
       return {

@@ -53,7 +53,7 @@ export async function analyzeSessionRecording(params: {
 
   try {
     const audioBase64 = await recordingUriToBase64(recordingUri);
-    const url = new URL('/api/session-score', getApiUrl());
+    const url = new URL('/api/v1/session-score', getApiUrl());
     const response = await fetch(url.toString(), {
       method: 'POST',
       headers: getApiHeaders({ 'Content-Type': 'application/json' }),

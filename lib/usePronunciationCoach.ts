@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { Platform } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useApp } from '@/lib/AppContext';
 import { getApiHeaders, getApiUrl } from '@/lib/query-client';
@@ -18,10 +19,15 @@ export function usePronunciationCoach() {
   const [result, setResult] = useState<PronunciationResult | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
 
-  const player = useAudioPlayer(audioUri ? { uri: audioUri } : null);
+  const audioSource = useMemo(() => (audioUri ? { uri: audioUri } : null), [audioUri]);
+  const player = useAudioPlayer(audioSource);
   const status = useAudioPlayerStatus(player);
 
   const wasPlayingRef = useRef(false);
+  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const lastPronounceArgsRef = useRef<{ word: string; context?: string; genre?: string } | null>(
+    null
+  );
 
   useEffect(() => {
     if (state === 'playing' && wasPlayingRef.current && !status.playing && status.currentTime > 0) {
@@ -33,15 +39,16 @@ export function usePronunciationCoach() {
     }
   }, [status.playing, status.currentTime, state]);
 
-  const pronounce = useCallback(async (word: string, context?: string) => {
+  const pronounce = useCallback(async (word: string, context?: string, genre?: string) => {
     setState('loading');
     setResult(null);
     setAudioUri(null);
     wasPlayingRef.current = false;
+    lastPronounceArgsRef.current = { word, context, genre };
 
     try {
       const baseUrl = getApiUrl();
-      const url = new URL('/api/pronounce', baseUrl);
+      const url = new URL('/api/v1/pronounce', baseUrl);
 
       const response = await fetch(url.toString(), {
         method: 'POST',
@@ -49,6 +56,7 @@ export function usePronunciationCoach() {
         body: JSON.stringify({
           word,
           context,
+          genre,
           language: settings.language,
           accentGoal: settings.accentGoal,
         }),
@@ -74,7 +82,32 @@ export function usePronunciationCoach() {
           try { player.play(); } catch {}
         }, 200);
       } else {
-        setState('ready');
+        const canUseWebSpeech =
+          Platform.OS === 'web' &&
+          typeof window !== 'undefined' &&
+          typeof window.speechSynthesis !== 'undefined';
+
+        if (canUseWebSpeech) {
+          try {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(data.slow || word);
+            speechUtteranceRef.current = utterance;
+            setState('playing');
+            utterance.onend = () => {
+              setState('ready');
+              speechUtteranceRef.current = null;
+            };
+            utterance.onerror = () => {
+              setState('ready');
+              speechUtteranceRef.current = null;
+            };
+            window.speechSynthesis.speak(utterance);
+          } catch {
+            setState('ready');
+          }
+        } else {
+          setState('ready');
+        }
       }
     } catch (err) {
       console.error('Pronunciation coach error:', err);
@@ -91,15 +124,21 @@ export function usePronunciationCoach() {
         player.seekTo(0);
         player.play();
       } catch {
-        await pronounce(result.word);
+        const previous = lastPronounceArgsRef.current;
+        await pronounce(result.word, previous?.context, previous?.genre);
       }
     } else {
-      await pronounce(result.word);
+      const previous = lastPronounceArgsRef.current;
+      await pronounce(result.word, previous?.context, previous?.genre);
     }
   }, [result, audioUri, player, pronounce]);
 
   const dismiss = useCallback(() => {
     try { player.pause(); } catch {}
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.speechSynthesis !== 'undefined') {
+      window.speechSynthesis.cancel();
+    }
+    speechUtteranceRef.current = null;
     setAudioUri(null);
     setState('idle');
     setResult(null);

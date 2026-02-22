@@ -13,11 +13,13 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import Colors from '@/constants/colors';
 import { getGenreProfile } from '@/constants/genres';
 import WaveformTimeline from '@/components/WaveformTimeline';
 import Toast from '@/components/Toast';
 import { useApp } from '@/lib/AppContext';
+import { goBackWithFallback } from '@/lib/navigation';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
@@ -118,16 +120,29 @@ export default function SessionReviewScreen() {
     }
   }, [fromRecording]);
 
+  const session = useMemo(() => sessions.find(s => s.id === id), [sessions, id]);
+
   const handlePronounce = (word: string) => {
     setActiveFixWord(word);
-    coach.pronounce(word);
+    coach.pronounce(word, undefined, session?.genre);
   };
 
-  const session = useMemo(() => sessions.find(s => s.id === id), [sessions, id]);
+  const sessionAudioSource = useMemo(
+    () => (session?.recordingUri ? { uri: session.recordingUri } : null),
+    [session?.recordingUri]
+  );
+  const player = useAudioPlayer(sessionAudioSource);
+  const playerStatus = useAudioPlayerStatus(player);
   const genreProfile = useMemo(() => session?.genre ? getGenreProfile(session.genre) : null, [session?.genre]);
 
   const webTopInset = Platform.OS === 'web' ? 67 : 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
+  const hasRecording = Boolean(session?.recordingUri);
+  const hasWebLocalRecordingUri =
+    Platform.OS === 'web' &&
+    typeof session?.recordingUri === 'string' &&
+    /^(file|content):\/\//i.test(session.recordingUri);
+  const canPlayRecording = hasRecording && !hasWebLocalRecordingUri;
   const horizontalInset = responsive.contentPadding;
   const contentMaxWidth = responsive.contentMaxWidth;
   const sectionWrapStyle = useMemo(
@@ -140,12 +155,27 @@ export default function SessionReviewScreen() {
     [responsive]
   );
 
+  useEffect(() => {
+    const effectiveDuration =
+      playerStatus.duration && playerStatus.duration > 0
+        ? playerStatus.duration
+        : session?.duration ?? 0;
+    if (!effectiveDuration || !Number.isFinite(effectiveDuration)) {
+      return;
+    }
+    const next = Math.max(
+      0,
+      Math.min(1, (playerStatus.currentTime || 0) / effectiveDuration)
+    );
+    setWaveformProgress(next);
+  }, [playerStatus.currentTime, playerStatus.duration, session?.duration]);
+
   if (!session) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackWithFallback(router, '/profile')}
             hitSlop={12}
             style={styles.backButton}
             accessibilityRole="button"
@@ -204,7 +234,7 @@ export default function SessionReviewScreen() {
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackWithFallback(router, '/profile')}
           hitSlop={12}
           style={styles.backButton}
           accessibilityRole="button"
@@ -249,8 +279,46 @@ export default function SessionReviewScreen() {
             onSeek={(seekPos) => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setWaveformProgress(seekPos);
+              if (session.recordingUri) {
+                const effectiveDuration =
+                  playerStatus.duration && playerStatus.duration > 0
+                    ? playerStatus.duration
+                    : session.duration;
+                void player.seekTo(Math.max(0, Math.min(effectiveDuration, seekPos * effectiveDuration)));
+              }
             }}
           />
+          <View style={styles.waveformControls}>
+            <Pressable
+              onPress={() => {
+                if (!canPlayRecording) {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                  return;
+                }
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                if (playerStatus.playing) {
+                  void player.pause();
+                } else {
+                  void player.play();
+                }
+              }}
+              style={styles.waveformPlayBtn}
+              accessibilityRole="button"
+              accessibilityLabel={playerStatus.playing ? 'Pause session audio' : 'Play session audio'}
+              accessibilityHint="Plays or pauses the recorded take"
+            >
+              <Ionicons name={playerStatus.playing ? 'pause' : 'play'} size={scaledIcon(10)} color="#fff" />
+              <Text style={styles.waveformPlayText}>{playerStatus.playing ? 'Pause' : 'Play'}</Text>
+            </Pressable>
+            {!hasRecording && (
+              <Text style={styles.waveformHintText}>Audio not saved for this session.</Text>
+            )}
+            {hasWebLocalRecordingUri && (
+              <Text style={styles.waveformHintText}>
+                This recording was saved on device and cannot be played in web.
+              </Text>
+            )}
+          </View>
         </View>
 
         <View style={[styles.insightsRow, { paddingHorizontal: horizontalInset }]}>
@@ -456,7 +524,32 @@ const styles = StyleSheet.create({
   waveformSection: {
     paddingHorizontal: 20,
     marginBottom: 20,
-    gap: 4,
+    gap: 10,
+  },
+  waveformControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  waveformPlayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.gradientStart,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  waveformPlayText: {
+    color: '#fff',
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  waveformHintText: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
   },
   insightsRow: {
     flexDirection: 'row',

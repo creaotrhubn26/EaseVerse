@@ -196,7 +196,7 @@ This updates the icon files already used in the interface under:
 
 ## PWA (Web Installable App)
 
-EaseVerse supports a Progressive Web App deployment under `/app`.
+EaseVerse supports a Progressive Web App deployment from the root path (`/`).
 
 ### Build the PWA bundle
 
@@ -208,9 +208,23 @@ npm run web:build
 
 Start the server as usual. If `web-build/index.html` exists, the app is available at:
 
-- `GET /app` (SPA entry)
+- `GET /` (canonical SPA entry)
+- `GET /app` and `GET /app/*` remain compatibility redirects to root routes
 
-The service worker, offline fallback, and manifest are served from the same `/app` scope.
+The service worker, offline fallback, and manifest are served from the root scope.
+
+### Web Asset Optimization + Budget
+
+Optimize large web-critical images before shipping:
+
+```bash
+npm run assets:optimize:web
+```
+
+`npm run web:build` now enforces a web budget check (`npm run web:budget`) that fails the build if:
+
+- entry web bundle exceeds the configured limit
+- optimized web icon assets are missing or exceed per-file limits
 
 ## External API (For Other Systems)
 

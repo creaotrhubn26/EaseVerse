@@ -78,14 +78,14 @@ export function useRecording() {
       const { granted } = await requestRecordingPermissionsAsync();
       setHasPermission(granted);
       if (!granted) {
-        setError('Microphone permission is required.');
+        setError('Microphone permission is off. Enable it in settings and try again.');
       } else {
         setError(null);
       }
       return granted;
     } catch {
       setHasPermission(false);
-      setError('Microphone permission is required.');
+      setError('Microphone permission is off. Enable it in settings and try again.');
       return false;
     }
   }, []);
@@ -162,11 +162,11 @@ export function useRecording() {
         setAudioLevel(0);
         setIsRecording(true);
         setIsPaused(false);
-        setError('Recording unavailable. Live transcript only.');
+        setError('Microphone recording is unavailable on this device. Live transcript will continue.');
         startMetering();
         return true;
       }
-      setError('Recording failed to start. Check microphone access.');
+      setError('Unable to start recording. Check microphone permission and try again.');
       return false;
     }
   }, [hasPermission, requestPermission, startMetering, recorder]);
@@ -187,7 +187,7 @@ export function useRecording() {
       setAudioLevel(0);
     } catch (err) {
       console.error('Failed to pause recording:', err);
-      setError('Recording pause failed.');
+      setError('Unable to pause recording. Try again.');
     }
   }, [stopMetering, recorder]);
 
@@ -205,7 +205,7 @@ export function useRecording() {
       startMetering();
     } catch (err) {
       console.error('Failed to resume recording:', err);
-      setError('Recording resume failed.');
+      setError('Unable to resume recording. Try again.');
     }
   }, [startMetering, recorder]);
 
@@ -243,7 +243,7 @@ export function useRecording() {
       return { uri, durationSeconds: elapsed };
     } catch (err) {
       console.error('Failed to stop recording:', err);
-      setError('Recording stop failed.');
+      setError('Unable to stop recording. Try again.');
       recordingActiveRef.current = false;
       setIsRecording(false);
       setIsPaused(false);

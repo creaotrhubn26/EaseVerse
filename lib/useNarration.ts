@@ -71,17 +71,13 @@ export function useNarration() {
   );
 
   const speakWithWebFallback = useCallback(
-    (text: string, requestId: number) => {
+    async (text: string, requestId: number) => {
       const synth = globalThis.speechSynthesis;
       if (!synth || typeof SpeechSynthesisUtterance === 'undefined') {
         return false;
       }
 
       const utterance = new SpeechSynthesisUtterance(text);
-      const voice = selectWebVoice(synth.getVoices());
-      if (voice) {
-        utterance.voice = voice;
-      }
       utterance.rate = 0.96;
       utterance.onend = () => {
         if (requestIdRef.current !== requestId) {
@@ -106,6 +102,47 @@ export function useNarration() {
 
       cleanupWebPlayback();
       webUtteranceRef.current = utterance;
+
+      const pickVoice = () => {
+        const voice = selectWebVoice(synth.getVoices());
+        if (voice) {
+          utterance.voice = voice;
+        }
+      };
+
+      pickVoice();
+      if (!utterance.voice) {
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            try {
+              synth.removeEventListener?.('voiceschanged', onVoicesChanged);
+            } catch {
+              // Ignore listener cleanup errors.
+            }
+            resolve();
+          };
+          const onVoicesChanged = () => finish();
+          try {
+            synth.addEventListener?.('voiceschanged', onVoicesChanged);
+          } catch {
+            // Ignore listener setup errors.
+          }
+          setTimeout(finish, 250);
+        });
+        if (requestIdRef.current !== requestId) {
+          return false;
+        }
+        pickVoice();
+      }
+
+      try {
+        synth.resume();
+      } catch {
+        // Ignore resume errors.
+      }
       synth.cancel();
       synth.speak(utterance);
       return true;
@@ -161,6 +198,15 @@ export function useNarration() {
     setErrorMessage(null);
 
     try {
+      if (Platform.OS === 'web') {
+        setState('playing');
+        const started = await speakWithWebFallback(text, thisRequestId);
+        if (started) {
+          return;
+        }
+        setState('loading');
+      }
+
       const baseUrl = getApiUrl();
       const elevenUrl = new URL('/api/tts/elevenlabs', baseUrl);
       const fallbackUrl = new URL('/api/tts', baseUrl);
@@ -185,6 +231,13 @@ export function useNarration() {
       }
 
       if (!response.ok) {
+        if (Platform.OS === 'web') {
+          setState('playing');
+          const started = await speakWithWebFallback(text, thisRequestId);
+          if (started) {
+            return;
+          }
+        }
         throw new Error(`TTS failed: ${response.status}`);
       }
 
@@ -218,8 +271,10 @@ export function useNarration() {
             return;
           }
           // Browser autoplay policies can block programmatic playback.
-          const started = speakWithWebFallback(text, thisRequestId);
-          if (!started) {
+          void speakWithWebFallback(text, thisRequestId).then((started) => {
+            if (started || requestIdRef.current !== thisRequestId) {
+              return;
+            }
             isSpeakingRef.current = false;
             setState('error');
             setErrorMessage('Voice playback failed. Try again.');
@@ -229,15 +284,17 @@ export function useNarration() {
                 setErrorMessage(null);
               }
             }, 1200);
-          }
+          });
         };
         webAudioRef.current = webAudio;
         void webAudio.play().catch(() => {
           if (requestIdRef.current !== thisRequestId) {
             return;
           }
-          const started = speakWithWebFallback(text, thisRequestId);
-          if (!started) {
+          void speakWithWebFallback(text, thisRequestId).then((started) => {
+            if (started || requestIdRef.current !== thisRequestId) {
+              return;
+            }
             isSpeakingRef.current = false;
             setState('error');
             setErrorMessage('Voice playback failed. Try again.');
@@ -247,7 +304,7 @@ export function useNarration() {
                 setErrorMessage(null);
               }
             }, 1200);
-          }
+          });
         });
       } else {
         try {
@@ -266,6 +323,13 @@ export function useNarration() {
       }
     } catch (err) {
       if (requestIdRef.current !== thisRequestId) return;
+      if (Platform.OS === 'web') {
+        setState('playing');
+        const started = await speakWithWebFallback(text, thisRequestId);
+        if (started) {
+          return;
+        }
+      }
       console.error('Narration error:', err);
       isSpeakingRef.current = false;
       setState('error');

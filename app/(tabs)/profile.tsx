@@ -33,6 +33,7 @@ import {
   parseCollabItem,
   parseIsoTimestampMs,
   type CollabLyricsItem,
+  resolveLyricsSyncConfig,
 } from '@/lib/collab-lyrics';
 import * as Storage from '@/lib/storage';
 import type { FeedbackIntensity, LiveMode, LyricsFollowSpeed, NarrationVoice, Song } from '@/lib/types';
@@ -72,6 +73,46 @@ type LearningRecommendationsView = {
 
 const DIFF_PREVIEW_LIMIT = 18;
 const DIFF_MAX_CELLS = 200000;
+const howToIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/howto-icon.webp')
+    : require('@/assets/images/icon-set/howto-icon.png');
+const languageAccentIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/Language_accent.webp')
+    : require('@/assets/images/icon-set/Language_accent.png');
+const feedbackHighIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/Feedback_intensity_high.webp')
+    : require('@/assets/images/icon-set/Feedback_intensity_high.png');
+const liveModeIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/Live_mode.webp')
+    : require('@/assets/images/icon-set/Live_mode.png');
+const easePocketIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/EasePocket.webp')
+    : require('@/assets/images/EasePocket.png');
+const lyricsFlowSpeedIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/lyrics_flow_speed_icon.webp')
+    : require('@/assets/images/lyrics_flow_speed_icon.png');
+const countInIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/count_in_icon.webp')
+    : require('@/assets/images/count_in_icon.png');
+const twoBeatsIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/two_beats.webp')
+    : require('@/assets/images/two_beats.png');
+const fourBeatsIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/four_beats.webp')
+    : require('@/assets/images/four_beats.png');
+const aboutIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/about_icon.webp')
+    : require('@/assets/images/about_icon.png');
 
 function buildLineDiff(
   previousLyrics: string,
@@ -205,8 +246,10 @@ function SettingRow({
   accessibilityHint?: string;
 }) {
   const responsive = useResponsiveLayout();
-  const iconContainerSize = tierValue(responsive.tier, [40, 46, 52, 60, 74, 92, 112]);
-  const iconGlyphSize = tierValue(responsive.tier, [20, 22, 24, 28, 34, 40, 46]);
+  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
+  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
+  const iconContainerSize = scaleDisplay(tierValue(responsive.tier, [40, 46, 52, 60, 74, 92, 112]));
+  const iconGlyphSize = scaleDisplay(tierValue(responsive.tier, [20, 22, 24, 28, 34, 40, 46]));
 
   if (!onPress) {
     return (
@@ -269,13 +312,15 @@ function SegmentedControl<T extends string>({
   value,
   onChange,
 }: {
-  options: { key: T; label: string; iconImage?: ImageSourcePropType }[];
+  options: { key: T; label: string; iconImage?: ImageSourcePropType; iconScale?: number }[];
   value: T;
   onChange: (key: T) => void;
 }) {
   const responsive = useResponsiveLayout();
-  const segmentIconWidth = tierValue(responsive.tier, [56, 64, 72, 84, 104, 128, 156]);
-  const segmentIconHeight = tierValue(responsive.tier, [36, 40, 44, 50, 60, 72, 86]);
+  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
+  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
+  const segmentIconWidth = scaleDisplay(tierValue(responsive.tier, [56, 64, 72, 84, 104, 128, 156]));
+  const segmentIconHeight = scaleDisplay(tierValue(responsive.tier, [36, 40, 44, 50, 60, 72, 86]));
 
   return (
     <View style={styles.segmented}>
@@ -298,8 +343,8 @@ function SegmentedControl<T extends string>({
               style={[
                 styles.segmentIcon,
                 {
-                  width: segmentIconWidth,
-                  height: segmentIconHeight,
+                  width: Math.round(segmentIconWidth * (opt.iconScale ?? 1)),
+                  height: Math.round(segmentIconHeight * (opt.iconScale ?? 1)),
                   opacity: value === opt.key ? 1 : 0.6,
                 },
               ]}
@@ -361,16 +406,33 @@ export default function ProfileScreen() {
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
   const sectionPadding = responsive.contentPadding;
   const contentMaxWidth = responsive.contentMaxWidth;
-  const sectionHeaderIconSize = tierValue(responsive.tier, [36, 40, 46, 54, 66, 82, 100]);
-  const sectionTitleIconSize = tierValue(responsive.tier, [72, 80, 92, 108, 132, 164, 200]);
-  const aboutIconWrapSize = tierValue(responsive.tier, [74, 84, 96, 112, 138, 172, 208]);
-  const aboutIconSize = tierValue(responsive.tier, [58, 66, 78, 92, 114, 144, 176]);
+  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
+  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
+  const sectionHeaderIconSize = scaleDisplay(tierValue(responsive.tier, [36, 40, 46, 54, 66, 82, 100]));
+  const sectionTitleIconSize = scaleDisplay(tierValue(responsive.tier, [72, 80, 92, 108, 132, 164, 200]));
+  const aboutIconWrapSize = scaleDisplay(tierValue(responsive.tier, [74, 84, 96, 112, 138, 172, 208]));
+  const aboutIconSize = scaleDisplay(tierValue(responsive.tier, [58, 66, 78, 92, 114, 144, 176]));
   const scaledIcon = useMemo(
     () => (size: number) => scaledIconSize(size, responsive),
     [responsive]
   );
 
   const apiBaseUrl = useMemo(() => getApiUrl(), []);
+  const lyricsSyncConfig = useMemo(() => resolveLyricsSyncConfig(), []);
+  const lyricsSyncFilterLabel = useMemo(() => {
+    const filters: string[] = [];
+    if (lyricsSyncConfig.source) {
+      filters.push(`source=${lyricsSyncConfig.source}`);
+    }
+    if (lyricsSyncConfig.projectId) {
+      filters.push(`projectId=${lyricsSyncConfig.projectId}`);
+    }
+    return filters.length > 0 ? filters.join(', ') : 'all drafts';
+  }, [lyricsSyncConfig.projectId, lyricsSyncConfig.source]);
+  const appIconSource =
+    Platform.OS === 'web'
+      ? require('@/assets/images/web/easeverse_logo_App.web.png')
+      : require('@/assets/images/easeverse_logo_App.png');
   const apiHost = useMemo(() => {
     try {
       const parsed = new URL(apiBaseUrl);
@@ -468,7 +530,7 @@ export default function ProfileScreen() {
 
     setSyncingLyrics(true);
     try {
-      const response = await apiRequest('GET', buildLyricsSyncRoute());
+      const response = await apiRequest('GET', buildLyricsSyncRoute(lyricsSyncConfig));
       const payload = (await response.json()) as { items?: unknown[] };
       const remoteItems = Array.isArray(payload.items)
         ? dedupeCollabItems(
@@ -485,7 +547,7 @@ export default function ProfileScreen() {
         setLastLyricsSyncAt(Date.now());
         setToast({
           visible: true,
-          message: 'Lyrics synced. No remote lyric drafts found.',
+          message: `Lyrics synced. No remote lyric drafts found (${lyricsSyncFilterLabel}).`,
           variant: 'info',
         });
         return;
@@ -656,7 +718,15 @@ export default function ProfileScreen() {
     } finally {
       setSyncingLyrics(false);
     }
-  }, [activeSong?.id, setActiveSong, songs, syncingLyrics, updateSong]);
+  }, [
+    activeSong?.id,
+    lyricsSyncConfig,
+    lyricsSyncFilterLabel,
+    setActiveSong,
+    songs,
+    syncingLyrics,
+    updateSong,
+  ]);
 
   const handleRefreshLearning = useCallback(async () => {
     setLearningLoading(true);
@@ -798,7 +868,7 @@ export default function ProfileScreen() {
           >
             <View style={styles.sectionTitleRow}>
               <Image
-                source={require('@/assets/images/icon-set/howto-icon.png')}
+                source={howToIconSource}
                 style={[
                   styles.sectionHeaderIcon,
                   {
@@ -832,7 +902,7 @@ export default function ProfileScreen() {
         <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
-              source={require('@/assets/images/EasePocket.png')}
+              source={easePocketIconSource}
               style={[
                 styles.sectionTitleIcon,
                 {
@@ -877,7 +947,7 @@ export default function ProfileScreen() {
         <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
-              source={require('@/assets/images/icon-set/Language_accent.png')}
+              source={languageAccentIconSource}
               style={[
                 styles.sectionTitleIcon,
                 {
@@ -913,7 +983,7 @@ export default function ProfileScreen() {
         <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
-              source={require('@/assets/images/icon-set/Feedback_intensity_high.png')}
+              source={feedbackHighIconSource}
               style={[
                 styles.sectionTitleIcon,
                 {
@@ -941,7 +1011,7 @@ export default function ProfileScreen() {
         <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
-              source={require('@/assets/images/icon-set/Live_mode.png')}
+              source={liveModeIconSource}
               style={[
                 styles.sectionTitleIcon,
                 {
@@ -973,7 +1043,7 @@ export default function ProfileScreen() {
         <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
-              source={require('@/assets/images/lyrics_flow_speed_icon.png')}
+              source={lyricsFlowSpeedIconSource}
               style={[
                 styles.sectionTitleIcon,
                 {
@@ -1004,7 +1074,7 @@ export default function ProfileScreen() {
         <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
-              source={require('@/assets/images/count_in_icon.png')}
+              source={countInIconSource}
               style={[
                 styles.sectionTitleIcon,
                 {
@@ -1021,8 +1091,8 @@ export default function ProfileScreen() {
           <SegmentedControl<string>
             options={[
               { key: '0', label: 'None' },
-              { key: '2', label: '2 beats', iconImage: require('@/assets/images/two_beats.png') },
-              { key: '4', label: '4 beats', iconImage: require('@/assets/images/four_beats.png') },
+              { key: '2', label: '2 beats', iconImage: twoBeatsIconSource },
+              { key: '4', label: '4 beats', iconImage: fourBeatsIconSource, iconScale: 1.22 },
             ]}
             value={String(settings.countIn)}
             onChange={v => updateSettings({ countIn: Number(v) as 0 | 2 | 4 })}
@@ -1132,6 +1202,10 @@ export default function ProfileScreen() {
             </Text>
           )}
 
+          <Text style={styles.modeHint}>
+            Active filters: {lyricsSyncFilterLabel}.
+          </Text>
+
           {sortedSyncChanges.length > 0 && (
             <View style={styles.diffList}>
               {sortedSyncChanges.map((change) => (
@@ -1236,7 +1310,7 @@ export default function ProfileScreen() {
 	        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
             <View style={styles.sectionTitleRow}>
               <Image
-                source={require('@/assets/images/about_icon.png')}
+                source={aboutIconSource}
                 style={[
                   styles.sectionTitleIcon,
                   {
@@ -1263,7 +1337,7 @@ export default function ProfileScreen() {
                   ]}
                 >
 	                <Image
-	                  source={require('@/assets/images/easeverse_logo_App.png')}
+	                  source={appIconSource}
 	                  style={[
                       styles.aboutIcon,
                       { width: aboutIconSize, height: aboutIconSize },

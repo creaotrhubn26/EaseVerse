@@ -7,7 +7,7 @@ import { pipeline, AutomaticSpeechRecognitionPipeline } from '@xenova/transforme
 import { readFile, writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import wavefilePkg from 'wavefile';
+import * as wavefilePkg from 'wavefile';
 import { spawn } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
 
@@ -20,6 +20,7 @@ const { WaveFile } = wavefilePkg as unknown as {
 let transcriber: AutomaticSpeechRecognitionPipeline | null = null;
 let isInitializing = false;
 let initPromise: Promise<void> | null = null;
+const AI_DEBUG_LOGS = process.env.AI_DEBUG_LOGS === 'true';
 let whisperStatus: {
   state: 'idle' | 'loading' | 'ready' | 'error';
   lastError: string | null;
@@ -31,6 +32,12 @@ let whisperStatus: {
   startedAt: null,
   readyAt: null,
 };
+
+function debugLog(...args: unknown[]) {
+  if (AI_DEBUG_LOGS) {
+    console.log(...args);
+  }
+}
 
 /**
  * Initialize the Whisper model (lazy loading)
@@ -53,12 +60,12 @@ async function initializeWhisper(): Promise<void> {
   };
   initPromise = (async () => {
     try {
-      console.log('Initializing Whisper model (this may take a moment on first run)...');
+      debugLog('Initializing Whisper model (this may take a moment on first run)...');
       
       // Use base.en for better accuracy (tiny.en may silently fail on some audio)
       const modelName = process.env.WHISPER_MODEL || 'Xenova/whisper-base.en';
       
-      console.log(`Loading Whisper model: ${modelName}`);
+      debugLog(`Loading Whisper model: ${modelName}`);
       
       transcriber = await pipeline(
         'automatic-speech-recognition',
@@ -69,7 +76,7 @@ async function initializeWhisper(): Promise<void> {
         }
       ) as AutomaticSpeechRecognitionPipeline;
       
-      console.log('Whisper model initialized successfully');
+      debugLog('Whisper model initialized successfully');
       whisperStatus = {
         state: 'ready',
         lastError: null,
@@ -174,12 +181,12 @@ export async function transcribeWithWhisper(
       throw new Error('Whisper model not initialized');
     }
 
-    console.log('Whisper: Processing audio buffer of', audioBuffer.length, 'bytes');
+    debugLog('Whisper: Processing audio buffer of', audioBuffer.length, 'bytes');
 
     // Decode audio to Float32Array (16kHz mono PCM)
-    console.log('Whisper: Decoding audio with ffmpeg...');
+    debugLog('Whisper: Decoding audio with ffmpeg...');
     const audioSamples = await decodeAudio(audioBuffer);
-    console.log('Whisper: Decoded', audioSamples.length, 'samples');
+    debugLog('Whisper: Decoded', audioSamples.length, 'samples');
 
     // Pass raw audio samples to Whisper
     const result: any = await transcriber(audioSamples, {
@@ -189,7 +196,9 @@ export async function transcribeWithWhisper(
       chunk_length_s: 30, // Process in 30-second chunks
     });
 
-    console.log('Whisper: Full result:', JSON.stringify(result, null, 2));
+    if (AI_DEBUG_LOGS) {
+      console.log('Whisper: Full result:', JSON.stringify(result, null, 2));
+    }
     
     let transcription = '';
     if (typeof result === 'string') {
@@ -200,7 +209,7 @@ export async function transcribeWithWhisper(
       transcription = result.map((r: any) => r.text || '').join(' ').trim();
     }
     
-    console.log('Whisper: Transcription:', transcription || '(empty)');
+    debugLog('Whisper: Transcription:', transcription || '(empty)');
     return transcription;
   } catch (error) {
     console.error('Whisper transcription error:', error);
@@ -228,7 +237,7 @@ export function getWhisperStatus() {
 export async function preloadWhisper(): Promise<void> {
   try {
     await initializeWhisper();
-    console.log('Whisper model preloaded and ready');
+    debugLog('Whisper model preloaded and ready');
   } catch (error) {
     console.warn('Failed to preload Whisper model:', error);
   }

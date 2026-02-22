@@ -11,6 +11,7 @@ import {
   dedupeCollabItems,
   normalizeTitle,
   parseCollabItem,
+  resolveLyricsSyncConfig,
 } from './collab-lyrics';
 
 interface AppContextValue {
@@ -94,6 +95,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const autoLyricsSyncLastRunAtRef = useRef(0);
   const runAutoLyricsSyncRef = useRef<() => void>(() => undefined);
   const apiBaseUrl = useMemo(() => getApiUrl(), []);
+  const lyricsSyncConfig = useMemo(() => resolveLyricsSyncConfig(), []);
 
   useEffect(() => {
     autoLyricsSyncLastRunAtRef.current = loadAutoLyricsSyncLastRunAt();
@@ -231,7 +233,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     let response: Response;
     try {
-      response = await apiRequest('GET', buildLyricsSyncRoute());
+      response = await apiRequest('GET', buildLyricsSyncRoute(lyricsSyncConfig));
     } catch {
       return;
     }
@@ -323,7 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     await Storage.saveLyricsSnapshots(nextSnapshots);
-  }, [updateSong]);
+  }, [lyricsSyncConfig, updateSong]);
 
   const runAutoLyricsSync = useCallback(() => {
     const now = Date.now();
@@ -367,7 +369,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     runAutoLyricsSync();
 
-    const wsUrl = buildLyricsRealtimeSocketUrl(apiBaseUrl);
+    const wsUrl = buildLyricsRealtimeSocketUrl(apiBaseUrl, lyricsSyncConfig);
     if (!wsUrl) {
       return;
     }
@@ -450,7 +452,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         socket.close();
       }
     };
-  }, [apiBaseUrl, isLoading, runAutoLyricsSync]);
+  }, [apiBaseUrl, isLoading, lyricsSyncConfig, runAutoLyricsSync]);
 
   const value = useMemo(() => ({
     songs,

@@ -53,6 +53,7 @@ export interface Session {
   title: string;
   duration: number;
   date: number;
+  recordingUri?: string;
   tags: string[];
   favorite: boolean;
   insights: SessionInsight;

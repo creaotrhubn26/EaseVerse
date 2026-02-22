@@ -27,6 +27,7 @@ import { useApp } from '@/lib/AppContext';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { getApiHeaders, getApiUrl } from '@/lib/query-client';
+import { goBackWithFallback } from '@/lib/navigation';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
 const speedOptions = [0.8, 1.0, 1.1] as const;
@@ -66,8 +67,15 @@ export default function PracticeLoopScreen() {
   const [loopAudioLine, setLoopAudioLine] = useState('');
   const [isLoopAudioLoading, setIsLoopAudioLoading] = useState(false);
   const [loopAudioError, setLoopAudioError] = useState<string | null>(null);
+  const [loopStatusText, setLoopStatusText] = useState(
+    'Select a phrase and tap Start Loop.'
+  );
   const coach = usePronunciationCoach();
-  const loopPlayer = useAudioPlayer(loopAudioUri ? { uri: loopAudioUri } : null);
+  const loopAudioSource = useMemo(
+    () => (loopAudioUri ? { uri: loopAudioUri } : null),
+    [loopAudioUri]
+  );
+  const loopPlayer = useAudioPlayer(loopAudioSource);
   const loopPlayerStatus = useAudioPlayerStatus(loopPlayer);
 
   const progressAnim = useSharedValue(0);
@@ -98,22 +106,26 @@ export default function PracticeLoopScreen() {
   useEffect(() => {
     setIsLooping((current) => (current ? false : current));
     setLoopAudioError(null);
+    setLoopStatusText('Phrase changed. Tap Start Loop when ready.');
   }, [selectedLineIdx]);
 
   const ensureLoopAudio = useCallback(async (): Promise<boolean> => {
     const line = lyricsLines[selectedLineIdx];
     if (!line) {
       setLoopAudioError('Select a phrase to start looping.');
+      setLoopStatusText('Select a phrase to start loop playback.');
       return false;
     }
 
     if (loopAudioUri && loopAudioLine === line) {
+      setLoopStatusText('Audio ready. Tap Start Loop.');
       return true;
     }
 
     try {
       setIsLoopAudioLoading(true);
       setLoopAudioError(null);
+      setLoopStatusText('Generating loop audio...');
       const baseUrl = getApiUrl();
       const elevenUrl = new URL('/api/tts/elevenlabs', baseUrl);
       const fallbackUrl = new URL('/api/tts', baseUrl);
@@ -123,7 +135,11 @@ export default function PracticeLoopScreen() {
         response = await fetch(elevenUrl.toString(), {
           method: 'POST',
           headers: getApiHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ text: line, voice: settings.narrationVoice }),
+          body: JSON.stringify({
+            text: line,
+            voice: settings.narrationVoice,
+            genre: session?.genre,
+          }),
         });
       } catch {
         response = null;
@@ -144,15 +160,17 @@ export default function PracticeLoopScreen() {
       const dataUri = await blobToDataUri(blob);
       setLoopAudioUri(dataUri);
       setLoopAudioLine(line);
+      setLoopStatusText('Audio ready. Tap Start Loop.');
       return true;
     } catch (error) {
       console.error('Failed to prepare practice loop audio:', error);
       setLoopAudioError('Unable to generate loop audio. Check TTS API configuration.');
+      setLoopStatusText('Unable to generate loop audio. Check TTS API configuration.');
       return false;
     } finally {
       setIsLoopAudioLoading(false);
     }
-  }, [loopAudioLine, loopAudioUri, lyricsLines, selectedLineIdx, settings.narrationVoice]);
+  }, [loopAudioLine, loopAudioUri, lyricsLines, selectedLineIdx, settings.narrationVoice, session?.genre]);
 
   useEffect(() => {
     if (!isLooping) {
@@ -171,8 +189,17 @@ export default function PracticeLoopScreen() {
       }
       setProgress(0);
       progressAnim.value = 0;
+      if (loopAudioError) {
+        setLoopStatusText(loopAudioError);
+      } else if (loopAudioUri) {
+        setLoopStatusText('Loop stopped. Tap Start Loop to replay.');
+      } else {
+        setLoopStatusText('Select a phrase and tap Start Loop.');
+      }
       return;
     }
+
+    setLoopStatusText('Playing loop...');
 
     const totalMs = loopLength * 1000;
     loopEndAtRef.current = Date.now() + totalMs;
@@ -193,7 +220,7 @@ export default function PracticeLoopScreen() {
     return () => {
       if (loopTimerRef.current) clearInterval(loopTimerRef.current);
     };
-  }, [isLooping, loopLength, loopPlayer, progressAnim]);
+  }, [isLooping, loopLength, loopPlayer, progressAnim, loopAudioError, loopAudioUri]);
 
   useEffect(() => {
     if (!isLooping) {
@@ -290,7 +317,7 @@ export default function PracticeLoopScreen() {
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackWithFallback(router, '/profile')}
             hitSlop={12}
             style={styles.backButton}
             accessibilityRole="button"
@@ -311,7 +338,7 @@ export default function PracticeLoopScreen() {
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackWithFallback(router, '/profile')}
           hitSlop={12}
           style={styles.backButton}
           accessibilityRole="button"
@@ -370,7 +397,7 @@ export default function PracticeLoopScreen() {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               const words = line.split(' ').filter((w: string) => w.trim());
               const hardWord = words.reduce((longest: string, w: string) => w.length > longest.length ? w : longest, '');
-              coach.pronounce(hardWord, line);
+              coach.pronounce(hardWord, line, session?.genre);
             }}
             accessibilityRole="button"
             accessibilityLabel="Hear pronunciation"
@@ -484,6 +511,7 @@ export default function PracticeLoopScreen() {
 
             if (isLooping) {
               setIsLooping(false);
+              setLoopStatusText('Loop stopped. Tap Start Loop to replay.');
               return;
             }
 
@@ -497,6 +525,7 @@ export default function PracticeLoopScreen() {
             loopHintIndexRef.current = 0;
             setCoachHint(null);
             setIsLooping(true);
+            setLoopStatusText('Playing loop...');
             try {
               loopPlayer.seekTo(0);
               loopPlayer.setPlaybackRate(speed, 'medium');
@@ -504,6 +533,7 @@ export default function PracticeLoopScreen() {
             } catch {
               setIsLooping(false);
               setLoopAudioError('Unable to start loop playback on this device.');
+              setLoopStatusText('Unable to start loop playback on this device.');
             }
           }}
           style={styles.loopPressable}
@@ -536,6 +566,9 @@ export default function PracticeLoopScreen() {
             </LinearGradient>
           </Animated.View>
         </Pressable>
+        <Text style={styles.loopStatusText} accessibilityLiveRegion="polite">
+          {loopStatusText}
+        </Text>
         {loopAudioError && (
           <Text style={styles.loopErrorText}>{loopAudioError}</Text>
         )}
@@ -721,6 +754,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
+  },
+  loopStatusText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    fontFamily: 'Inter_500Medium',
   },
   loopErrorText: {
     color: Colors.dangerUnderline,

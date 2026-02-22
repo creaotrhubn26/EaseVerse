@@ -22,6 +22,7 @@ import { useApp } from "@/lib/AppContext";
 import { useRecording } from "@/lib/useRecording";
 import { analyzeConsonantPrecision, type EasePocketGrid as ApiGrid } from "@/lib/easepocket-client";
 import { ingestEasePocketLearningEvent } from "@/lib/learning-client";
+import { goBackWithFallback } from "@/lib/navigation";
 import * as Storage from "@/lib/storage";
 import { scaledIconSize, tierValue, useResponsiveLayout } from "@/lib/responsive";
 import Toast from "@/components/Toast";
@@ -145,7 +146,22 @@ const modeCards: {
   },
 ];
 
-const easePocketIcon = require("@/assets/images/EasePocket.png");
+const easePocketIcon =
+  Platform.OS === "web"
+    ? require("@/assets/images/EasePocket.webp")
+    : require("@/assets/images/EasePocket.png");
+const bpmIconSource =
+  Platform.OS === "web"
+    ? require("@/assets/images/bpm_icon.webp")
+    : require("@/assets/images/bpm_icon.png");
+const twoBeatsIconSource =
+  Platform.OS === "web"
+    ? require("@/assets/images/two_beats.webp")
+    : require("@/assets/images/two_beats.png");
+const fourBeatsIconSource =
+  Platform.OS === "web"
+    ? require("@/assets/images/four_beats.webp")
+    : require("@/assets/images/four_beats.png");
 
 export default function EasePocketScreen() {
   const insets = useSafeAreaInsets();
@@ -179,6 +195,8 @@ export default function EasePocketScreen() {
     message: "",
   });
   const lastToastErrorRef = useRef<string | null>(null);
+  const recordingIsActiveRef = useRef(recording.isRecording);
+  const recordingStopRef = useRef(recording.stop);
 
   const startEpochRef = useRef<number | null>(null);
   const isRunningRef = useRef(false);
@@ -304,6 +322,11 @@ export default function EasePocketScreen() {
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+
+  useEffect(() => {
+    recordingIsActiveRef.current = recording.isRecording;
+    recordingStopRef.current = recording.stop;
+  }, [recording.isRecording, recording.stop]);
 
   useEffect(() => {
     let cancelled = false;
@@ -627,20 +650,20 @@ export default function EasePocketScreen() {
     setPocketTarget("center");
     
     // Stop recording if switching away from consonant mode
-    if (recording.isRecording) {
-      void recording.stop();
+    if (recordingIsActiveRef.current) {
+      void recordingStopRef.current();
     }
-  }, [hardStop, mode, recording]);
+  }, [hardStop, mode]);
 
   useEffect(() => {
     return () => {
       hardStop();
       // Stop recording on unmount if active
-      if (recording.isRecording) {
-        void recording.stop();
+      if (recordingIsActiveRef.current) {
+        void recordingStopRef.current();
       }
     };
-  }, [hardStop, recording]);
+  }, [hardStop]);
 
   const startOrStop = useCallback(() => {
     if (isRunning) {
@@ -733,7 +756,9 @@ export default function EasePocketScreen() {
     () => ({ width: "100%" as const, maxWidth: contentMaxWidth, alignSelf: "center" as const }),
     [contentMaxWidth]
   );
-  const topIconSize = tierValue(responsive.tier, [28, 30, 32, 34, 40, 46, 52]);
+  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
+  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
+  const topIconSize = scaleDisplay(tierValue(responsive.tier, [28, 30, 32, 34, 40, 46, 52]));
   const circleSize = tierValue(responsive.tier, [192, 210, 226, 240, 272, 312, 352]);
   const circleRadius = Math.round(circleSize / 2);
   const centerSize = Math.round(circleSize * 0.71);
@@ -741,7 +766,7 @@ export default function EasePocketScreen() {
   const circleDotSize = tierValue(responsive.tier, [12, 13, 14, 14, 16, 18, 20]);
   const centerTitleSize = tierValue(responsive.tier, [18, 20, 21, 22, 24, 28, 32]);
   const centerSubSize = tierValue(responsive.tier, [12, 13, 13, 14, 15, 16, 18]);
-  const controlIconSize = tierValue(responsive.tier, [28, 32, 36, 42, 52, 64, 78]);
+  const controlIconSize = scaleDisplay(tierValue(responsive.tier, [28, 32, 36, 42, 52, 64, 78]));
   const scaledIcon = useMemo(
     () => (size: number) => scaledIconSize(size, responsive),
     [responsive]
@@ -765,7 +790,7 @@ export default function EasePocketScreen() {
       />
       <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackWithFallback(router, "/")}
           hitSlop={12}
           style={styles.backButton}
           accessibilityRole="button"
@@ -852,7 +877,7 @@ export default function EasePocketScreen() {
             <View style={styles.controlCard}>
               <View style={styles.controlLabelRow}>
                 <Image
-                  source={require("@/assets/images/bpm_icon.png")}
+                  source={bpmIconSource}
                   style={[styles.controlIcon, { width: controlIconSize, height: controlIconSize }]}
                   resizeMode="contain"
                 />
@@ -892,8 +917,14 @@ export default function EasePocketScreen() {
             <View style={styles.controlCard}>
               <View style={styles.controlLabelRow}>
                 <Image
-                  source={prefs.beatsPerBar === 2 ? require("@/assets/images/two_beats.png") : require("@/assets/images/four_beats.png")}
-                  style={[styles.controlIcon, { width: controlIconSize, height: controlIconSize }]}
+                  source={prefs.beatsPerBar === 2 ? twoBeatsIconSource : fourBeatsIconSource}
+                  style={[
+                    styles.controlIcon,
+                    {
+                      width: Math.round(controlIconSize * (prefs.beatsPerBar === 4 ? 1.22 : 1)),
+                      height: Math.round(controlIconSize * (prefs.beatsPerBar === 4 ? 1.22 : 1)),
+                    },
+                  ]}
                   resizeMode="contain"
                 />
                 <Text style={styles.controlLabel}>Beats</Text>

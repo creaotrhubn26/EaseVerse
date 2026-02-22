@@ -36,6 +36,39 @@ import { buildSessionScoring } from '@shared/session-scoring';
 import type { LyricLine, SignalQuality, Session } from '@/lib/types';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
+const easeVerseLogoSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/web/easeverse_logo_App.web.png')
+    : require('@/assets/images/easeverse_logo_App.png');
+const warmupIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/web/warmup-icon.web.png')
+    : require('@/assets/images/warmup-icon.png');
+const mindfulnessIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/web/mindfulness-icon.web.png')
+    : require('@/assets/images/mindfulness-icon.png');
+const easePocketIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/EasePocket.webp')
+    : require('@/assets/images/EasePocket.png');
+const recordControlIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/record_icon.web.png')
+    : require('@/assets/images/record_icon.png');
+const stopControlIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/Stop_icon.web.png')
+    : require('@/assets/images/Stop_icon.png');
+const metronomeControlIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/metronome_icon.web.png')
+    : require('@/assets/images/metronome_icon.png');
+const markerControlIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/flag_icon.web.png')
+    : require('@/assets/images/flag_icon.png');
+
 function AnimatedTransportIcon({
   source,
   size,
@@ -122,7 +155,8 @@ function AnimatedTransportIcon({
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
-  const { activeSong, songs, setActiveSong, addSession, settings, updateSettings } = useApp();
+  const { activeSong, songs, sessions, setActiveSong, addSession, settings, updateSettings } =
+    useApp();
   const recording = useRecording();
   const metronomePlayer = useAudioPlayer(require('@/assets/sounds/metronome-click.wav'));
   const [quality, setQuality] = useState<SignalQuality>('good');
@@ -459,17 +493,19 @@ export default function SingScreen() {
     if (recording.error) {
       setStatusText(recording.error);
     } else if (countInRemaining !== null) {
-      setStatusText(`Starting in ${countInRemaining}...`);
+      setStatusText(`Count-in: ${countInRemaining}...`);
     } else if (isAnalyzing) {
-      setStatusText(analysisStatus ?? 'Analyzing take...');
+      setStatusText(analysisStatus ?? 'Analyzing your take...');
     } else if (isRecording && !isPaused) {
       setStatusText(
-        liveTrackingSupported ? 'Listening with live word tracking...' : 'Listening...'
+        liveTrackingSupported
+          ? 'Listening with live word tracking.'
+          : 'Listening.'
       );
     } else if (isPaused) {
-      setStatusText('Paused');
+      setStatusText('Paused. Tap record to resume.');
     } else {
-      setStatusText('Ready to sing');
+      setStatusText('Ready. Tap record to start your take.');
     }
   }, [analysisStatus, countInRemaining, isAnalyzing, isPaused, isRecording, liveTrackingSupported, recording.error]);
 
@@ -582,6 +618,7 @@ export default function SingScreen() {
           title: `${activeSong?.title || 'Recording'} - Take`,
           duration: elapsed,
           date: Date.now(),
+          recordingUri: recordingUri || undefined,
           tags: ['practice', genreProfile.label.toLowerCase()],
           favorite: false,
           insights: resolvedInsights,
@@ -597,6 +634,11 @@ export default function SingScreen() {
         setIsAnalyzing(false);
         setAnalysisStatus(null);
       }
+    } else {
+      setToast({
+        visible: true,
+        message: 'Record at least 3 seconds to generate session feedback.',
+      });
     }
 
     setLiveTranscript('');
@@ -676,7 +718,8 @@ export default function SingScreen() {
     [contentMaxWidth]
   );
   const quickActionSize = tierValue(responsive.tier, [56, 60, 64, 72, 86, 104, 124]);
-  const warmupIconSize = tierValue(responsive.tier, [24, 26, 28, 32, 38, 46, 56]);
+  const quickDockIconSize = Math.max(48, Math.round(quickActionSize * 0.84));
+  const quickDockButtonSize = Math.max(58, quickDockIconSize + 12);
   const transportImageSize = tierValue(responsive.tier, [34, 38, 42, 50, 62, 76, 92]);
   const transportButtonSize = tierValue(responsive.tier, [50, 54, 58, 66, 78, 94, 112]);
   const noSongLogoSize = tierValue(responsive.tier, [110, 124, 146, 170, 210, 252, 300]);
@@ -686,6 +729,34 @@ export default function SingScreen() {
     () => (size: number) => scaledIconSize(size, responsive),
     [responsive]
   );
+  const isFirstSessionGuideVisible =
+    Boolean(activeSong) &&
+    sessions.length === 0 &&
+    !isRecording &&
+    !isAnalyzing &&
+    countInRemaining === null;
+  const recordingStageLabel = recording.error
+    ? 'Issue'
+    : countInRemaining !== null
+      ? 'Count-In'
+      : isAnalyzing
+        ? 'Analyzing'
+        : isRecording && !isPaused
+          ? 'Listening'
+          : isPaused
+            ? 'Paused'
+            : 'Ready';
+  const recordingActionHint = recording.error
+    ? 'Check microphone settings, then retry.'
+    : countInRemaining !== null
+      ? 'Tap record to cancel count-in.'
+      : isAnalyzing
+        ? 'Hold on while feedback is generated.'
+        : isRecording && !isPaused
+          ? 'Tap stop to open Session Review.'
+          : isPaused
+            ? 'Tap record to resume, or stop to review.'
+            : 'Tap record to start a take.';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
@@ -728,97 +799,117 @@ export default function SingScreen() {
         </View>
       </View>
 
-      {activeSong && !isRecording && (
-        <View
-          style={[
-            styles.preRecordRow,
-            sectionWrapStyle,
-            { marginHorizontal: horizontalInset },
-          ]}
-        >
-          <View style={styles.genreTipBar}>
-            <Ionicons name="bulb-outline" size={scaledIcon(10)} color={genreProfile.color} />
-            <Text style={styles.genreTipText} numberOfLines={1}>
-              {genreProfile.vocalStyle}
-            </Text>
+      {activeSong && !isRecording && !isAnalyzing && (
+        <View style={[styles.quickActionsTopStrip, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
+          <View style={styles.quickDockRow}>
+            <Pressable
+              style={[
+                styles.quickDockBtn,
+                {
+                  width: quickDockButtonSize,
+                  height: quickDockButtonSize,
+                  borderRadius: Math.round(quickDockButtonSize * 0.22),
+                },
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push('/warmup');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open warm up"
+              accessibilityHint="Starts the vocal warm-up routine"
+            >
+              <Image
+                source={warmupIconSource}
+                style={[
+                    styles.quickDockIcon,
+                    {
+                      width: quickDockIconSize,
+                      height: quickDockIconSize,
+                      borderRadius: Math.round(quickDockIconSize * 0.24),
+                    },
+                  ]}
+                resizeMode="contain"
+                accessible={false}
+              />
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.quickDockBtn,
+                {
+                  width: quickDockButtonSize,
+                  height: quickDockButtonSize,
+                  borderRadius: Math.round(quickDockButtonSize * 0.22),
+                },
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push('/mindfulness');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open mindfulness"
+              accessibilityHint="Starts the breathing and focus routine"
+            >
+              <Image
+                source={mindfulnessIconSource}
+                style={[
+                    styles.quickDockIcon,
+                    {
+                      width: quickDockIconSize,
+                      height: quickDockIconSize,
+                      borderRadius: Math.round(quickDockIconSize * 0.24),
+                    },
+                  ]}
+                resizeMode="contain"
+                accessible={false}
+              />
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.quickDockBtn,
+                {
+                  width: quickDockButtonSize,
+                  height: quickDockButtonSize,
+                  borderRadius: Math.round(quickDockButtonSize * 0.22),
+                },
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push('/easepocket');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open EasePocket timing trainer"
+              accessibilityHint="Opens the timing trainer modes"
+            >
+              <Image
+                source={easePocketIconSource}
+                style={[
+                    styles.quickDockIcon,
+                    {
+                      width: quickDockIconSize,
+                      height: quickDockIconSize,
+                      borderRadius: Math.round(quickDockIconSize * 0.24),
+                    },
+                  ]}
+                resizeMode="cover"
+                accessible={false}
+              />
+            </Pressable>
           </View>
-          <Pressable
-            style={styles.warmUpBtn}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              router.push('/warmup');
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Open warm up"
-            accessibilityHint="Starts the vocal warm-up routine"
-          >
-            <Image
-              source={require('@/assets/images/warmup-icon.png')}
-              style={[styles.warmUpIcon, { width: warmupIconSize, height: warmupIconSize }]}
-              accessible={false}
-            />
-            <Text style={styles.warmUpBtnText}>Warm Up</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.mindfulBtn,
-              {
-                width: quickActionSize,
-                height: quickActionSize,
-                borderRadius: Math.round(quickActionSize * 0.24),
-              },
-            ]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              router.push('/mindfulness');
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Open mindfulness"
-            accessibilityHint="Starts the breathing and focus routine"
-          >
-            <Image
-              source={require('@/assets/images/mindfulness-icon.png')}
-              style={[
-                styles.mindfulIcon,
-                {
-                  width: quickActionSize,
-                  height: quickActionSize,
-                  borderRadius: Math.round(quickActionSize * 0.24),
-                },
-              ]}
-              accessible={false}
-            />
-          </Pressable>
-          <Pressable
-            style={[
-              styles.easePocketBtn,
-              {
-                width: quickActionSize,
-                height: quickActionSize,
-                borderRadius: Math.round(quickActionSize * 0.24),
-              },
-            ]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              router.push('/easepocket');
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Open EasePocket timing trainer"
-            accessibilityHint="Opens the timing trainer modes"
-          >
-            <Image
-              source={require('@/assets/images/EasePocket.png')}
-              style={[
-                styles.easePocketIcon,
-                {
-                  width: quickActionSize,
-                  height: quickActionSize,
-                  borderRadius: Math.round(quickActionSize * 0.24),
-                },
-              ]}
-              accessible={false}
-            />
-          </Pressable>
+        </View>
+      )}
+
+      {isFirstSessionGuideVisible && (
+        <View style={[styles.quickStartCard, sectionWrapStyle, { marginHorizontal: horizontalInset }]}>
+          <View style={styles.quickStartHeader}>
+            <Ionicons name="flash-outline" size={scaledIcon(10)} color={Colors.gradientStart} />
+            <Text style={styles.quickStartTitle}>Quick Start</Text>
+          </View>
+          <Text style={styles.quickStartStep}>1. Tap record to capture your first take.</Text>
+          <Text style={styles.quickStartStep}>2. Stop after 3+ seconds to open Session Review.</Text>
+          <Text style={styles.quickStartStep}>3. Open Practice Loop to drill hard lines.</Text>
         </View>
       )}
 
@@ -848,18 +939,37 @@ export default function SingScreen() {
       >
         <VUMeter isActive={isRecording && !isPaused} audioLevel={recording.audioLevel} />
 
-        <View style={styles.statusRow}>
-          <View style={[styles.statusDot, {
-            backgroundColor: isRecording && !isPaused
-              ? Colors.successUnderline
-              : isPaused
-              ? Colors.warningUnderline
-              : Colors.textTertiary,
-          }]} />
-          <Text style={styles.statusText} accessibilityLiveRegion="polite">{statusText}</Text>
-          {isRecording && (
-            <Text style={styles.timerText}>{formatTime(duration)}</Text>
-          )}
+        {activeSong && !isRecording && !isAnalyzing && (
+          <View style={styles.genreStyleHint}>
+            <Ionicons name="bulb-outline" size={scaledIcon(10)} color={genreProfile.color} />
+            <Text style={styles.genreTipText}>{genreProfile.vocalStyle}</Text>
+          </View>
+        )}
+
+        <View style={styles.primaryActionCard}>
+          <View style={styles.primaryActionTopRow}>
+            <View style={styles.primaryActionStateRow}>
+              <View style={[styles.statusDot, {
+                backgroundColor: isRecording && !isPaused
+                  ? Colors.successUnderline
+                  : isPaused
+                  ? Colors.warningUnderline
+                  : isAnalyzing
+                  ? Colors.gradientStart
+                  : Colors.textTertiary,
+              }]} />
+              <Text style={styles.primaryActionStateText}>{recordingStageLabel}</Text>
+            </View>
+            {(isRecording || isAnalyzing) && (
+              <Text style={styles.primaryActionTimer}>
+                {isAnalyzing ? 'Processing…' : formatTime(duration)}
+              </Text>
+            )}
+          </View>
+          <Text style={styles.primaryActionHeadline} accessibilityLiveRegion="polite">
+            {statusText}
+          </Text>
+          <Text style={styles.primaryActionHintText}>{recordingActionHint}</Text>
         </View>
 
         <View style={styles.transportRow}>
@@ -881,7 +991,7 @@ export default function SingScreen() {
             accessibilityState={{ disabled: !isRecording }}
           >
             <AnimatedTransportIcon
-              source={require('@/assets/images/flag_icon.png')}
+              source={markerControlIconSource}
               size={transportImageSize}
               active={isRecording}
               dimmed={!isRecording}
@@ -893,7 +1003,7 @@ export default function SingScreen() {
             isPaused={isPaused}
             onPress={handleRecordPress}
             size={recordButtonSize}
-            iconSource={require('@/assets/images/record_icon.png')}
+            iconSource={recordControlIconSource}
           />
 
           {isRecording ? (
@@ -917,7 +1027,7 @@ export default function SingScreen() {
               accessibilityHint="Stops recording and opens session review"
             >
               <AnimatedTransportIcon
-                source={require('@/assets/images/Stop_icon.png')}
+                source={stopControlIconSource}
                 size={transportImageSize}
                 active
               />
@@ -959,7 +1069,7 @@ export default function SingScreen() {
               accessibilityState={{ selected: settings.metronomeEnabled }}
             >
               <AnimatedTransportIcon
-                source={require('@/assets/images/metronome_icon.png')}
+                source={metronomeControlIconSource}
                 size={transportImageSize}
                 active={settings.metronomeEnabled}
                 dimmed={!settings.metronomeEnabled}
@@ -978,7 +1088,7 @@ export default function SingScreen() {
             ]}
           >
             <Image
-              source={require('@/assets/images/easeverse_logo_App.png')}
+              source={easeVerseLogoSource}
               style={[
                 styles.emptyStateTopLogo,
                 {
@@ -1030,8 +1140,9 @@ export default function SingScreen() {
                 accessibilityHint="Opens the vocal warm-up routine"
               >
                 <Image
-                  source={require('@/assets/images/warmup-icon.png')}
+                  source={warmupIconSource}
                   style={styles.emptyQuickIcon}
+                  resizeMode="contain"
                   accessible={false}
                 />
                 <Text style={styles.emptyQuickText}>Warm Up</Text>
@@ -1047,8 +1158,9 @@ export default function SingScreen() {
                 accessibilityHint="Opens the breathing and focus routine"
               >
                 <Image
-                  source={require('@/assets/images/mindfulness-icon.png')}
+                  source={mindfulnessIconSource}
                   style={styles.emptyQuickIcon}
+                  resizeMode="contain"
                   accessible={false}
                 />
                 <Text style={styles.emptyQuickText}>Mindfulness</Text>
@@ -1146,14 +1258,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
   },
+  quickActionsCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surfaceGlass,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    pointerEvents: 'auto',
+  },
   preRecordRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
-    marginHorizontal: 20,
   },
-  genreTipBar: {
-    flex: 1,
+  quickActionsTopStrip: {
+    marginBottom: 8,
+    alignItems: 'flex-end',
+    position: 'relative',
+    zIndex: 25,
+    elevation: 25,
+    pointerEvents: 'box-none',
+  },
+  quickDockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickDockBtn: {
+    width: 62,
+    height: 62,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surfaceGlass,
+    overflow: 'hidden',
+  },
+  quickDockIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+  },
+  genreStyleHint: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -1164,62 +1313,40 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderGlass,
   },
-  warmUpBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    minHeight: 44,
-    borderRadius: 10,
-    backgroundColor: Colors.accentSubtle,
-    borderWidth: 1,
-    borderColor: Colors.accentBorder,
-  },
-  warmUpIcon: {
-    width: 20,
-    height: 20,
-  },
-  warmUpBtnText: {
-    color: Colors.gradientStart,
-    fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  mindfulBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  mindfulIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-  },
-  easePocketBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-    backgroundColor: Colors.surfaceGlass,
-  },
-  easePocketIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    resizeMode: 'cover',
-  },
   genreTipText: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
     flex: 1,
+  },
+  quickStartCard: {
+    marginTop: 10,
+    marginHorizontal: 20,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    gap: 4,
+  },
+  quickStartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  quickStartTitle: {
+    color: Colors.gradientStart,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  quickStartStep: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Inter_500Medium',
   },
   lyricsArea: {
     flex: 1,
@@ -1233,30 +1360,56 @@ const styles = StyleSheet.create({
   },
   controls: {
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 12,
     zIndex: 10,
   },
-  statusRow: {
+  primaryActionCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surfaceGlass,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  primaryActionTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     gap: 8,
+  },
+  primaryActionStateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-  statusText: {
+  primaryActionStateText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  primaryActionHeadline: {
     color: Colors.textTertiary,
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: 'Inter_500Medium',
   },
-  timerText: {
+  primaryActionHintText: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Inter_400Regular',
+  },
+  primaryActionTimer: {
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
-    marginLeft: 4,
   },
   transportRow: {
     flexDirection: 'row',
@@ -1356,7 +1509,6 @@ const styles = StyleSheet.create({
   emptyQuickIcon: {
     width: 20,
     height: 20,
-    resizeMode: 'contain',
   },
   emptyQuickText: {
     color: Colors.textSecondary,

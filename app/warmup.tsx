@@ -28,6 +28,7 @@ import {
   type WarmUpExercise,
   type WarmUpTip,
 } from '@/constants/warmup';
+import { goBackWithFallback } from '@/lib/navigation';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
 type WarmUpPhase = 'intro' | 'exercise' | 'complete';
@@ -257,7 +258,7 @@ export default function WarmUpScreen() {
     } else if (phase === 'exercise' && currentExIdx === 0) {
       setPhase('intro');
     } else {
-      router.back();
+      goBackWithFallback(router, '/');
     }
   };
 
@@ -293,7 +294,7 @@ export default function WarmUpScreen() {
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <View style={[styles.header, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackWithFallback(router, '/')}
             hitSlop={12}
             style={styles.headerActionButton}
             accessibilityRole="button"
@@ -462,7 +463,7 @@ export default function WarmUpScreen() {
           </View>
 
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackWithFallback(router, '/')}
             style={styles.donePresssable}
             accessibilityRole="button"
             accessibilityLabel="Ready to sing"
@@ -514,7 +515,7 @@ export default function WarmUpScreen() {
           </View>
         </View>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackWithFallback(router, '/')}
           hitSlop={12}
           style={styles.headerActionButton}
           accessibilityRole="button"

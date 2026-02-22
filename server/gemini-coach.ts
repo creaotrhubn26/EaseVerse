@@ -7,6 +7,13 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 let genAI: GoogleGenerativeAI | null = null;
+const AI_DEBUG_LOGS = process.env.AI_DEBUG_LOGS === 'true';
+
+function debugLog(...args: unknown[]) {
+  if (AI_DEBUG_LOGS) {
+    console.log(...args);
+  }
+}
 
 /**
  * Initialize Gemini client
@@ -68,14 +75,14 @@ JSON:`;
     const candidates = response.candidates;
     if (candidates && candidates.length > 0) {
       const candidate = candidates[0];
-      console.log('Gemini finish reason:', candidate.finishReason);
-      console.log('Gemini safety ratings:', candidate.safetyRatings);
+      debugLog('Gemini finish reason:', candidate.finishReason);
+      debugLog('Gemini safety ratings:', candidate.safetyRatings);
     }
     
     // Wait for complete response
     const text = response.text().trim();
 
-    console.log('Gemini raw response:', text); // Debug logging
+    debugLog('Gemini response length:', text.length);
 
     // Try to parse JSON, handling both plain JSON and markdown-wrapped JSON
     let jsonText = text;
@@ -105,26 +112,30 @@ JSON:`;
       }
     }
 
-    console.log('Extracted JSON text:', jsonText); // Debug extracted JSON
+    debugLog('Extracted JSON text length:', jsonText.length);
 
     try {
       const parsed = JSON.parse(jsonText);
       
       // Validate required fields
       if (parsed.phonetic && parsed.tip && parsed.slow) {
-        console.log('Gemini coaching success:', parsed);
+        debugLog('Gemini coaching success for word:', params.word);
         return {
           phonetic: String(parsed.phonetic).substring(0, 120),
           tip: String(parsed.tip).substring(0, 160),
           slow: String(parsed.slow).substring(0, 120),
         };
       } else {
-        console.warn('Gemini response missing required fields:', parsed);
+        console.warn('Gemini response missing required fields.');
+        debugLog('Gemini parsed payload:', parsed);
         throw new Error('Invalid response structure');
       }
     } catch (parseError) {
-      console.warn('Failed to parse Gemini response as JSON. Raw text:', text);
-      console.warn('Parse error:', parseError);
+      console.warn('Failed to parse Gemini response as JSON.');
+      if (AI_DEBUG_LOGS) {
+        console.warn('Gemini parse error:', parseError);
+        console.warn('Gemini raw response:', text);
+      }
       throw parseError; // Re-throw to use fallback
     }
   } catch (error) {

@@ -12,24 +12,37 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { genreList, getGenreProfile, type GenreId } from '@/constants/genres';
 import SectionCard from '@/components/SectionCard';
 import Toast from '@/components/Toast';
 import LogoHeader from '@/components/LogoHeader';
 import PencilInkLayer from '@/components/PencilInkLayer';
+import LyricsWriterStudio from '@/components/LyricsWriterStudio';
 import { useApp } from '@/lib/AppContext';
-import { generateId } from '@/lib/storage';
+import * as Storage from '@/lib/storage';
 import { parseSongSections } from '@/lib/lyrics-sections';
+import { resolveLyricsSyncConfig } from '@/lib/collab-lyrics';
 import type { Song, SongSection } from '@/lib/types';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
+import {
+  buildSectionGoalHints,
+  buildLyricsExportText,
+  lineNumberToCursorIndex,
+} from '@/lib/lyrics-writer-tools';
+
+const bpmIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/bpm_icon.webp')
+    : require('@/assets/images/bpm_icon.png');
 
 const AUTOSAVE_DEBOUNCE_MS = 700;
 const TOAST_THROTTLE_MS = 15000;
 const PAPER_LINE_HEIGHT = 34;
 const PAPER_GUIDE_LINES = Array.from({ length: 36 }, (_, index) => index);
 
-type TabKey = 'write' | 'structure' | 'import';
+type TabKey = 'write' | 'structure' | 'import' | 'writer';
 type InsertSectionOption = {
   type: SongSection['type'];
   label: string;
@@ -74,6 +87,8 @@ type TextSelection = {
   start: number;
   end: number;
 };
+
+type SaveIndicatorState = 'saved' | 'saving' | 'unsaved' | 'error';
 
 function parseSectionHeaderToken(
   line: string
@@ -247,11 +262,20 @@ function formatShortDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export default function LyricsScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const isNativeIpad = Platform.OS === 'ios' && Platform.isPad === true;
-  const { activeSong, songs, addSong, updateSong, setActiveSong } = useApp();
+  const { activeSong, songs, sessions, addSong, updateSong, setActiveSong } = useApp();
   const [activeTab, setActiveTab] = useState<TabKey>('write');
   const [editText, setEditText] = useState(activeSong?.lyrics || '');
   const [importText, setImportText] = useState('');
@@ -260,6 +284,7 @@ export default function LyricsScreen() {
   const [tempoBpmText, setTempoBpmText] = useState(activeSong?.bpm ? String(activeSong.bpm) : '');
   const [paperModeEnabled, setPaperModeEnabled] = useState(isNativeIpad);
   const [focusMode, setFocusMode] = useState(false);
+  const [mobileLyricsFocus, setMobileLyricsFocus] = useState(true);
   const [showFindPanel, setShowFindPanel] = useState(false);
   const [showReplacePanel, setShowReplacePanel] = useState(false);
   const [findQuery, setFindQuery] = useState('');
@@ -271,6 +296,12 @@ export default function LyricsScreen() {
     visible: false,
     message: '',
   });
+  const [saveIndicatorState, setSaveIndicatorState] = useState<SaveIndicatorState>('saved');
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(activeSong?.updatedAt ?? null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [lyricsVersions, setLyricsVersions] = useState<Storage.LyricsVersionRecord[]>([]);
+  const [lineComments, setLineComments] = useState<Storage.LyricsLineComment[]>([]);
+  const [captureInbox, setCaptureInbox] = useState<Storage.LyricsCaptureItem[]>([]);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = useRef(true);
   const lastToastTimeRef = useRef(0);
@@ -287,6 +318,17 @@ export default function LyricsScreen() {
     () => ({ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }),
     [contentMaxWidth]
   );
+  const lyricsSyncConfig = useMemo(() => resolveLyricsSyncConfig(), []);
+  const lyricsSyncFilterLabel = useMemo(() => {
+    const filters: string[] = [];
+    if (lyricsSyncConfig.source) {
+      filters.push(`source=${lyricsSyncConfig.source}`);
+    }
+    if (lyricsSyncConfig.projectId) {
+      filters.push(`projectId=${lyricsSyncConfig.projectId}`);
+    }
+    return filters.length > 0 ? filters.join(', ') : 'all drafts';
+  }, [lyricsSyncConfig.projectId, lyricsSyncConfig.source]);
   const bpmIconSize = tierValue(responsive.tier, [18, 20, 20, 22, 24, 28, 30]);
   const libraryCardWidth = tierValue(responsive.tier, [170, 188, 208, 236, 268, 320, 360]);
   const scaledIcon = useMemo(
@@ -297,11 +339,13 @@ export default function LyricsScreen() {
     () => [...songs].sort((a, b) => b.updatedAt - a.updatedAt),
     [songs]
   );
+  const activeSongRecordKey = activeSong?.id ?? 'draft';
   const findMatches = useMemo(
     () => buildFindMatches(editText, findQuery),
     [editText, findQuery]
   );
   const sectionAnchors = useMemo(() => buildSectionAnchors(editText), [editText]);
+  const sectionGoalHints = useMemo(() => buildSectionGoalHints(editText), [editText]);
   const draftDirty = useMemo(
     () =>
       editText !== (activeSong?.lyrics || '') ||
@@ -314,10 +358,61 @@ export default function LyricsScreen() {
   const isDesktopWriteLayout = isDesktopWorkspace && activeTab === 'write';
   const isDesktopStructureLayout = isDesktopWorkspace && activeTab === 'structure';
   const isDesktopImportLayout = isDesktopWorkspace && activeTab === 'import';
+  const isDesktopWriterLayout = isDesktopWorkspace && activeTab === 'writer';
   const showDesktopThreePane = isDesktopWorkspace && (activeTab !== 'write' || !focusMode);
-  const showTopComposerControls = !isDesktopWorkspace;
-  const showTopLibrary = !isDesktopWorkspace;
+  const isMobileLyricsLayout = !isDesktopWorkspace;
+  const isMobileWriteLayout = isMobileLyricsLayout && activeTab === 'write';
+  const showTopComposerControls =
+    !isDesktopWorkspace && !mobileLyricsFocus;
+  const showTopLibrary =
+    !isDesktopWorkspace && !mobileLyricsFocus;
   const pencilSessionKey = activeSong?.id || 'draft';
+  const saveIndicatorLabel = useMemo(() => {
+    if (saveIndicatorState === 'saving') {
+      return 'Saving...';
+    }
+    if (saveIndicatorState === 'unsaved') {
+      return 'Unsaved changes';
+    }
+    if (saveIndicatorState === 'error') {
+      return 'Save issue';
+    }
+    return 'Saved';
+  }, [saveIndicatorState]);
+  const lastSavedLabel = useMemo(() => {
+    if (!lastSavedAt) {
+      return 'Not saved yet';
+    }
+    return `Saved ${new Date(lastSavedAt).toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit',
+    })}`;
+  }, [lastSavedAt]);
+  const lastSyncedLabel = useMemo(() => {
+    if (!lastSyncedAt) {
+      return 'No sync history';
+    }
+    return `Last sync ${new Date(lastSyncedAt).toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit',
+    })}`;
+  }, [lastSyncedAt]);
+  const saveIndicatorBadgeStyle =
+    saveIndicatorState === 'saved'
+      ? styles.saveBadgeSaved
+      : saveIndicatorState === 'saving'
+        ? styles.saveBadgeSaving
+        : saveIndicatorState === 'error'
+          ? styles.saveBadgeError
+          : styles.saveBadgeUnsaved;
+  const saveIndicatorDotColor =
+    saveIndicatorState === 'saved'
+      ? Colors.successUnderline
+      : saveIndicatorState === 'saving'
+        ? Colors.gradientStart
+        : saveIndicatorState === 'error'
+          ? Colors.dangerUnderline
+          : Colors.warningUnderline;
   const desktopWidthScale = responsive.isWeb
     ? 1 + (responsive.highResScale - 1) * 0.72
     : 1;
@@ -358,10 +453,19 @@ export default function LyricsScreen() {
     setSongTitle(activeSong?.title || '');
     setSelectedGenre(activeSong?.genre || 'pop');
     setTempoBpmText(activeSong?.bpm ? String(activeSong.bpm) : '');
+    setSaveIndicatorState('saved');
+    setLastSavedAt(activeSong?.updatedAt ?? null);
     setEditorSelection({ start: 0, end: 0 });
     setFindMatchIndex(-1);
     findCursorRef.current = 0;
-  }, [activeSong?.id, activeSong?.lyrics, activeSong?.title, activeSong?.genre, activeSong?.bpm]);
+  }, [
+    activeSong?.id,
+    activeSong?.lyrics,
+    activeSong?.title,
+    activeSong?.genre,
+    activeSong?.bpm,
+    activeSong?.updatedAt,
+  ]);
 
   useEffect(() => {
     setEditorSelection((current) => clampSelection(current, editText.length));
@@ -389,11 +493,219 @@ export default function LyricsScreen() {
     }
   }, [findMatchIndex, findMatches.length]);
 
-  const performSave = useCallback((): boolean => {
-    if (!editText.trim()) return true;
+  useEffect(() => {
+    if (isInitialMount.current) {
+      return;
+    }
+    if (draftDirty) {
+      setSaveIndicatorState('unsaved');
+    }
+  }, [draftDirty]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const snapshots = await Storage.getLyricsSnapshots();
+      if (cancelled) {
+        return;
+      }
+
+      if (activeSong?.id) {
+        const snapshot = snapshots[activeSong.id];
+        setLastSyncedAt(snapshot?.syncedAt ?? null);
+      } else {
+        setLastSyncedAt(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSong?.id, songs.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const [versions, comments, captures] = await Promise.all([
+        Storage.getLyricsVersions(activeSongRecordKey),
+        Storage.getLyricsLineComments(activeSongRecordKey),
+        Storage.getLyricsCaptureInbox(activeSongRecordKey),
+      ]);
+      if (cancelled) {
+        return;
+      }
+      setLyricsVersions(versions);
+      setLineComments(comments);
+      setCaptureInbox(captures);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSongRecordKey]);
+
+  const handleCreateVersionSnapshot = useCallback(
+    async (note?: string) => {
+      if (!editText.trim()) {
+        setToast({ visible: true, message: 'Write lyrics before creating a snapshot.', variant: 'error' });
+        return;
+      }
+
+      const createdAt = Date.now();
+      const nextVersion: Storage.LyricsVersionRecord = {
+        id: Storage.generateId(),
+        songId: activeSongRecordKey,
+        title: songTitle || activeSong?.title || 'Untitled',
+        lyrics: editText,
+        bpm: tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm,
+        createdAt,
+        note,
+      };
+
+      const latest = lyricsVersions[0];
+      if (
+        latest &&
+        latest.lyrics.trim() === nextVersion.lyrics.trim() &&
+        latest.title.trim() === nextVersion.title.trim() &&
+        createdAt - latest.createdAt < 90_000 &&
+        !note
+      ) {
+        return;
+      }
+
+      const next = [nextVersion, ...lyricsVersions.filter((version) => version.id !== nextVersion.id)].slice(0, 40);
+      setLyricsVersions(next);
+      await Storage.saveLyricsVersions(activeSongRecordKey, next);
+      setToast({ visible: true, message: 'Snapshot added to timeline.' });
+    },
+    [
+      activeSong?.bpm,
+      activeSong?.title,
+      activeSongRecordKey,
+      editText,
+      lyricsVersions,
+      songTitle,
+      tempoBpmText,
+    ]
+  );
+
+  const handleRestoreVersion = useCallback(
+    (versionId: string) => {
+      const version = lyricsVersions.find((item) => item.id === versionId);
+      if (!version) {
+        return;
+      }
+      setSongTitle(version.title || 'Untitled');
+      setEditText(version.lyrics);
+      setTempoBpmText(typeof version.bpm === 'number' ? String(version.bpm) : '');
+      setSaveIndicatorState('unsaved');
+      setActiveTab('write');
+      setToast({ visible: true, message: 'Restored snapshot. Save when ready.' });
+      Haptics.selectionAsync();
+    },
+    [lyricsVersions]
+  );
+
+  const handleDeleteVersion = useCallback(
+    async (versionId: string) => {
+      const next = lyricsVersions.filter((version) => version.id !== versionId);
+      setLyricsVersions(next);
+      await Storage.saveLyricsVersions(activeSongRecordKey, next);
+    },
+    [activeSongRecordKey, lyricsVersions]
+  );
+
+  const handleUpsertLineComment = useCallback(
+    async (lineNumber: number, text: string) => {
+      const trimmed = text.trim();
+      const existing = lineComments.find((comment) => comment.lineNumber === lineNumber);
+      const now = Date.now();
+
+      let nextComments: Storage.LyricsLineComment[];
+      if (!trimmed) {
+        nextComments = lineComments.filter((comment) => comment.lineNumber !== lineNumber);
+      } else if (existing) {
+        nextComments = lineComments.map((comment) =>
+          comment.id === existing.id
+            ? { ...comment, text: trimmed, updatedAt: now }
+            : comment
+        );
+      } else {
+        nextComments = [
+          ...lineComments,
+          {
+            id: Storage.generateId(),
+            lineNumber,
+            text: trimmed,
+            createdAt: now,
+          },
+        ];
+      }
+
+      setLineComments(nextComments);
+      await Storage.saveLyricsLineComments(activeSongRecordKey, nextComments);
+    },
+    [activeSongRecordKey, lineComments]
+  );
+
+  const handleDeleteLineComment = useCallback(
+    async (commentId: string) => {
+      const next = lineComments.filter((comment) => comment.id !== commentId);
+      setLineComments(next);
+      await Storage.saveLyricsLineComments(activeSongRecordKey, next);
+    },
+    [activeSongRecordKey, lineComments]
+  );
+
+  const handleAddCapture = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        return;
+      }
+      const next: Storage.LyricsCaptureItem[] = [
+        { id: Storage.generateId(), text: trimmed, createdAt: Date.now(), pinned: false },
+        ...captureInbox,
+      ].slice(0, 40);
+      setCaptureInbox(next);
+      await Storage.saveLyricsCaptureInbox(activeSongRecordKey, next);
+    },
+    [activeSongRecordKey, captureInbox]
+  );
+
+  const handleToggleCapturePin = useCallback(
+    async (captureId: string) => {
+      const next = [...captureInbox]
+        .map((capture) =>
+          capture.id === captureId ? { ...capture, pinned: !capture.pinned } : capture
+        )
+        .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt - a.createdAt);
+      setCaptureInbox(next);
+      await Storage.saveLyricsCaptureInbox(activeSongRecordKey, next);
+    },
+    [activeSongRecordKey, captureInbox]
+  );
+
+  const handleDeleteCapture = useCallback(
+    async (captureId: string) => {
+      const next = captureInbox.filter((capture) => capture.id !== captureId);
+      setCaptureInbox(next);
+      await Storage.saveLyricsCaptureInbox(activeSongRecordKey, next);
+    },
+    [activeSongRecordKey, captureInbox]
+  );
+
+  const performSave = useCallback((options?: { silent?: boolean }): boolean => {
+    if (!editText.trim()) {
+      setSaveIndicatorState('unsaved');
+      return true;
+    }
 
     const duplicate = songs.find(s => s.title.toLowerCase() === (songTitle || 'Untitled').toLowerCase() && s.id !== activeSong?.id);
     if (duplicate) {
+      setSaveIndicatorState('error');
       setToast({ visible: true, message: 'Duplicate title – choose a different name', variant: 'error' });
       return false;
     }
@@ -403,6 +715,7 @@ export default function LyricsScreen() {
     const parsedBpm = tempoBpmText.trim()
       ? Math.max(30, Math.min(300, parseInt(tempoBpmText, 10)))
       : undefined;
+    const savedAt = Date.now();
 
     if (activeSong) {
       const updated: Song = {
@@ -412,32 +725,49 @@ export default function LyricsScreen() {
         genre: selectedGenre,
         bpm: parsedBpm,
         sections,
-        updatedAt: Date.now(),
+        updatedAt: savedAt,
       };
       updateSong(updated);
       setActiveSong(updated);
     } else {
       const newSong: Song = {
-        id: generateId(),
+        id: Storage.generateId(),
         title: songTitle || 'Untitled',
         lyrics: editText,
         genre: selectedGenre,
         bpm: parsedBpm,
         sections,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: savedAt,
+        updatedAt: savedAt,
       };
       addSong(newSong);
       setActiveSong(newSong);
     }
 
-    const now = Date.now();
-    if (now - lastToastTimeRef.current >= TOAST_THROTTLE_MS) {
-      lastToastTimeRef.current = now;
+    setSaveIndicatorState('saved');
+    setLastSavedAt(savedAt);
+
+    if (!options?.silent) {
+      void handleCreateVersionSnapshot('Saved snapshot');
+    }
+
+    if (!options?.silent && savedAt - lastToastTimeRef.current >= TOAST_THROTTLE_MS) {
+      lastToastTimeRef.current = savedAt;
       setToast({ visible: true, message: 'Saved & ready for live' });
     }
     return true;
-  }, [editText, songTitle, activeSong, selectedGenre, tempoBpmText, songs, updateSong, addSong, setActiveSong]);
+  }, [
+    activeSong,
+    addSong,
+    editText,
+    selectedGenre,
+    setActiveSong,
+    songTitle,
+    songs,
+    tempoBpmText,
+    updateSong,
+    handleCreateVersionSnapshot,
+  ]);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -446,10 +776,17 @@ export default function LyricsScreen() {
     }
 
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    if (!editText.trim()) return;
+    if (!editText.trim()) {
+      setSaveIndicatorState('unsaved');
+      return;
+    }
 
     autosaveTimerRef.current = setTimeout(() => {
-      performSave();
+      setSaveIndicatorState('saving');
+      const saved = performSave({ silent: true });
+      if (!saved) {
+        setSaveIndicatorState('error');
+      }
       autosaveTimerRef.current = null;
     }, AUTOSAVE_DEBOUNCE_MS);
 
@@ -466,6 +803,135 @@ export default function LyricsScreen() {
       findCursorRef.current = clamped.end;
     },
     []
+  );
+
+  const insertTextAtCursor = useCallback(
+    (snippet: string) => {
+      if (!snippet) {
+        return;
+      }
+      const selection = clampSelection(editorSelection, editText.length);
+      const before = editText.slice(0, selection.start);
+      const after = editText.slice(selection.end);
+      const nextText = `${before}${snippet}${after}`;
+      const cursor = before.length + snippet.length;
+      updateEditorContent(nextText, { start: cursor, end: cursor });
+      setSaveIndicatorState('unsaved');
+      setActiveTab('write');
+      Haptics.selectionAsync();
+    },
+    [editText, editorSelection, updateEditorContent]
+  );
+
+  const jumpToLineFromWriter = useCallback(
+    (lineNumber: number) => {
+      const cursor = lineNumberToCursorIndex(editText, lineNumber);
+      setEditorSelection({ start: cursor, end: cursor });
+      findCursorRef.current = cursor;
+      setActiveTab('write');
+      editorRef.current?.focus();
+      Haptics.selectionAsync();
+    },
+    [editText]
+  );
+
+  const handleWriterExport = useCallback(
+    async (mode: 'copy-clean' | 'copy-rehearsal' | 'download-clean' | 'print') => {
+      const cleanText = buildLyricsExportText({
+        title: songTitle || activeSong?.title || 'Untitled',
+        lyrics: editText,
+        genre: getGenreProfile(selectedGenre).label,
+        bpm: tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm,
+        includeLineNumbers: false,
+        includeHeaders: true,
+      });
+      const rehearsalText = buildLyricsExportText({
+        title: songTitle || activeSong?.title || 'Untitled',
+        lyrics: editText,
+        genre: getGenreProfile(selectedGenre).label,
+        bpm: tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm,
+        includeLineNumbers: true,
+        includeHeaders: true,
+      });
+
+      const targetText = mode === 'copy-rehearsal' ? rehearsalText : cleanText;
+
+      if (mode === 'copy-clean' || mode === 'copy-rehearsal') {
+        if (
+          Platform.OS === 'web' &&
+          typeof navigator !== 'undefined' &&
+          navigator.clipboard &&
+          typeof navigator.clipboard.writeText === 'function'
+        ) {
+          try {
+            await navigator.clipboard.writeText(targetText);
+            setToast({ visible: true, message: 'Export copied to clipboard.' });
+          } catch {
+            setToast({ visible: true, message: 'Clipboard copy failed.', variant: 'error' });
+          }
+        } else {
+          setToast({ visible: true, message: 'Clipboard copy is supported on web export.', variant: 'error' });
+        }
+        return;
+      }
+
+      if (mode === 'download-clean') {
+        if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof document === 'undefined') {
+          setToast({ visible: true, message: 'File download is available on web export.', variant: 'error' });
+          return;
+        }
+
+        const blob = new Blob([targetText], { type: 'text/plain;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const slug = (songTitle || 'lyrics')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '');
+        link.href = url;
+        link.download = `${slug || 'lyrics'}-${Date.now()}.txt`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        setToast({ visible: true, message: 'TXT export downloaded.' });
+        return;
+      }
+
+      if (mode === 'print') {
+        if (Platform.OS !== 'web' || typeof window === 'undefined') {
+          setToast({ visible: true, message: 'Print/PDF export is available on web.', variant: 'error' });
+          return;
+        }
+
+        const popup = window.open('', '_blank', 'noopener,noreferrer,width=820,height=900');
+        if (!popup) {
+          setToast({ visible: true, message: 'Popup blocked. Enable popups to print.', variant: 'error' });
+          return;
+        }
+        const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(songTitle || 'Lyrics')}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; padding: 28px; color: #121622; }
+    pre { white-space: pre-wrap; line-height: 1.45; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <pre>${escapeHtml(rehearsalText)}</pre>
+</body>
+</html>`;
+        popup.document.open();
+        popup.document.write(html);
+        popup.document.close();
+        popup.focus();
+        popup.print();
+      }
+    },
+    [activeSong?.bpm, activeSong?.title, editText, selectedGenre, songTitle, tempoBpmText]
   );
 
   const handleImport = useCallback(() => {
@@ -835,12 +1301,14 @@ export default function LyricsScreen() {
 
       if (hasModifier && key === 's') {
         event.preventDefault();
+        setSaveIndicatorState('saving');
         performSave();
         return;
       }
 
       if (hasModifier && key === 'enter') {
         event.preventDefault();
+        setSaveIndicatorState('saving');
         performSave();
         return;
       }
@@ -905,6 +1373,7 @@ export default function LyricsScreen() {
     if (!editText.trim()) {
       return true;
     }
+    setSaveIndicatorState('saving');
     return performSave();
   }, [draftDirty, editText, performSave]);
 
@@ -923,6 +1392,7 @@ export default function LyricsScreen() {
     { key: 'write', label: 'Write', icon: 'edit-3' },
     { key: 'structure', label: 'Structure', icon: 'layers' },
     { key: 'import', label: 'Import', icon: 'download' },
+    { key: 'writer', label: 'Writer', icon: 'pen-tool' },
   ];
 
   const renderTitleField = () => (
@@ -1250,7 +1720,21 @@ export default function LyricsScreen() {
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <LogoHeader />
       <View style={[styles.header, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
-        <Text style={styles.headerTitle} accessibilityRole="header">Lyrics</Text>
+        <View style={styles.headerMain}>
+          <Text style={styles.headerTitle} accessibilityRole="header">Lyrics</Text>
+          <View style={styles.headerMetaRow} accessibilityLiveRegion="polite">
+            <View
+              style={[styles.saveBadge, saveIndicatorBadgeStyle]}
+              testID="lyrics-save-indicator"
+            >
+              <View style={[styles.saveBadgeDot, { backgroundColor: saveIndicatorDotColor }]} />
+              <Text style={styles.saveBadgeText}>{saveIndicatorLabel}</Text>
+            </View>
+            <Text style={styles.headerMetaText} testID="lyrics-last-saved">
+              {lastSavedLabel}
+            </Text>
+          </View>
+        </View>
         <Pressable
           onPress={() => handleSelectSongCard(null)}
           hitSlop={12}
@@ -1270,6 +1754,37 @@ export default function LyricsScreen() {
           variant={toast.variant ?? 'success'}
           onHide={() => setToast(t => ({ ...t, visible: false }))}
         />
+      )}
+
+      {isMobileLyricsLayout && (
+        <View style={[styles.mobileFocusBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
+          <View style={styles.mobileFocusLabelGroup}>
+            <Text style={styles.mobileFocusLabel}>Lyrics Focus</Text>
+            <Text style={styles.mobileFocusHint}>
+              {mobileLyricsFocus ? 'Content-first layout' : 'Tools + library visible'}
+            </Text>
+          </View>
+          <Pressable
+            style={[styles.mobileFocusToggle, mobileLyricsFocus && styles.mobileFocusToggleActive]}
+            onPress={() => {
+              setMobileLyricsFocus((value) => !value);
+              Haptics.selectionAsync();
+            }}
+            accessibilityRole="switch"
+            accessibilityLabel="Toggle mobile lyrics focus mode"
+            accessibilityHint="Hides extra panels so the active lyrics tab stays front and center"
+            accessibilityState={{ checked: mobileLyricsFocus }}
+          >
+            <Text
+              style={[
+                styles.mobileFocusToggleText,
+                mobileLyricsFocus && styles.mobileFocusToggleTextActive,
+              ]}
+            >
+              {mobileLyricsFocus ? 'Focused' : 'Expanded'}
+            </Text>
+          </Pressable>
+        </View>
       )}
 
       {showTopLibrary && (
@@ -1367,7 +1882,7 @@ export default function LyricsScreen() {
           <View style={[styles.tempoSection, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
             <View style={styles.sectionLabelRow}>
               <Image
-                source={require('@/assets/images/bpm_icon.png')}
+                source={bpmIconSource}
                 style={[
                   styles.sectionLabelIcon,
                   {
@@ -1384,6 +1899,29 @@ export default function LyricsScreen() {
             {renderTempoControls()}
           </View>
         </>
+      )}
+
+      {activeSong && !mobileLyricsFocus && (
+        <View style={[styles.syncInfoBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
+          <View style={styles.syncInfoTopRow}>
+            <View style={styles.syncInfoLabelRow}>
+              <Ionicons name="sync-outline" size={scaledIcon(10)} color={Colors.gradientStart} />
+              <Text style={styles.syncInfoLabel}>Lyrics Sync</Text>
+            </View>
+            <Pressable
+              style={styles.syncInfoButton}
+              onPress={() => router.push('/(tabs)/profile')}
+              accessibilityRole="button"
+              accessibilityLabel="Open lyrics sync controls"
+              accessibilityHint="Opens profile sync settings"
+            >
+              <Text style={styles.syncInfoButtonText}>Open Sync Controls</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.syncInfoText} numberOfLines={2} testID="lyrics-sync-filters">
+            Filters: {lyricsSyncFilterLabel} • {lastSyncedLabel}
+          </Text>
+        </View>
       )}
 
       {!(isDesktopWriteLayout && focusMode) && (
@@ -1423,7 +1961,7 @@ export default function LyricsScreen() {
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 24 }}
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!showDesktopThreePane}
+        scrollEnabled
       >
         {activeTab === 'write' && (
           <View style={styles.writeTab}>
@@ -1445,6 +1983,7 @@ export default function LyricsScreen() {
                     <View style={styles.editorToolbarLeft}>
                       <Text style={styles.editorToolbarTitle}>Lyrics Editor</Text>
                       <Text style={styles.editorToolbarHint}>Cmd/Ctrl+S save • Cmd/Ctrl+F find • Tab indent</Text>
+                      <Text style={styles.editorToolbarStatus}>{saveIndicatorLabel} • {lastSavedLabel}</Text>
                     </View>
                     <View style={styles.editorToolbarActions}>
                       <Pressable
@@ -1524,7 +2063,7 @@ export default function LyricsScreen() {
                     <View style={styles.desktopComposerCard}>
                       <View style={styles.sectionLabelRow}>
                         <Image
-                          source={require('@/assets/images/bpm_icon.png')}
+                          source={bpmIconSource}
                           style={[
                             styles.sectionLabelIcon,
                             {
@@ -1573,6 +2112,15 @@ export default function LyricsScreen() {
                       ) : (
                         <Text style={styles.desktopHintText}>Add section headers like [Verse] or [Chorus] to navigate quickly.</Text>
                       )}
+                    </View>
+                    <View style={styles.desktopComposerCard}>
+                      <Text style={styles.desktopComposerTitle}>Section Goals</Text>
+                      {sectionGoalHints.slice(0, 5).map((goal, idx) => (
+                        <View key={`${goal.sectionLabel}-${idx}`} style={styles.sectionGoalItem}>
+                          <Text style={styles.sectionGoalLabel}>{goal.sectionLabel}</Text>
+                          <Text style={styles.sectionGoalText}>{goal.goal}</Text>
+                        </View>
+                      ))}
                     </View>
                     <View style={styles.desktopComposerCard}>
                       <Text style={styles.desktopComposerTitle}>Shortcuts</Text>
@@ -1648,6 +2196,7 @@ export default function LyricsScreen() {
                       styles.lyricsEditor,
                       isNativeIpad && styles.lyricsEditorIpad,
                       paperModeEnabled && styles.lyricsEditorPaper,
+                      mobileLyricsFocus && styles.lyricsEditorMobileFocus,
                     ]}
                     multiline
                     textAlignVertical="top"
@@ -1667,7 +2216,20 @@ export default function LyricsScreen() {
                     Tip: use Apple Pencil Scribble, then open Ink On for pen/highlighter, eraser, undo/redo and stylus-priority.
                   </Text>
                 )}
-                {renderInsertButtons()}
+                {!mobileLyricsFocus && (
+                  <>
+                    {renderInsertButtons()}
+                    <View style={styles.mobileSectionGoalCard}>
+                      <Text style={styles.genreSectionLabel}>Section Goals</Text>
+                      {sectionGoalHints.slice(0, 4).map((goal, idx) => (
+                        <View key={`${goal.sectionLabel}-mobile-${idx}`} style={styles.sectionGoalItem}>
+                          <Text style={styles.sectionGoalLabel}>{goal.sectionLabel}</Text>
+                          <Text style={styles.sectionGoalText}>{goal.goal}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                )}
               </>
             )}
           </View>
@@ -1739,7 +2301,7 @@ export default function LyricsScreen() {
                     <View style={styles.desktopComposerCard}>
                       <View style={styles.sectionLabelRow}>
                         <Image
-                          source={require('@/assets/images/bpm_icon.png')}
+                          source={bpmIconSource}
                           style={[
                             styles.sectionLabelIcon,
                             {
@@ -1881,7 +2443,7 @@ export default function LyricsScreen() {
                     <View style={styles.desktopComposerCard}>
                       <View style={styles.sectionLabelRow}>
                         <Image
-                          source={require('@/assets/images/bpm_icon.png')}
+                          source={bpmIconSource}
                           style={[
                             styles.sectionLabelIcon,
                             {
@@ -1934,6 +2496,160 @@ export default function LyricsScreen() {
             )}
           </View>
         )}
+
+        {activeTab === 'writer' && (
+          <View style={styles.writerTab}>
+            {isDesktopWriterLayout ? (
+              <View style={[styles.writeDesktopLayout, { gap: desktopPaneGap }]}>
+                {showDesktopThreePane && (
+                  <View style={[styles.writeDesktopLibrary, { width: desktopLibraryPaneWidth }]}>
+                    {renderDesktopLibraryPane()}
+                  </View>
+                )}
+                <View style={styles.writeDesktopMain}>
+                  <View style={styles.editorToolbar}>
+                    <View style={styles.editorToolbarLeft}>
+                      <Text style={styles.editorToolbarTitle}>Writer Studio</Text>
+                      <Text style={styles.editorToolbarHint}>
+                        Meter, rhymes, hook lab, comments, timeline, sing-back links, and pro export
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.desktopMainCard, { minHeight: desktopEditorMinHeight }]}>
+                    <ScrollView
+                      style={styles.desktopMainScroll}
+                      contentContainerStyle={styles.desktopMainScrollContent}
+                      showsVerticalScrollIndicator={false}
+                    >
+                      <LyricsWriterStudio
+                        lyrics={editText}
+                        songTitle={songTitle || activeSong?.title || 'Untitled'}
+                        genreLabel={getGenreProfile(selectedGenre).label}
+                        bpm={tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm}
+                        sessions={sessions}
+                        activeSongId={activeSong?.id}
+                        versions={lyricsVersions}
+                        comments={lineComments}
+                        captures={captureInbox}
+                        onCreateVersion={(note) => {
+                          void handleCreateVersionSnapshot(note);
+                        }}
+                        onRestoreVersion={handleRestoreVersion}
+                        onDeleteVersion={(versionId) => {
+                          void handleDeleteVersion(versionId);
+                        }}
+                        onUpsertComment={(lineNumber, text) => {
+                          void handleUpsertLineComment(lineNumber, text);
+                        }}
+                        onDeleteComment={(commentId) => {
+                          void handleDeleteLineComment(commentId);
+                        }}
+                        onAddCapture={(text) => {
+                          void handleAddCapture(text);
+                        }}
+                        onToggleCapturePin={(captureId) => {
+                          void handleToggleCapturePin(captureId);
+                        }}
+                        onDeleteCapture={(captureId) => {
+                          void handleDeleteCapture(captureId);
+                        }}
+                        onInsertText={insertTextAtCursor}
+                        onJumpToLine={jumpToLineFromWriter}
+                        onExport={(mode) => {
+                          void handleWriterExport(mode);
+                        }}
+                      />
+                    </ScrollView>
+                  </View>
+                </View>
+                {showDesktopThreePane && (
+                  <View
+                    style={[
+                      styles.writeDesktopSide,
+                      {
+                        width: desktopSidePaneWidth,
+                        gap: Math.max(10, desktopPaneGap - 6),
+                      },
+                    ]}
+                  >
+                    <View style={styles.desktopComposerCard}>
+                      <Text style={styles.desktopComposerTitle}>Song</Text>
+                      {renderTitleField()}
+                    </View>
+                    <View style={styles.desktopComposerCard}>
+                      <Text style={styles.desktopComposerTitle}>Genre</Text>
+                      {renderGenreChips(false)}
+                    </View>
+                    <View style={styles.desktopComposerCard}>
+                      <View style={styles.sectionLabelRow}>
+                        <Image
+                          source={bpmIconSource}
+                          style={[
+                            styles.sectionLabelIcon,
+                            {
+                              width: bpmIconSize,
+                              height: bpmIconSize,
+                              borderRadius: Math.round(bpmIconSize * 0.3),
+                            },
+                          ]}
+                          resizeMode="cover"
+                          accessible={false}
+                        />
+                        <Text style={styles.desktopComposerTitle}>Tempo</Text>
+                      </View>
+                      {renderTempoControls()}
+                    </View>
+                    <View style={styles.desktopComposerCard}>
+                      <Text style={styles.desktopComposerTitle}>Writer Notes</Text>
+                      <Text style={styles.desktopHintText}>Use Writer Studio to refine structure and word choice before recording.</Text>
+                      <Text style={styles.desktopHintText}>After restoring a snapshot, save when you are ready to commit changes.</Text>
+                      <Text style={styles.desktopHintText}>Use Sing-back linkage after each take to close weak spots quickly.</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <LyricsWriterStudio
+                lyrics={editText}
+                songTitle={songTitle || activeSong?.title || 'Untitled'}
+                genreLabel={getGenreProfile(selectedGenre).label}
+                bpm={tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm}
+                sessions={sessions}
+                activeSongId={activeSong?.id}
+                versions={lyricsVersions}
+                comments={lineComments}
+                captures={captureInbox}
+                onCreateVersion={(note) => {
+                  void handleCreateVersionSnapshot(note);
+                }}
+                onRestoreVersion={handleRestoreVersion}
+                onDeleteVersion={(versionId) => {
+                  void handleDeleteVersion(versionId);
+                }}
+                onUpsertComment={(lineNumber, text) => {
+                  void handleUpsertLineComment(lineNumber, text);
+                }}
+                onDeleteComment={(commentId) => {
+                  void handleDeleteLineComment(commentId);
+                }}
+                onAddCapture={(text) => {
+                  void handleAddCapture(text);
+                }}
+                onToggleCapturePin={(captureId) => {
+                  void handleToggleCapturePin(captureId);
+                }}
+                onDeleteCapture={(captureId) => {
+                  void handleDeleteCapture(captureId);
+                }}
+                onInsertText={insertTextAtCursor}
+                onJumpToLine={jumpToLineFromWriter}
+                onExport={(mode) => {
+                  void handleWriterExport(mode);
+                }}
+              />
+            )}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -1951,16 +2667,170 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
+  headerMain: {
+    flex: 1,
+    gap: 4,
+    marginRight: 12,
+  },
   headerTitle: {
     color: Colors.textPrimary,
     fontSize: 28,
     fontFamily: 'Inter_700Bold',
+  },
+  headerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  headerMetaText: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+  },
+  saveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  saveBadgeSaved: {
+    backgroundColor: Colors.accentSubtle,
+    borderColor: Colors.accentBorder,
+  },
+  saveBadgeSaving: {
+    backgroundColor: Colors.surfaceGlass,
+    borderColor: Colors.borderGlass,
+  },
+  saveBadgeUnsaved: {
+    backgroundColor: Colors.surfaceGlass,
+    borderColor: Colors.warningUnderline,
+  },
+  saveBadgeError: {
+    backgroundColor: Colors.surfaceGlass,
+    borderColor: Colors.dangerUnderline,
+  },
+  saveBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  saveBadgeText: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
   },
   newSongButton: {
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  syncInfoBar: {
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    gap: 4,
+  },
+  syncInfoTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  syncInfoLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  syncInfoLabel: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  syncInfoText: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Inter_400Regular',
+  },
+  syncInfoButton: {
+    minHeight: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.accentBorder,
+    backgroundColor: Colors.accentSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  syncInfoButtonText: {
+    color: Colors.gradientStart,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  mobileFocusBar: {
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surfaceGlass,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  mobileFocusLabelGroup: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mobileFocusLabel: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.7,
+  },
+  mobileFocusHint: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    marginTop: 2,
+  },
+  mobileFocusToggle: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mobileFocusToggleActive: {
+    borderColor: Colors.accentBorder,
+    backgroundColor: Colors.accentSubtle,
+  },
+  mobileFocusToggleText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  mobileFocusToggleTextActive: {
+    color: Colors.gradientStart,
   },
   librarySection: {
     marginBottom: 12,
@@ -2337,6 +3207,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
   },
+  editorToolbarStatus: {
+    color: Colors.textTertiary,
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+  },
   editorToolbarActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2554,6 +3429,9 @@ const styles = StyleSheet.create({
   lyricsEditorDesktop: {
     minHeight: 540,
   },
+  lyricsEditorMobileFocus: {
+    minHeight: 420,
+  },
   sectionNavigatorList: {
     maxHeight: 180,
   },
@@ -2581,6 +3459,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontFamily: 'Inter_400Regular',
+  },
+  sectionGoalItem: {
+    gap: 2,
+    paddingVertical: 2,
+  },
+  sectionGoalLabel: {
+    color: Colors.gradientStart,
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  sectionGoalText: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+  },
+  mobileSectionGoalCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surfaceGlass,
+    padding: 12,
+    gap: 6,
   },
   insertRow: {
     flexDirection: 'row',
@@ -2619,6 +3519,9 @@ const styles = StyleSheet.create({
   },
   importTab: {
     gap: 16,
+  },
+  writerTab: {
+    gap: 12,
   },
   importEditor: {
     color: Colors.textPrimary,

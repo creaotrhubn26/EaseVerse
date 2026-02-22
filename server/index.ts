@@ -123,12 +123,11 @@ function setupCors(app: express.Application) {
 
     const origin = req.header("origin");
 
-    // Allow localhost origins for Expo web development (any port)
+    // Allow localhost browser clients on any port for local testing, even
+    // when the API process is started with NODE_ENV=production.
     const isLocalhost =
       !!origin &&
-      isDev &&
-      (origin.startsWith("http://localhost:") ||
-        origin.startsWith("http://127.0.0.1:"));
+      /^(https?:\/\/)(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(origin);
 
     if (origin && (allowAllOrigins || origins.has(origin) || isLocalhost)) {
       res.header("Access-Control-Allow-Origin", allowAllOrigins ? "*" : origin);
@@ -156,7 +155,7 @@ function setupCors(app: express.Application) {
 function setupBodyParsing(app: express.Application) {
   app.use(
     express.json({
-      limit: "10mb",
+      limit: "25mb",
       verify: (req, _res, buf) => {
         req.rawBody = buf;
       },
@@ -357,10 +356,28 @@ function setupErrorHandler(app: express.Application) {
       status?: number;
       statusCode?: number;
       message?: string;
+      type?: string;
+      body?: unknown;
     };
 
     const status = error.status || error.statusCode || 500;
     const message = error.message || "Internal Server Error";
+
+    if (error.type === "entity.too.large" || status === 413) {
+      if (!res.headersSent) {
+        return res.status(413).json({
+          error: "Request body is too large. Maximum supported payload is 25MB.",
+        });
+      }
+      return next(err);
+    }
+
+    if (error instanceof SyntaxError && "body" in error) {
+      if (!res.headersSent) {
+        return res.status(400).json({ error: "Invalid JSON request body." });
+      }
+      return next(err);
+    }
 
     console.error("Internal Server Error:", err);
 
@@ -385,7 +402,7 @@ function setupErrorHandler(app: express.Application) {
 
   setupErrorHandler(app);
 
-  const port = parseInt(process.env.PORT || "5000", 10);
+  const port = parseInt(process.env.PORT || "5059", 10);
   server.listen(
     {
       port,

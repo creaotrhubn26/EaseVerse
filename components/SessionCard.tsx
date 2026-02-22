@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, Pressable } from 'react-native';
+import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -49,7 +49,7 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-      accessibilityRole="button"
+      accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
       accessibilityLabel={`Open session ${session.title}`}
       accessibilityHint={`Recorded ${formattedDate} for ${formattedDuration}. Accuracy ${session.insights.textAccuracy} percent.`}
     >
@@ -63,7 +63,7 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
             }}
             hitSlop={12}
             style={styles.iconActionButton}
-            accessibilityRole="button"
+            accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
             accessibilityLabel={session.favorite ? 'Remove favorite' : 'Mark as favorite'}
             accessibilityHint="Saves this session to your flagged list"
             accessibilityState={{ selected: session.favorite }}
@@ -81,7 +81,7 @@ export default function SessionCard({ session, onPress, onFavorite, onDelete }: 
             }}
             hitSlop={12}
             style={styles.iconActionButton}
-            accessibilityRole="button"
+            accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
             accessibilityLabel="Delete session"
             accessibilityHint="Removes this recording from your sessions"
           >

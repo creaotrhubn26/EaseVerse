@@ -8,6 +8,17 @@ export type CollabLyricsItem = {
   bpm?: number;
 };
 
+export type LyricsSyncConfig = {
+  source?: string;
+  projectId?: string;
+  apiKey?: string;
+};
+
+type RuntimeOverride = {
+  present: boolean;
+  value?: string;
+};
+
 export function normalizeTitle(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
@@ -31,6 +42,56 @@ function parseOptionalBpm(input: unknown): number | undefined {
     }
   }
   return undefined;
+}
+
+function normalizeOptional(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function getRuntimeOverride(
+  key: "__E2E_LYRICS_SYNC_SOURCE__" | "__E2E_LYRICS_SYNC_PROJECT_ID__"
+): RuntimeOverride {
+  const runtime = globalThis as Record<string, unknown>;
+  if (!(key in runtime)) {
+    return { present: false };
+  }
+  return {
+    present: true,
+    value: normalizeOptional(runtime[key]),
+  };
+}
+
+export function resolveLyricsSyncConfig(config?: LyricsSyncConfig): LyricsSyncConfig {
+  const runtimeSource = getRuntimeOverride("__E2E_LYRICS_SYNC_SOURCE__");
+  const runtimeProjectId = getRuntimeOverride("__E2E_LYRICS_SYNC_PROJECT_ID__");
+
+  const envSource = normalizeOptional(process.env.EXPO_PUBLIC_LYRICS_SYNC_SOURCE);
+  const envProjectId = normalizeOptional(process.env.EXPO_PUBLIC_LYRICS_SYNC_PROJECT_ID);
+  const envApiKey = normalizeOptional(process.env.EXPO_PUBLIC_API_KEY);
+
+  const baseSource = runtimeSource.present ? runtimeSource.value : envSource;
+  const baseProjectId = runtimeProjectId.present
+    ? runtimeProjectId.value
+    : envProjectId;
+
+  const explicitSource =
+    config && "source" in config ? normalizeOptional(config.source) : undefined;
+  const explicitProjectId =
+    config && "projectId" in config
+      ? normalizeOptional(config.projectId)
+      : undefined;
+  const explicitApiKey =
+    config && "apiKey" in config ? normalizeOptional(config.apiKey) : undefined;
+
+  return {
+    source: explicitSource ?? baseSource,
+    projectId: explicitProjectId ?? baseProjectId,
+    apiKey: explicitApiKey ?? envApiKey,
+  };
 }
 
 export function parseCollabItem(input: unknown): CollabLyricsItem | null {
@@ -89,39 +150,38 @@ export function buildSongTitleCandidatesMap(songs: Song[]): Map<string, Song[]> 
   return candidates;
 }
 
-export function buildLyricsSyncRoute(): string {
+export function buildLyricsSyncRoute(config?: LyricsSyncConfig): string {
+  const resolved = resolveLyricsSyncConfig(config);
   const params = new URLSearchParams();
-  const source = process.env.EXPO_PUBLIC_LYRICS_SYNC_SOURCE?.trim();
-  const projectId = process.env.EXPO_PUBLIC_LYRICS_SYNC_PROJECT_ID?.trim();
 
-  if (source) {
-    params.set("source", source);
+  if (resolved.source) {
+    params.set("source", resolved.source);
   }
-  if (projectId) {
-    params.set("projectId", projectId);
+  if (resolved.projectId) {
+    params.set("projectId", resolved.projectId);
   }
 
   const query = params.toString();
   return query ? `/api/v1/collab/lyrics?${query}` : "/api/v1/collab/lyrics";
 }
 
-export function buildLyricsRealtimeSocketUrl(apiBaseUrl: string): string | null {
+export function buildLyricsRealtimeSocketUrl(
+  apiBaseUrl: string,
+  config?: LyricsSyncConfig
+): string | null {
   try {
     const url = new URL("/api/v1/ws", apiBaseUrl);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
 
-    const source = process.env.EXPO_PUBLIC_LYRICS_SYNC_SOURCE?.trim();
-    const projectId = process.env.EXPO_PUBLIC_LYRICS_SYNC_PROJECT_ID?.trim();
-    const apiKey = process.env.EXPO_PUBLIC_API_KEY?.trim();
-
-    if (source) {
-      url.searchParams.set("source", source);
+    const resolved = resolveLyricsSyncConfig(config);
+    if (resolved.source) {
+      url.searchParams.set("source", resolved.source);
     }
-    if (projectId) {
-      url.searchParams.set("projectId", projectId);
+    if (resolved.projectId) {
+      url.searchParams.set("projectId", resolved.projectId);
     }
-    if (apiKey) {
-      url.searchParams.set("apiKey", apiKey);
+    if (resolved.apiKey) {
+      url.searchParams.set("apiKey", resolved.apiKey);
     }
 
     return url.toString();

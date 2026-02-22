@@ -5,6 +5,9 @@ const SONGS_KEY = '@lyricflow_songs';
 const SESSIONS_KEY = '@lyricflow_sessions';
 const SETTINGS_KEY = '@lyricflow_settings';
 const LYRICS_SNAPSHOTS_KEY = '@easeverse_lyrics_snapshots';
+const LYRICS_VERSIONS_KEY = '@easeverse_lyrics_versions';
+const LYRICS_LINE_COMMENTS_KEY = '@easeverse_lyrics_line_comments';
+const LYRICS_CAPTURE_INBOX_KEY = '@easeverse_lyrics_capture_inbox';
 const EASEPOCKET_PREFS_KEY = '@easeverse_easepocket_prefs';
 const EASEPOCKET_HISTORY_KEY = '@easeverse_easepocket_history';
 const LEARNING_USER_ID_KEY = '@easeverse_learning_user_id';
@@ -44,6 +47,37 @@ export type LyricsSnapshotRecord = {
 };
 
 export type LyricsSnapshotMap = Record<string, LyricsSnapshotRecord>;
+
+export type LyricsVersionRecord = {
+  id: string;
+  songId: string;
+  title: string;
+  lyrics: string;
+  bpm?: number;
+  createdAt: number;
+  note?: string;
+};
+
+export type LyricsVersionMap = Record<string, LyricsVersionRecord[]>;
+
+export type LyricsLineComment = {
+  id: string;
+  lineNumber: number;
+  text: string;
+  createdAt: number;
+  updatedAt?: number;
+};
+
+export type LyricsLineCommentMap = Record<string, LyricsLineComment[]>;
+
+export type LyricsCaptureItem = {
+  id: string;
+  text: string;
+  createdAt: number;
+  pinned?: boolean;
+};
+
+export type LyricsCaptureInboxMap = Record<string, LyricsCaptureItem[]>;
 
 const defaultSettings: UserSettings = {
   language: 'English',
@@ -188,6 +222,191 @@ export async function saveLyricsSnapshots(
   snapshots: LyricsSnapshotMap
 ): Promise<void> {
   await AsyncStorage.setItem(LYRICS_SNAPSHOTS_KEY, JSON.stringify(snapshots));
+}
+
+export async function getLyricsVersionsMap(): Promise<LyricsVersionMap> {
+  const data = await AsyncStorage.getItem(LYRICS_VERSIONS_KEY);
+  if (!data) {
+    return {};
+  }
+
+  const parsed = safeParseJson(data);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    await AsyncStorage.removeItem(LYRICS_VERSIONS_KEY);
+    return {};
+  }
+
+  const normalized: LyricsVersionMap = {};
+  for (const [songId, versions] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!Array.isArray(versions)) {
+      continue;
+    }
+    const valid = versions
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+      .filter((item) => typeof item.id === 'string' && typeof item.lyrics === 'string' && typeof item.title === 'string')
+      .map((item) => ({
+        id: item.id as string,
+        songId: typeof item.songId === 'string' ? item.songId : songId,
+        title: item.title as string,
+        lyrics: item.lyrics as string,
+        bpm: typeof item.bpm === 'number' && Number.isFinite(item.bpm) ? item.bpm : undefined,
+        createdAt:
+          typeof item.createdAt === 'number' && Number.isFinite(item.createdAt)
+            ? item.createdAt
+            : Date.now(),
+        note: typeof item.note === 'string' ? item.note : undefined,
+      }))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (valid.length > 0) {
+      normalized[songId] = valid;
+    }
+  }
+  return normalized;
+}
+
+export async function getLyricsVersions(songId: string): Promise<LyricsVersionRecord[]> {
+  const map = await getLyricsVersionsMap();
+  return map[songId] ?? [];
+}
+
+export async function saveLyricsVersionsMap(map: LyricsVersionMap): Promise<void> {
+  await AsyncStorage.setItem(LYRICS_VERSIONS_KEY, JSON.stringify(map));
+}
+
+export async function saveLyricsVersions(songId: string, versions: LyricsVersionRecord[]): Promise<void> {
+  const map = await getLyricsVersionsMap();
+  map[songId] = [...versions].sort((a, b) => b.createdAt - a.createdAt);
+  await saveLyricsVersionsMap(map);
+}
+
+export async function addLyricsVersion(
+  songId: string,
+  version: LyricsVersionRecord,
+  maxItems = 40
+): Promise<void> {
+  const versions = await getLyricsVersions(songId);
+  const next = [version, ...versions.filter((existing) => existing.id !== version.id)].slice(0, maxItems);
+  await saveLyricsVersions(songId, next);
+}
+
+export async function deleteLyricsVersion(songId: string, versionId: string): Promise<void> {
+  const versions = await getLyricsVersions(songId);
+  await saveLyricsVersions(
+    songId,
+    versions.filter((version) => version.id !== versionId)
+  );
+}
+
+export async function getLyricsLineCommentMap(): Promise<LyricsLineCommentMap> {
+  const data = await AsyncStorage.getItem(LYRICS_LINE_COMMENTS_KEY);
+  if (!data) {
+    return {};
+  }
+
+  const parsed = safeParseJson(data);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    await AsyncStorage.removeItem(LYRICS_LINE_COMMENTS_KEY);
+    return {};
+  }
+
+  const normalized: LyricsLineCommentMap = {};
+  for (const [songId, comments] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!Array.isArray(comments)) {
+      continue;
+    }
+    const valid = comments
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+      .filter((item) => typeof item.id === 'string' && typeof item.text === 'string' && typeof item.lineNumber === 'number')
+      .map((item) => ({
+        id: item.id as string,
+        lineNumber: Math.max(1, Math.round(item.lineNumber as number)),
+        text: item.text as string,
+        createdAt:
+          typeof item.createdAt === 'number' && Number.isFinite(item.createdAt)
+            ? item.createdAt
+            : Date.now(),
+        updatedAt:
+          typeof item.updatedAt === 'number' && Number.isFinite(item.updatedAt)
+            ? item.updatedAt
+            : undefined,
+      }))
+      .sort((a, b) => a.lineNumber - b.lineNumber || b.createdAt - a.createdAt);
+    if (valid.length > 0) {
+      normalized[songId] = valid;
+    }
+  }
+
+  return normalized;
+}
+
+export async function getLyricsLineComments(songId: string): Promise<LyricsLineComment[]> {
+  const map = await getLyricsLineCommentMap();
+  return map[songId] ?? [];
+}
+
+export async function saveLyricsLineComments(
+  songId: string,
+  comments: LyricsLineComment[]
+): Promise<void> {
+  const map = await getLyricsLineCommentMap();
+  map[songId] = comments
+    .filter((comment) => comment.text.trim().length > 0)
+    .sort((a, b) => a.lineNumber - b.lineNumber || b.createdAt - a.createdAt);
+  await AsyncStorage.setItem(LYRICS_LINE_COMMENTS_KEY, JSON.stringify(map));
+}
+
+export async function getLyricsCaptureInboxMap(): Promise<LyricsCaptureInboxMap> {
+  const data = await AsyncStorage.getItem(LYRICS_CAPTURE_INBOX_KEY);
+  if (!data) {
+    return {};
+  }
+
+  const parsed = safeParseJson(data);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    await AsyncStorage.removeItem(LYRICS_CAPTURE_INBOX_KEY);
+    return {};
+  }
+
+  const normalized: LyricsCaptureInboxMap = {};
+  for (const [songId, captures] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!Array.isArray(captures)) {
+      continue;
+    }
+    const valid = captures
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+      .filter((item) => typeof item.id === 'string' && typeof item.text === 'string')
+      .map((item) => ({
+        id: item.id as string,
+        text: item.text as string,
+        createdAt:
+          typeof item.createdAt === 'number' && Number.isFinite(item.createdAt)
+            ? item.createdAt
+            : Date.now(),
+        pinned: Boolean(item.pinned),
+      }))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt - a.createdAt);
+    if (valid.length > 0) {
+      normalized[songId] = valid;
+    }
+  }
+
+  return normalized;
+}
+
+export async function getLyricsCaptureInbox(songId: string): Promise<LyricsCaptureItem[]> {
+  const map = await getLyricsCaptureInboxMap();
+  return map[songId] ?? [];
+}
+
+export async function saveLyricsCaptureInbox(
+  songId: string,
+  captures: LyricsCaptureItem[]
+): Promise<void> {
+  const map = await getLyricsCaptureInboxMap();
+  map[songId] = captures
+    .filter((capture) => capture.text.trim().length > 0)
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt - a.createdAt);
+  await AsyncStorage.setItem(LYRICS_CAPTURE_INBOX_KEY, JSON.stringify(map));
 }
 
 const defaultEasePocketPrefs: EasePocketPrefs = {

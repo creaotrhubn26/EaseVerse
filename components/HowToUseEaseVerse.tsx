@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, type ImageSourcePropType, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
@@ -32,6 +32,71 @@ type HowToStep = {
   showQuickStart?: boolean;
 };
 
+const warmupShortcutIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/web/warmup-icon.web.png')
+    : require('@/assets/images/warmup-icon.png');
+const mindfulnessShortcutIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/web/mindfulness-icon.web.png')
+    : require('@/assets/images/mindfulness-icon.png');
+const singTabIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/Singing.nav.webp')
+    : require('@/assets/images/icon-set/Singing.png');
+const lyricsTabIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/Lyrics.nav.webp')
+    : require('@/assets/images/icon-set/Lyrics.png');
+const sessionsTabIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/sessions.nav.webp')
+    : require('@/assets/images/icon-set/sessions.png');
+const profileTabIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/Profile.nav.webp')
+    : require('@/assets/images/icon-set/Profile.png');
+const howToIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/howto-icon.webp')
+    : require('@/assets/images/icon-set/howto-icon.png');
+const liveModeIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/Live_mode.webp')
+    : require('@/assets/images/icon-set/Live_mode.png');
+const feedbackHighIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/icon-set/Feedback_intensity_high.webp')
+    : require('@/assets/images/icon-set/Feedback_intensity_high.png');
+const easePocketIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/EasePocket.webp')
+    : require('@/assets/images/EasePocket.png');
+const bpmIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/bpm_icon.webp')
+    : require('@/assets/images/bpm_icon.png');
+const twoBeatsIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/two_beats.webp')
+    : require('@/assets/images/two_beats.png');
+const fourBeatsIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/four_beats.webp')
+    : require('@/assets/images/four_beats.png');
+const lyricsFlowSpeedIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/lyrics_flow_speed_icon.webp')
+    : require('@/assets/images/lyrics_flow_speed_icon.png');
+const countInIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/count_in_icon.webp')
+    : require('@/assets/images/count_in_icon.png');
+const aboutIconSource =
+  Platform.OS === 'web'
+    ? require('@/assets/images/about_icon.webp')
+    : require('@/assets/images/about_icon.png');
+
 function SnippetFrame({ children }: { children: React.ReactNode }) {
   return <View style={styles.snippetFrame}>{children}</View>;
 }
@@ -44,9 +109,11 @@ function IconTiles({
   items: { label: string; source: ImageSourcePropType }[];
 }) {
   const responsive = useResponsiveLayout();
-  const tileSize = tierValue(responsive.tier, [48, 52, 54, 60, 68, 76, 84]);
+  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
+  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
+  const tileSize = scaleDisplay(tierValue(responsive.tier, [48, 52, 54, 60, 68, 76, 84]));
   const tileRadius = Math.round(tileSize * 0.28);
-  const tileWidth = tierValue(responsive.tier, [100, 112, 120, 132, 148, 164, 180]);
+  const tileWidth = scaleDisplay(tierValue(responsive.tier, [100, 112, 120, 132, 148, 164, 180]));
   const labelSize = tierValue(responsive.tier, [11, 12, 12, 13, 13, 14, 15]);
 
   return (
@@ -74,8 +141,10 @@ function IconTiles({
 
 function Legend({ items }: { items: LegendItem[] }) {
   const responsive = useResponsiveLayout();
-  const legendIconSize = tierValue(responsive.tier, [30, 32, 34, 36, 40, 44, 48]);
-  const legendImageSize = tierValue(responsive.tier, [22, 24, 26, 30, 36, 44, 52]);
+  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
+  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
+  const legendIconSize = scaleDisplay(tierValue(responsive.tier, [30, 32, 34, 36, 40, 44, 48]));
+  const legendImageSize = scaleDisplay(tierValue(responsive.tier, [22, 24, 26, 30, 36, 44, 52]));
   const legendImageRadius = Math.round(legendImageSize * 0.34);
 
   return (
@@ -162,10 +231,12 @@ export default function HowToUseEaseVerse({
 }) {
   const responsive = useResponsiveLayout();
   const [expanded, setExpanded] = useState<HowToStep['id'] | null>('sing');
-  const introIconSize = tierValue(responsive.tier, [34, 36, 38, 42, 48, 56, 64]);
-  const stepIconSize = tierValue(responsive.tier, [36, 38, 40, 44, 50, 56, 62]);
-  const tabPillIconSize = tierValue(responsive.tier, [20, 22, 24, 26, 30, 34, 38]);
-  const warmupIconSize = tierValue(responsive.tier, [22, 24, 24, 26, 30, 34, 38]);
+  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
+  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
+  const introIconSize = scaleDisplay(tierValue(responsive.tier, [34, 36, 38, 42, 48, 56, 64]));
+  const stepIconSize = scaleDisplay(tierValue(responsive.tier, [36, 38, 40, 44, 50, 56, 62]));
+  const tabPillIconSize = scaleDisplay(tierValue(responsive.tier, [20, 22, 24, 26, 30, 34, 38]));
+  const warmupIconSize = scaleDisplay(tierValue(responsive.tier, [22, 24, 24, 26, 30, 34, 38]));
   const sectionMaxWidth = responsive.cardMaxWidth;
 
   const steps = useMemo<HowToStep[]>(
@@ -177,7 +248,7 @@ export default function HowToUseEaseVerse({
         route: '/',
         accent: Colors.gradientStart,
         icon: 'mic',
-        iconImage: require('@/assets/images/icon-set/Singing.png'),
+        iconImage: singTabIconSource,
         bullets: [
           'If no song is loaded, use the quick overlay: Warm Up, Mindfulness, or Add Lyrics.',
           'Pick your song from the title dropdown, then confirm Tempo (BPM).',
@@ -223,7 +294,7 @@ export default function HowToUseEaseVerse({
         route: '/lyrics',
         accent: Colors.successUnderline,
         icon: 'document-text',
-        iconImage: require('@/assets/images/icon-set/Lyrics.png'),
+        iconImage: lyricsTabIconSource,
         bullets: [
           'Write or import lyrics for your song.',
           'Set Tempo (BPM) or Tap to detect BPM quickly.',
@@ -236,7 +307,7 @@ export default function HowToUseEaseVerse({
         legend: [
           { icon: 'add-circle-outline', label: 'New song', description: 'Clears the current draft and starts fresh.' },
           {
-            iconImage: require('@/assets/images/bpm_icon.png'),
+            iconImage: bpmIconSource,
             label: 'Tempo (BPM)',
             description: 'Syncs count-in + metronome while recording.',
           },
@@ -254,7 +325,7 @@ export default function HowToUseEaseVerse({
         route: '/sessions',
         accent: Colors.warningUnderline,
         icon: 'time',
-        iconImage: require('@/assets/images/icon-set/sessions.png'),
+        iconImage: sessionsTabIconSource,
         bullets: [
           'Browse recordings and open Session Review.',
           'Filter by Latest, Best, or Flagged.',
@@ -276,7 +347,7 @@ export default function HowToUseEaseVerse({
         route: '/easepocket',
         accent: Colors.gradientEnd,
         icon: 'pulse',
-        iconImage: require('@/assets/images/EasePocket.png'),
+        iconImage: easePocketIconSource,
         bullets: [
           'Choose mode: Subdivision Lab, Silent Beat, Consonant Precision, Pocket Control, or Slow Mastery.',
           'Set BPM from the song, or override BPM for practice drills.',
@@ -286,17 +357,17 @@ export default function HowToUseEaseVerse({
         ],
         legend: [
           {
-            iconImage: require('@/assets/images/EasePocket.png'),
+            iconImage: easePocketIconSource,
             label: 'Modes',
             description: 'Switch between five timing training modes.',
           },
           {
-            iconImage: require('@/assets/images/bpm_icon.png'),
+            iconImage: bpmIconSource,
             label: 'BPM',
             description: 'Controls click speed and timing grid spacing.',
           },
           {
-            iconImage: require('@/assets/images/two_beats.png'),
+            iconImage: twoBeatsIconSource,
             label: '2/4 Beats',
             description: 'Sets bar accents for count feel and drill flow.',
           },
@@ -311,7 +382,7 @@ export default function HowToUseEaseVerse({
         route: '/profile',
         accent: Colors.gradientMid,
         icon: 'person',
-        iconImage: require('@/assets/images/icon-set/Profile.png'),
+        iconImage: profileTabIconSource,
         bullets: [
           'Set Language and Accent Goal for coaching tone.',
           'Adjust Live Mode and Lyrics Follow Speed for live tracking behavior.',
@@ -323,19 +394,19 @@ export default function HowToUseEaseVerse({
           { icon: 'globe-outline', label: 'Language', description: 'Affects live recognition and pronunciation coaching.' },
           { icon: 'flash-outline', label: 'Live mode', description: 'Stability vs Speed tracking.' },
           {
-            iconImage: require('@/assets/images/lyrics_flow_speed_icon.png'),
+            iconImage: lyricsFlowSpeedIconSource,
             label: 'Lyrics speed',
             description: 'How fast the highlighted word advances.',
           },
           {
-            iconImage: require('@/assets/images/count_in_icon.png'),
+            iconImage: countInIconSource,
             label: 'Count-in',
             description: 'Choose 0, 2, or 4 beats before recording starts.',
           },
           { icon: 'volume-high-outline', label: 'Mindfulness voice', description: 'Select a male/female voice for narration.' },
           { icon: 'sync-outline', label: 'Lyrics sync', description: 'Pulls latest lyrics + BPM, shows diffs, and fires a synced toast.' },
           {
-            iconImage: require('@/assets/images/about_icon.png'),
+            iconImage: aboutIconSource,
             label: 'About',
             description: 'Overview of features, API links, and version info.',
           },
@@ -349,11 +420,11 @@ export default function HowToUseEaseVerse({
     | { id: HowToStep['id']; label: string; route: HowToRoute; icon: IoniconName }
     | { id: HowToStep['id']; label: string; route: HowToRoute; image: ImageSourcePropType }
   )[] = [
-    { id: 'sing', label: 'Sing', image: require('@/assets/images/icon-set/Singing.png'), route: '/' },
-    { id: 'lyrics', label: 'Lyrics', image: require('@/assets/images/icon-set/Lyrics.png'), route: '/lyrics' },
-    { id: 'sessions', label: 'Sessions', image: require('@/assets/images/icon-set/sessions.png'), route: '/sessions' },
-    { id: 'easepocket', label: 'EasePocket', image: require('@/assets/images/EasePocket.png'), route: '/easepocket' },
-    { id: 'profile', label: 'Profile', image: require('@/assets/images/icon-set/Profile.png'), route: '/profile' },
+    { id: 'sing', label: 'Sing', image: singTabIconSource, route: '/' },
+    { id: 'lyrics', label: 'Lyrics', image: lyricsTabIconSource, route: '/lyrics' },
+    { id: 'sessions', label: 'Sessions', image: sessionsTabIconSource, route: '/sessions' },
+    { id: 'easepocket', label: 'EasePocket', image: easePocketIconSource, route: '/easepocket' },
+    { id: 'profile', label: 'Profile', image: profileTabIconSource, route: '/profile' },
   ];
 
   return (
@@ -376,7 +447,7 @@ export default function HowToUseEaseVerse({
             ]}
           >
             <Image
-              source={require('@/assets/images/icon-set/howto-icon.png')}
+              source={howToIconSource}
               style={[
                 styles.howToIcon,
                 {
@@ -384,6 +455,7 @@ export default function HowToUseEaseVerse({
                   height: introIconSize,
                 },
               ]}
+              resizeMode="cover"
               accessibilityRole="image"
               accessibilityLabel="How to use EaseVerse"
             />
@@ -536,19 +608,19 @@ export default function HowToUseEaseVerse({
                       items={[
                         {
                           label: 'Live mode',
-                          source: require('@/assets/images/icon-set/Live_mode.png'),
+                          source: liveModeIconSource,
                         },
                         {
                           label: 'Lyrics speed',
-                          source: require('@/assets/images/lyrics_flow_speed_icon.png'),
+                          source: lyricsFlowSpeedIconSource,
                         },
                         {
                           label: 'Count-in',
-                          source: require('@/assets/images/count_in_icon.png'),
+                          source: countInIconSource,
                         },
                         {
                           label: 'Feedback',
-                          source: require('@/assets/images/icon-set/Feedback_intensity_high.png'),
+                          source: feedbackHighIconSource,
                         },
                         {
                           label: 'Mindfulness voice',
@@ -560,7 +632,7 @@ export default function HowToUseEaseVerse({
                         },
                         {
                           label: 'About',
-                          source: require('@/assets/images/about_icon.png'),
+                          source: aboutIconSource,
                         },
                       ]}
                     />
@@ -572,19 +644,19 @@ export default function HowToUseEaseVerse({
                       items={[
                         {
                           label: 'BPM',
-                          source: require('@/assets/images/bpm_icon.png'),
+                          source: bpmIconSource,
                         },
                         {
                           label: '2 beats',
-                          source: require('@/assets/images/two_beats.png'),
+                          source: twoBeatsIconSource,
                         },
                         {
                           label: '4 beats',
-                          source: require('@/assets/images/four_beats.png'),
+                          source: fourBeatsIconSource,
                         },
                         {
                           label: 'Trainer',
-                          source: require('@/assets/images/EasePocket.png'),
+                          source: easePocketIconSource,
                         },
                       ]}
                     />
@@ -596,8 +668,9 @@ export default function HowToUseEaseVerse({
                       <View style={styles.warmupRow}>
                         <View style={styles.warmupItem}>
                           <Image
-                            source={require('@/assets/images/warmup-icon.png')}
+                            source={warmupShortcutIconSource}
                             style={[styles.warmupIcon, { width: warmupIconSize, height: warmupIconSize }]}
+                            resizeMode="contain"
                             accessibilityRole="image"
                             accessibilityLabel="Warm up shortcut icon"
                           />
@@ -605,8 +678,9 @@ export default function HowToUseEaseVerse({
                         </View>
                         <View style={styles.warmupItem}>
                           <Image
-                            source={require('@/assets/images/mindfulness-icon.png')}
+                            source={mindfulnessShortcutIconSource}
                             style={[styles.warmupIcon, { width: warmupIconSize, height: warmupIconSize }]}
+                            resizeMode="contain"
                             accessibilityRole="image"
                             accessibilityLabel="Mindfulness shortcut icon"
                           />
@@ -614,8 +688,9 @@ export default function HowToUseEaseVerse({
                         </View>
                         <View style={styles.warmupItem}>
                           <Image
-                            source={require('@/assets/images/EasePocket.png')}
+                            source={easePocketIconSource}
                             style={[styles.warmupIcon, { width: warmupIconSize, height: warmupIconSize }]}
+                            resizeMode="contain"
                             accessibilityRole="image"
                             accessibilityLabel="EasePocket timing trainer icon"
                           />
@@ -677,7 +752,6 @@ const styles = StyleSheet.create({
   howToIcon: {
     width: 34,
     height: 34,
-    resizeMode: 'cover',
   },
   introCopy: {
     flex: 1,
@@ -830,7 +904,6 @@ const styles = StyleSheet.create({
   warmupIcon: {
     width: 22,
     height: 22,
-    resizeMode: 'contain',
   },
   warmupText: {
     color: Colors.textSecondary,

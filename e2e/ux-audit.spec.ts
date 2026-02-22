@@ -375,7 +375,9 @@ test.describe("UX audit", () => {
     await page.goto("/lyrics", { waitUntil: "domcontentloaded" });
     await page.getByPlaceholder("Song title").fill(songTitle);
     await page.getByPlaceholder("Write your lyrics here...").fill(initialLyrics);
-    await expect(page.getByText("Saved & ready for live")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("lyrics-save-indicator")).toContainText("Saved", {
+      timeout: 15_000,
+    });
 
     const externalTrackId = `ux-audit-${Date.now()}`;
     const seed = await request.post("/api/v1/collab/lyrics", {
@@ -586,4 +588,3 @@ test.describe("UX audit", () => {
     expect(true).toBeTruthy();
   });
 });
-

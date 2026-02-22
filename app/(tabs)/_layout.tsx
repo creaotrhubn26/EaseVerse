@@ -1,8 +1,6 @@
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
-import { Platform, StyleSheet, View, type ImageSourcePropType } from "react-native";
+import { Image, Platform, StyleSheet, View, type ImageSourcePropType } from "react-native";
 import React, { useEffect } from "react";
 import Animated, {
   Easing,
@@ -15,10 +13,22 @@ import Colors from "@/constants/colors";
 import { useResponsiveLayout } from "@/lib/responsive";
 
 const tabIconSources = {
-  sing: require("@/assets/images/icon-set/Singing.png"),
-  lyrics: require("@/assets/images/icon-set/Lyrics.png"),
-  sessions: require("@/assets/images/icon-set/sessions.png"),
-  profile: require("@/assets/images/icon-set/Profile.png"),
+  sing:
+    Platform.OS === "web"
+      ? require("@/assets/images/icon-set/Singing.nav.webp")
+      : require("@/assets/images/icon-set/Singing.png"),
+  lyrics:
+    Platform.OS === "web"
+      ? require("@/assets/images/icon-set/Lyrics.nav.webp")
+      : require("@/assets/images/icon-set/Lyrics.png"),
+  sessions:
+    Platform.OS === "web"
+      ? require("@/assets/images/icon-set/sessions.nav.webp")
+      : require("@/assets/images/icon-set/sessions.png"),
+  profile:
+    Platform.OS === "web"
+      ? require("@/assets/images/icon-set/Profile.nav.webp")
+      : require("@/assets/images/icon-set/Profile.png"),
 } as const;
 
 function AnimatedTabIcon({
@@ -74,7 +84,7 @@ function AnimatedTabIcon({
           glowStyle,
         ]}
       />
-      <Animated.Image
+      <Image
         source={source}
         style={[
           styles.tabIcon,
@@ -88,29 +98,6 @@ function AnimatedTabIcon({
         accessible={false}
       />
     </Animated.View>
-  );
-}
-
-function NativeTabLayout() {
-  return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Icon sf={{ default: "mic", selected: "mic.fill" }} />
-        <NativeTabs.Trigger.Label>Sing</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="lyrics">
-        <NativeTabs.Trigger.Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
-        <NativeTabs.Trigger.Label>Lyrics</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="sessions">
-        <NativeTabs.Trigger.Icon sf={{ default: "clock", selected: "clock.fill" }} />
-        <NativeTabs.Trigger.Label>Sessions</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <NativeTabs.Trigger.Icon sf={{ default: "person", selected: "person.fill" }} />
-        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
   );
 }
 
@@ -128,6 +115,15 @@ function ClassicTabLayout() {
         tabBarActiveTintColor: Colors.tabActive,
         tabBarInactiveTintColor: Colors.tabInactive,
         sceneStyle: { backgroundColor: Colors.background },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontFamily: "Inter_600SemiBold",
+          marginTop: 1,
+          marginBottom: 2,
+        },
+        tabBarItemStyle: {
+          paddingTop: 5,
+        },
         tabBarStyle: {
           // On web, an absolute tab bar can overlap and intercept clicks on content near
           // the bottom of a ScrollView. Keep it in-flow so it's always clickable without
@@ -160,6 +156,7 @@ function ClassicTabLayout() {
         name="index"
         options={{
           title: "Sing",
+          tabBarAccessibilityLabel: "Sing tab",
           tabBarIcon: ({ focused }) => (
             <AnimatedTabIcon
               source={tabIconSources.sing}
@@ -173,6 +170,7 @@ function ClassicTabLayout() {
         name="lyrics"
         options={{
           title: "Lyrics",
+          tabBarAccessibilityLabel: "Lyrics tab",
           tabBarIcon: ({ focused }) => (
             <AnimatedTabIcon
               source={tabIconSources.lyrics}
@@ -186,6 +184,7 @@ function ClassicTabLayout() {
         name="sessions"
         options={{
           title: "Sessions",
+          tabBarAccessibilityLabel: "Sessions tab",
           tabBarIcon: ({ focused }) => (
             <AnimatedTabIcon
               source={tabIconSources.sessions}
@@ -199,6 +198,7 @@ function ClassicTabLayout() {
         name="profile"
         options={{
           title: "Profile",
+          tabBarAccessibilityLabel: "Profile tab",
           tabBarIcon: ({ focused }) => (
             <AnimatedTabIcon
               source={tabIconSources.profile}
@@ -213,9 +213,6 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
   return <ClassicTabLayout />;
 }
 

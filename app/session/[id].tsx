@@ -18,6 +18,7 @@ import Colors from '@/constants/colors';
 import { getGenreProfile } from '@/constants/genres';
 import WaveformTimeline from '@/components/WaveformTimeline';
 import Toast from '@/components/Toast';
+import { downloadBlob, trimAudioToWavBlob } from '@/lib/trim-audio';
 import { useApp } from '@/lib/AppContext';
 import { goBackWithFallback } from '@/lib/navigation';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
@@ -113,6 +114,37 @@ export default function SessionReviewScreen() {
   const [activeFixWord, setActiveFixWord] = useState<string | null>(null);
   const [showAddedToast, setShowAddedToast] = useState(false);
   const [waveformProgress, setWaveformProgress] = useState(0);
+  type TrimMarks = { start: number | null; end: number | null };
+  const [trimMarks, setTrimMarks] = useState<TrimMarks>({ start: null, end: null });
+  const [trimHistory, setTrimHistory] = useState<TrimMarks[]>([]);
+  const [trimRedo, setTrimRedo] = useState<TrimMarks[]>([]);
+  const trimStartSec = trimMarks.start;
+  const trimEndSec = trimMarks.end;
+  const commitTrim = (next: TrimMarks) => {
+    setTrimHistory((prev) => [...prev, trimMarks].slice(-20));
+    setTrimRedo([]);
+    setTrimMarks(next);
+  };
+  const undoTrim = () => {
+    setTrimHistory((prev) => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      setTrimRedo((r) => [trimMarks, ...r].slice(0, 20));
+      setTrimMarks(last);
+      return prev.slice(0, -1);
+    });
+  };
+  const redoTrim = () => {
+    setTrimRedo((prev) => {
+      if (prev.length === 0) return prev;
+      const next = prev[0];
+      setTrimHistory((h) => [...h, trimMarks].slice(-20));
+      setTrimMarks(next);
+      return prev.slice(1);
+    });
+  };
+  const [trimBusy, setTrimBusy] = useState(false);
+  const [trimError, setTrimError] = useState<string | null>(null);
 
   useEffect(() => {
     if (fromRecording === '1') {
@@ -338,6 +370,108 @@ export default function SessionReviewScreen() {
               </Text>
             )}
           </View>
+          {hasRecording && Platform.OS === 'web' && !hasWebLocalRecordingUri ? (
+            <View style={styles.trimRow}>
+              <View style={styles.trimMarkRow}>
+                <Pressable
+                  style={styles.trimMarkBtn}
+                  onPress={() => {
+                    const t = playerStatus.currentTime || 0;
+                    commitTrim({ start: t, end: trimMarks.end });
+                    setTrimError(null);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mark trim start at current position"
+                >
+                  <Ionicons name="enter-outline" size={12} color={Colors.textSecondary} />
+                  <Text style={styles.trimMarkText}>
+                    Start {trimStartSec !== null ? `${trimStartSec.toFixed(2)}s` : '–'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.trimMarkBtn}
+                  onPress={() => {
+                    const t = playerStatus.currentTime || 0;
+                    commitTrim({ start: trimMarks.start, end: t });
+                    setTrimError(null);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mark trim end at current position"
+                >
+                  <Ionicons name="exit-outline" size={12} color={Colors.textSecondary} />
+                  <Text style={styles.trimMarkText}>
+                    End {trimEndSec !== null ? `${trimEndSec.toFixed(2)}s` : '–'}
+                  </Text>
+                </Pressable>
+                {(trimStartSec !== null || trimEndSec !== null) && (
+                  <Pressable
+                    style={styles.trimMarkBtn}
+                    onPress={() => {
+                      commitTrim({ start: null, end: null });
+                      setTrimError(null);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Reset trim region"
+                  >
+                    <Ionicons name="close" size={12} color={Colors.textSecondary} />
+                    <Text style={styles.trimMarkText}>Reset</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  style={[styles.trimMarkBtn, trimHistory.length === 0 && { opacity: 0.4 }]}
+                  onPress={undoTrim}
+                  disabled={trimHistory.length === 0}
+                  accessibilityRole="button"
+                  accessibilityLabel="Undo trim mark"
+                >
+                  <Ionicons name="arrow-undo-outline" size={12} color={Colors.textSecondary} />
+                  <Text style={styles.trimMarkText}>Undo</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.trimMarkBtn, trimRedo.length === 0 && { opacity: 0.4 }]}
+                  onPress={redoTrim}
+                  disabled={trimRedo.length === 0}
+                  accessibilityRole="button"
+                  accessibilityLabel="Redo trim mark"
+                >
+                  <Ionicons name="arrow-redo-outline" size={12} color={Colors.textSecondary} />
+                  <Text style={styles.trimMarkText}>Redo</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                style={[
+                  styles.trimExportBtn,
+                  (trimStartSec === null || trimEndSec === null || trimBusy) && styles.trimExportBtnDisabled,
+                ]}
+                disabled={trimStartSec === null || trimEndSec === null || trimBusy}
+                onPress={async () => {
+                  if (!session?.recordingUri || trimStartSec === null || trimEndSec === null) return;
+                  setTrimError(null);
+                  setTrimBusy(true);
+                  try {
+                    const blob = await trimAudioToWavBlob(session.recordingUri, trimStartSec, trimEndSec);
+                    downloadBlob(blob, `easeverse-${session.id}-trim.wav`);
+                  } catch (err) {
+                    setTrimError((err as Error).message || 'Trim export failed');
+                  } finally {
+                    setTrimBusy(false);
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Export trimmed audio"
+              >
+                <Ionicons
+                  name={trimBusy ? 'hourglass' : 'download-outline'}
+                  size={14}
+                  color="#fff"
+                />
+                <Text style={styles.trimExportText}>
+                  {trimBusy ? 'Rendering…' : 'Export trim'}
+                </Text>
+              </Pressable>
+              {trimError ? <Text style={styles.trimErrorText}>{trimError}</Text> : null}
+            </View>
+          ) : null}
         </View>
 
         <View style={[styles.insightsRow, { paddingHorizontal: horizontalInset }]}>
@@ -544,6 +678,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 20,
     gap: 10,
+  },
+  trimRow: {
+    marginTop: 10,
+    gap: 8,
+  },
+  trimMarkRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    flexWrap: 'wrap' as const,
+    gap: 6,
+  },
+  trimMarkBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  trimMarkText: {
+    color: Colors.textSecondary,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 11,
+  },
+  trimExportBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    alignSelf: 'flex-start' as const,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.gradientStart,
+  },
+  trimExportBtnDisabled: {
+    opacity: 0.55,
+  },
+  trimExportText: {
+    color: '#fff',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 12,
+  },
+  trimErrorText: {
+    color: Colors.dangerUnderline,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 11,
   },
   waveformControls: {
     flexDirection: 'row',

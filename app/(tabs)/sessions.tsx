@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import SwipeableSessionCard from '@/components/SwipeableSessionCard';
 import LogoHeader from '@/components/LogoHeader';
+import { TakesSection } from '@/components/TakesSection';
 import { useApp } from '@/lib/AppContext';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
@@ -117,6 +118,8 @@ export default function SessionsScreen() {
           </Pressable>
         ))}
       </View>
+
+      <TakesSection horizontalMargin={horizontalInset} />
 
       <FlatList
         data={filteredSessions}

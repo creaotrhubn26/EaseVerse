@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { recordClaudeUsage } from "./usage-db.js";
 
 export type PronounceResult = { phonetic: string; tip: string; slow: string };
 export type PronounceParams = {
@@ -35,7 +36,7 @@ const pronounceTool: Anthropic.Tool = {
   },
 };
 
-async function claudeCoach(params: PronounceParams): Promise<PronounceResult> {
+async function claudeCoach(params: PronounceParams, userId?: string | null): Promise<PronounceResult> {
   if (!anthropic) throw new Error("Anthropic not configured");
   const languageHint = params.language?.trim() || "English";
   const accentHint = params.accentGoal?.trim();
@@ -57,6 +58,8 @@ async function claudeCoach(params: PronounceParams): Promise<PronounceResult> {
     tool_choice: { type: "tool", name: pronounceTool.name },
     messages: [{ role: "user", content: userMessage }],
   });
+
+  void recordClaudeUsage({ userId: userId ?? null, model: CLAUDE_MODEL, usage: response.usage });
 
   for (const block of response.content) {
     if (block.type === "tool_use" && block.name === pronounceTool.name) {
@@ -114,17 +117,24 @@ async function geminiCoach(params: PronounceParams): Promise<PronounceResult> {
 
 // --- Provider chain ---
 
-export async function coachPronunciation(params: PronounceParams): Promise<PronounceResult> {
-  const providers: Array<{ name: string; available: boolean; call: typeof claudeCoach }> = [
-    { name: "gemini", available: isGeminiAvailable(), call: geminiCoach },
-    { name: "claude", available: isClaudeAvailable(), call: claudeCoach },
+export async function coachPronunciation(
+  params: PronounceParams,
+  userId?: string | null,
+): Promise<PronounceResult> {
+  const providers: Array<{
+    name: string;
+    available: boolean;
+    call: (params: PronounceParams, userId?: string | null) => Promise<PronounceResult>;
+  }> = [
+    { name: "gemini", available: isGeminiAvailable(), call: (p) => geminiCoach(p) },
+    { name: "claude", available: isClaudeAvailable(), call: (p, u) => claudeCoach(p, u) },
   ];
 
   let lastError: unknown;
   for (const provider of providers) {
     if (!provider.available) continue;
     try {
-      return await provider.call(params);
+      return await provider.call(params, userId);
     } catch (error) {
       lastError = error;
       console.warn(`Provider ${provider.name} failed:`, error);

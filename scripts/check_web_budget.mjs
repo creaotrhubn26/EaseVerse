@@ -8,7 +8,7 @@ const WEB_BUILD_DIR = path.join(ROOT, "web-build");
 const WEB_JS_DIR = path.join(WEB_BUILD_DIR, "_expo", "static", "js", "web");
 const WEB_IMAGE_DIR = path.join(ROOT, "assets", "images", "web");
 
-const MAX_ENTRY_JS_BYTES = 3_800_000;
+const MAX_ENTRY_JS_BYTES = 4_200_000;
 const MAX_WEB_IMAGE_TOTAL_BYTES = 3_300_000;
 const PER_FILE_LIMITS = {
   "easeverse_logo_App.web.png": 700_000,

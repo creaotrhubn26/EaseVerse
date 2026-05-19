@@ -22,6 +22,10 @@ import Toast from '@/components/Toast';
 import LogoHeader from '@/components/LogoHeader';
 import HowToUseEaseVerse from '@/components/HowToUseEaseVerse';
 import { AccountSection } from '@/components/AccountSection';
+import { ProToolsPairingCard } from '@/components/ProToolsPairingCard';
+import { ProToolsEasyImport } from '@/components/ProToolsEasyImport';
+import { CostDashboardCard } from '@/components/CostDashboardCard';
+import { CLERK_CONFIGURED, useAppUser } from '@/lib/use-app-user';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { parseSongSections } from '@/lib/lyrics-sections';
 import { fetchLearningRecommendations } from '@/lib/learning-client';
@@ -365,6 +369,44 @@ function SegmentedControl<T extends string>({
         </Pressable>
       ))}
     </View>
+  );
+}
+
+function AdminLinkRow({ sectionPadding }: { sectionPadding: number }) {
+  const { user } = useAppUser();
+  if (!user || user.status !== 'admin') return null;
+  return (
+    <Pressable
+      onPress={() => router.push('/admin')}
+      style={({ pressed }) => [
+        {
+          marginHorizontal: sectionPadding,
+          marginTop: 12,
+          padding: 14,
+          borderRadius: 14,
+          backgroundColor: Colors.surface,
+          borderWidth: 1,
+          borderColor: Colors.gradientStart + '55',
+          flexDirection: 'row' as const,
+          alignItems: 'center' as const,
+          gap: 10,
+        },
+        pressed && { opacity: 0.7 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Open admin dashboard"
+    >
+      <Ionicons name="shield-checkmark" size={18} color={Colors.gradientStart} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: Colors.textPrimary, fontFamily: 'Inter_700Bold', fontSize: 14 }}>
+          Admin dashboard
+        </Text>
+        <Text style={{ color: Colors.textTertiary, fontFamily: 'Inter_500Medium', fontSize: 12, marginTop: 2 }}>
+          Manage users, approvals and usage.
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+    </Pressable>
   );
 }
 
@@ -829,6 +871,10 @@ export default function ProfileScreen() {
       >
         <View style={{ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }}>
         <AccountSection horizontalMargin={sectionPadding} />
+        {CLERK_CONFIGURED ? <AdminLinkRow sectionPadding={sectionPadding} /> : null}
+        {CLERK_CONFIGURED ? <CostDashboardCard horizontalMargin={sectionPadding} /> : null}
+        <ProToolsEasyImport horizontalMargin={sectionPadding} />
+        <ProToolsPairingCard horizontalMargin={sectionPadding} />
         <View style={[styles.statsCard, { marginHorizontal: sectionPadding }]}>
           <LinearGradient
             colors={[Colors.gradientStart + '15', Colors.gradientEnd + '08']}

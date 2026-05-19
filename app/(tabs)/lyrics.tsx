@@ -284,6 +284,7 @@ export default function LyricsScreen() {
   const [selectedGenre, setSelectedGenre] = useState<GenreId>(activeSong?.genre || 'pop');
   const [tempoBpmText, setTempoBpmText] = useState(activeSong?.bpm ? String(activeSong.bpm) : '');
   const [paperModeEnabled, setPaperModeEnabled] = useState(isNativeIpad);
+  const [paperTemplate, setPaperTemplate] = useState<'lined' | 'blank' | 'dotted' | 'grid'>('lined');
   const [focusMode, setFocusMode] = useState(false);
   const [mobileLyricsFocus, setMobileLyricsFocus] = useState(true);
   const [showFindPanel, setShowFindPanel] = useState(false);
@@ -2164,8 +2165,34 @@ export default function LyricsScreen() {
                     </Pressable>
                   </View>
                 )}
+                {paperModeEnabled && isNativeIpad ? (
+                  <View style={styles.paperTemplateRow}>
+                    {(['lined', 'blank', 'dotted', 'grid'] as const).map((template) => (
+                      <Pressable
+                        key={template}
+                        onPress={() => setPaperTemplate(template)}
+                        style={[
+                          styles.paperTemplateChip,
+                          paperTemplate === template && styles.paperTemplateChipActive,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Paper template ${template}`}
+                        accessibilityState={{ selected: paperTemplate === template }}
+                      >
+                        <Text
+                          style={[
+                            styles.paperTemplateChipText,
+                            paperTemplate === template && styles.paperTemplateChipTextActive,
+                          ]}
+                        >
+                          {template}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
                 <View style={[styles.paperEditorShell, paperModeEnabled && styles.paperEditorShellActive]}>
-                  {paperModeEnabled && (
+                  {paperModeEnabled && paperTemplate === 'lined' && (
                     <View pointerEvents="none" style={styles.paperLinesOverlay}>
                       {PAPER_GUIDE_LINES.map((lineIndex) => (
                         <View
@@ -2173,6 +2200,46 @@ export default function LyricsScreen() {
                           style={[
                             styles.paperGuideLine,
                             { top: 18 + lineIndex * PAPER_LINE_HEIGHT },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  )}
+                  {paperModeEnabled && paperTemplate === 'dotted' && (
+                    <View pointerEvents="none" style={styles.paperLinesOverlay}>
+                      {PAPER_GUIDE_LINES.flatMap((rowIndex) =>
+                        Array.from({ length: 24 }, (_, colIndex) => (
+                          <View
+                            key={`dot-${rowIndex}-${colIndex}`}
+                            style={[
+                              styles.paperDot,
+                              {
+                                top: 18 + rowIndex * PAPER_LINE_HEIGHT,
+                                left: 16 + colIndex * (PAPER_LINE_HEIGHT * 0.85),
+                              },
+                            ]}
+                          />
+                        )),
+                      )}
+                    </View>
+                  )}
+                  {paperModeEnabled && paperTemplate === 'grid' && (
+                    <View pointerEvents="none" style={styles.paperLinesOverlay}>
+                      {PAPER_GUIDE_LINES.map((lineIndex) => (
+                        <View
+                          key={`grid-h-${lineIndex}`}
+                          style={[
+                            styles.paperGuideLine,
+                            { top: 18 + lineIndex * PAPER_LINE_HEIGHT, opacity: 0.5 },
+                          ]}
+                        />
+                      ))}
+                      {Array.from({ length: 24 }, (_, colIndex) => (
+                        <View
+                          key={`grid-v-${colIndex}`}
+                          style={[
+                            styles.paperGridVertical,
+                            { left: 16 + colIndex * (PAPER_LINE_HEIGHT * 0.85) },
                           ]}
                         />
                       ))}
@@ -2209,7 +2276,29 @@ export default function LyricsScreen() {
                     }
                   />
                   {isNativeIpad && paperModeEnabled && (
-                    <PencilInkLayer visible sessionKey={pencilSessionKey} />
+                    <PencilInkLayer
+                      visible
+                      sessionKey={pencilSessionKey}
+                      onTranscribe={(text) => {
+                        if (!text) return;
+                        setEditText((prev) => {
+                          const sep = prev && !prev.endsWith('\n') ? '\n' : '';
+                          return `${prev}${sep}${text}`;
+                        });
+                      }}
+                      onDetectedSections={(sections) => {
+                        if (!activeSong || sections.length === 0) return;
+                        const merged = sections
+                          .map((s) => {
+                            const header = s.label || s.type;
+                            const body = (s.lines || []).filter(Boolean).join('\n');
+                            return body ? `[${header}]\n${body}` : '';
+                          })
+                          .filter(Boolean)
+                          .join('\n\n');
+                        if (merged) setEditText(merged);
+                      }}
+                    />
                   )}
                 </View>
                 {isNativeIpad && paperModeEnabled && (
@@ -3363,6 +3452,49 @@ const styles = StyleSheet.create({
     right: 14,
     height: 1,
     backgroundColor: '#d9caa1',
+  },
+  paperDot: {
+    position: 'absolute',
+    width: 2,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: '#c9b88a',
+  },
+  paperGridVertical: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: '#e6d9b2',
+  },
+  paperTemplateRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+    flexWrap: 'wrap' as const,
+  },
+  paperTemplateChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  paperTemplateChipActive: {
+    backgroundColor: Colors.gradientStart,
+    borderColor: Colors.gradientStart,
+  },
+  paperTemplateChipText: {
+    color: Colors.textSecondary,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 11,
+    textTransform: 'capitalize',
+  },
+  paperTemplateChipTextActive: {
+    color: '#fff',
   },
   lyricsEditorIpad: {
     minHeight: 500,

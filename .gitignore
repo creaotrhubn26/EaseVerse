@@ -49,3 +49,6 @@ playwright-report/
 .vercel
 
 .env
+
+# Claude Code local state
+.claude/

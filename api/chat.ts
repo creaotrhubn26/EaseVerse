@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { isClerkConfigured, requireAuth } from "./_lib/auth.js";
+import { recordClaudeUsage } from "./_lib/usage-db.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 const client: Anthropic | null = apiKey ? new Anthropic({ apiKey }) : null;
@@ -23,8 +24,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  let userId: string | null = null;
   if (isClerkConfigured()) {
-    const userId = await requireAuth(req, res);
+    userId = await requireAuth(req, res);
     if (!userId) return;
   }
 
@@ -58,6 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const final = await stream.finalMessage();
+    void recordClaudeUsage({ userId, model: MODEL, usage: final.usage });
     res.write(`data: ${JSON.stringify({ done: true, usage: final.usage })}\n\n`);
     res.end();
   } catch (error) {

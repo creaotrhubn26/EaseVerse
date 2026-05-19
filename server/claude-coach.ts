@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { recordClaudeUsage } from "./usage-tracker";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 const client: Anthropic | null = apiKey ? new Anthropic({ apiKey }) : null;
@@ -57,6 +58,8 @@ export async function getPronunciationCoaching(params: {
     tool_choice: { type: "tool", name: pronounceTool.name },
     messages: [{ role: "user", content: userMessage }],
   });
+
+  recordClaudeUsage({ model: MODEL, usage: response.usage });
 
   for (const block of response.content) {
     if (block.type === "tool_use" && block.name === pronounceTool.name) {

@@ -85,6 +85,22 @@ function RootLayoutNav() {
           animation: "slide_from_bottom",
         }}
       />
+      <Stack.Screen
+        name="admin"
+        options={{
+          headerShown: false,
+          presentation: "card",
+          animation: "slide_from_right",
+        }}
+      />
+      <Stack.Screen
+        name="booth/[trackId]"
+        options={{
+          headerShown: false,
+          presentation: "card",
+          animation: "fade",
+        }}
+      />
     </Stack>
   );
 }

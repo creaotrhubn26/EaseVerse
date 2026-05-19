@@ -16,8 +16,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  let userId: string | null = null;
   if (isClerkConfigured()) {
-    const userId = await requireAuth(req, res);
+    userId = await requireAuth(req, res);
     if (!userId) return;
   }
 
@@ -27,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const result = await coachPronunciation(parsed.data);
+    const result = await coachPronunciation(parsed.data, userId);
     return res.status(200).json(result);
   } catch (error) {
     console.error("Pronounce error:", error);

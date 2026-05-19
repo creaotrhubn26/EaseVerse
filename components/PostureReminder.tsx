@@ -72,6 +72,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderGlass,
     gap: 8,
+    zIndex: 50,
+    elevation: 6,
   },
   header: {
     flexDirection: 'row',

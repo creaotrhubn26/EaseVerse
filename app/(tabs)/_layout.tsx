@@ -11,6 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 import Colors from "@/constants/colors";
 import { useResponsiveLayout } from "@/lib/responsive";
+import { AppGate } from "@/components/AppGate";
 
 const tabIconSources = {
   sing:
@@ -213,7 +214,11 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  return <ClassicTabLayout />;
+  return (
+    <AppGate>
+      <ClassicTabLayout />
+    </AppGate>
+  );
 }
 
 const styles = StyleSheet.create({

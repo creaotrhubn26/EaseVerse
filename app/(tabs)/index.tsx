@@ -29,6 +29,8 @@ import { MicPermissionRationale } from '@/components/MicPermissionRationale';
 import { OnboardingChecklist, type ChecklistStep } from '@/components/OnboardingChecklist';
 import { InlineLyricsEditor } from '@/components/InlineLyricsEditor';
 import { PostureReminder } from '@/components/PostureReminder';
+import { CLERK_CONFIGURED } from '@/lib/use-app-user';
+import { WhatsNewBanner } from '@/components/WhatsNewBanner';
 import { PitchOverlay } from '@/components/PitchOverlay';
 import { usePitchDetection } from '@/lib/usePitchDetection';
 import { useVibratoDetection } from '@/lib/useVibratoDetection';
@@ -890,6 +892,7 @@ export default function SingScreen() {
         onHide={() => setToast((current) => ({ ...current, visible: false }))}
       />
       <LogoHeader />
+      {CLERK_CONFIGURED ? <WhatsNewBanner /> : null}
       {!isRecording && !isAnalyzing && onboardingFlags && !onboardingFlags.postureReminderDismissed && activeSong ? (
         <PostureReminder
           onDismiss={() => {
@@ -1529,6 +1532,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.accentBorder,
+    zIndex: 50,
+    elevation: 6,
   },
   draftBannerTitle: {
     color: Colors.textPrimary,
@@ -1756,6 +1761,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
+    zIndex: 1,
+    elevation: 1,
   },
   emptyCard: {
     alignItems: 'center',

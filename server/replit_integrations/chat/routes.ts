@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { chatStorage } from "./storage";
+import { recordClaudeUsage } from "../../usage-tracker";
 
 const resolvedAnthropicApiKey = process.env.ANTHROPIC_API_KEY;
 const hasChatAiCredentials = Boolean(resolvedAnthropicApiKey);
@@ -107,7 +108,8 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
         res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
       });
 
-      await stream.finalMessage();
+      const final = await stream.finalMessage();
+      recordClaudeUsage({ model: CHAT_MODEL, usage: final.usage });
 
       await chatStorage.createMessage(conversationId, "assistant", fullResponse);
 

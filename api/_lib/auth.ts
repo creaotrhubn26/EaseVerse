@@ -49,3 +49,14 @@ export async function requireAuth(
     return null;
   }
 }
+
+export async function fetchUserEmail(userId: string): Promise<string | null> {
+  if (!clerk) return null;
+  try {
+    const user = await clerk.users.getUser(userId);
+    return user.primaryEmailAddress?.emailAddress ?? null;
+  } catch (error) {
+    console.warn("Clerk user fetch failed:", error);
+    return null;
+  }
+}

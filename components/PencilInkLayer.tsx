@@ -5,14 +5,21 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
+import { Platform } from 'react-native';
 import Colors from '@/constants/colors';
+import * as Storage from '@/lib/storage';
+import {
+  detectSectionsFromStrokes,
+  transcribeStrokes,
+} from '@/lib/handwriting-client';
 
-type InkTool = 'pen' | 'highlighter' | 'eraser';
+type InkTool = 'pen' | 'highlighter' | 'eraser' | 'lasso';
 type InkPoint = {
   x: number;
   y: number;
@@ -34,6 +41,7 @@ type InkHistoryState = {
 };
 type InkAction =
   | { type: 'commit'; next: InkStroke[] }
+  | { type: 'replace'; strokes: InkStroke[] }
   | { type: 'undo' }
   | { type: 'redo' }
   | { type: 'clear' }
@@ -49,6 +57,10 @@ type TouchWithOptionalType = {
 interface PencilInkLayerProps {
   visible: boolean;
   sessionKey: string;
+  onTranscribe?: (text: string) => void;
+  onDetectedSections?: (
+    sections: { type: string; label: string; lines: string[] }[],
+  ) => void;
 }
 
 const MAX_HISTORY = 60;
@@ -56,7 +68,8 @@ const MIN_POINTS_FOR_STROKE = 2;
 const PEN_WIDTH_PRESETS = [2.2, 3.2, 4.4, 6];
 const ERASER_SIZE_PRESETS = [16, 24, 34, 46];
 const COLOR_PRESETS = ['#1E293B', '#0F172A', '#1D4ED8', '#EA580C', '#065F46', '#B91C1C'];
-const HIGHLIGHTER_COLOR = '#FACC15';
+const HIGHLIGHTER_PRESETS = ['#FACC15', '#F472B6', '#86EFAC', '#7DD3FC'];
+const HIGHLIGHTER_COLOR = HIGHLIGHTER_PRESETS[0];
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -87,6 +100,9 @@ function historyReducer(state: InkHistoryState, action: InkAction): InkHistorySt
         undo: cappedUndo,
         redo: [],
       };
+    }
+    case 'replace': {
+      return { strokes: action.strokes, undo: [], redo: [] };
     }
     case 'undo': {
       if (state.undo.length === 0) {
@@ -220,6 +236,34 @@ function strokeHitsPoint(stroke: InkStroke, point: InkPoint, eraserRadius: numbe
   return false;
 }
 
+function pointInPolygon(point: { x: number; y: number }, polygon: InkPoint[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x;
+    const yi = polygon[i].y;
+    const xj = polygon[j].x;
+    const yj = polygon[j].y;
+    const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + 1e-12) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function strokeIntersectsPolygon(stroke: InkStroke, polygon: InkPoint[]): boolean {
+  if (polygon.length < 3) return false;
+  for (const point of stroke.points) {
+    if (pointInPolygon(point, polygon)) return true;
+  }
+  return false;
+}
+
+function translateStroke(stroke: InkStroke, dx: number, dy: number): InkStroke {
+  return {
+    ...stroke,
+    points: stroke.points.map((p) => ({ x: p.x + dx, y: p.y + dy, pressure: p.pressure })),
+  };
+}
+
 function smoothPathFromPoints(points: InkPoint[]): string {
   if (points.length === 0) {
     return '';
@@ -268,7 +312,12 @@ function applyEraser(strokes: InkStroke[], point: InkPoint, eraserRadius: number
   return strokes.filter((stroke) => !strokeHitsPoint(stroke, point, eraserRadius));
 }
 
-export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerProps) {
+export default function PencilInkLayer({
+  visible,
+  sessionKey,
+  onTranscribe,
+  onDetectedSections,
+}: PencilInkLayerProps) {
   const [history, dispatch] = React.useReducer(historyReducer, {
     strokes: [],
     undo: [],
@@ -280,6 +329,16 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
   const [stylusPriority, setStylusPriority] = useState(true);
   const [pressureSensitive, setPressureSensitive] = useState(true);
   const [selectedColor, setSelectedColor] = useState(COLOR_PRESETS[0]);
+  const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_PRESETS[0]);
+  const [customColors, setCustomColors] = useState<string[]>([]);
+  const [showHexInput, setShowHexInput] = useState(false);
+  const [hexDraft, setHexDraft] = useState('');
+  const [ocrBusy, setOcrBusy] = useState<null | 'transcribe' | 'sections'>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [stabilization, setStabilization] = useState(false);
+  const [lassoPath, setLassoPath] = useState<InkPoint[] | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const lassoPointsRef = useRef<InkPoint[]>([]);
   const [penWidth, setPenWidth] = useState(3.2);
   const [eraserSize, setEraserSize] = useState(24);
   const [stylusHintVisible, setStylusHintVisible] = useState(false);
@@ -297,7 +356,27 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
     setDraftStroke(null);
     setEraserPreview(null);
     setEraserCursor(null);
+
+    let cancelled = false;
+    void Storage.getInkStrokes(sessionKey).then((stored) => {
+      if (cancelled || !stored || stored.length === 0) return;
+      dispatch({ type: 'replace', strokes: stored as InkStroke[] });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [sessionKey]);
+
+  // Persist on commit + every 60s heartbeat as a crash-safety net.
+  useEffect(() => {
+    void Storage.saveInkStrokes(sessionKey, history.strokes);
+  }, [sessionKey, history.strokes]);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void Storage.saveInkStrokes(sessionKey, history.strokes);
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [sessionKey, history.strokes]);
 
   useEffect(() => {
     return () => {
@@ -308,7 +387,7 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
   }, []);
 
   const activeToolIsMarker = tool === 'highlighter';
-  const activeInkColor = activeToolIsMarker ? HIGHLIGHTER_COLOR : selectedColor;
+  const activeInkColor = activeToolIsMarker ? highlighterColor : selectedColor;
   const activeInkWidth = tool === 'eraser' ? eraserSize : penWidth;
   const displayedStrokes = eraserPreview ?? history.strokes;
 
@@ -324,6 +403,8 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
 
   const applyToolButton = useCallback((nextTool: InkTool) => {
     setTool(nextTool);
+    setSelectedIds([]);
+    setLassoPath(null);
     Haptics.selectionAsync();
   }, []);
 
@@ -344,7 +425,19 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
 
   const appendStrokePoint = useCallback(
     (point: InkPoint) => {
-      activePointsRef.current = [...activePointsRef.current, point];
+      let nextPoint = point;
+      if (stabilization) {
+        const prev = activePointsRef.current[activePointsRef.current.length - 1];
+        if (prev) {
+          const factor = 0.55;
+          nextPoint = {
+            x: prev.x * factor + point.x * (1 - factor),
+            y: prev.y * factor + point.y * (1 - factor),
+            pressure: point.pressure,
+          };
+        }
+      }
+      activePointsRef.current = [...activePointsRef.current, nextPoint];
       const nextStroke = createInkStroke(
         activePointsRef.current,
         tool === 'highlighter' ? 'highlighter' : 'pen',
@@ -460,6 +553,12 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
             beginErase(point);
             return;
           }
+          if (tool === 'lasso') {
+            lassoPointsRef.current = [point];
+            setLassoPath([point]);
+            setSelectedIds([]);
+            return;
+          }
           beginStroke(point);
         },
         onPanResponderMove: (event) => {
@@ -475,16 +574,38 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
             continueErase(point);
             return;
           }
+          if (tool === 'lasso') {
+            lassoPointsRef.current = [...lassoPointsRef.current, point];
+            setLassoPath(lassoPointsRef.current);
+            return;
+          }
           appendStrokePoint(point);
         },
         onPanResponderRelease: () => {
+          if (tool === 'lasso') {
+            const polygon = lassoPointsRef.current;
+            if (polygon.length >= 3) {
+              const ids = history.strokes
+                .filter((stroke) => strokeIntersectsPolygon(stroke, polygon))
+                .map((stroke) => stroke.id);
+              setSelectedIds(ids);
+            }
+            lassoPointsRef.current = [];
+            setLassoPath(null);
+            return;
+          }
           endGesture();
         },
         onPanResponderTerminate: () => {
+          if (tool === 'lasso') {
+            lassoPointsRef.current = [];
+            setLassoPath(null);
+            return;
+          }
           endGesture();
         },
       }),
-    [appendStrokePoint, beginErase, beginStroke, continueErase, enabled, endGesture, shouldAllowEvent, tool]
+    [appendStrokePoint, beginErase, beginStroke, continueErase, enabled, endGesture, history.strokes, shouldAllowEvent, tool]
   );
 
   if (!visible) {
@@ -558,27 +679,102 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
                   />
                   <Text style={[styles.toolChipText, tool === 'eraser' && styles.toolChipTextActive]}>Eraser</Text>
                 </Pressable>
+                <Pressable
+                  style={[styles.toolChip, tool === 'lasso' && styles.toolChipActive]}
+                  onPress={() => applyToolButton('lasso')}
+                >
+                  <Ionicons
+                    name="ellipsis-horizontal-circle-outline"
+                    size={14}
+                    color={tool === 'lasso' ? Colors.gradientStart : Colors.textSecondary}
+                  />
+                  <Text style={[styles.toolChipText, tool === 'lasso' && styles.toolChipTextActive]}>Lasso</Text>
+                </Pressable>
               </View>
 
-              {tool !== 'eraser' && (
+              {tool === 'pen' && (
                 <View style={styles.colorRow}>
-                  {COLOR_PRESETS.map((color) => (
+                  {[...COLOR_PRESETS, ...customColors].map((color) => (
                     <Pressable
                       key={color}
                       style={[
                         styles.colorDot,
                         { backgroundColor: color },
-                        selectedColor === color && !activeToolIsMarker && styles.colorDotActive,
+                        selectedColor === color && styles.colorDotActive,
                       ]}
                       onPress={() => setSelectedColor(color)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Pick pen color ${color}`}
                     />
                   ))}
-                  <View style={styles.highlighterSample}>
-                    <View style={[styles.colorDot, { backgroundColor: HIGHLIGHTER_COLOR }]} />
-                    <Text style={styles.highlighterLabel}>HL</Text>
-                  </View>
+                  <Pressable
+                    style={[styles.colorDot, styles.colorDotAdd]}
+                    onPress={() => setShowHexInput(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add custom HEX color"
+                  >
+                    <Ionicons name="add" size={12} color={Colors.textPrimary} />
+                  </Pressable>
                 </View>
               )}
+              {tool === 'highlighter' && (
+                <View style={styles.colorRow}>
+                  {HIGHLIGHTER_PRESETS.map((color) => (
+                    <Pressable
+                      key={color}
+                      style={[
+                        styles.colorDot,
+                        { backgroundColor: color },
+                        highlighterColor === color && styles.colorDotActive,
+                      ]}
+                      onPress={() => setHighlighterColor(color)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Pick highlighter ${color}`}
+                    />
+                  ))}
+                </View>
+              )}
+              {showHexInput ? (
+                <View style={styles.hexInputRow}>
+                  <Text style={styles.hexInputLabel}>HEX</Text>
+                  <TextInput
+                    value={hexDraft}
+                    onChangeText={setHexDraft}
+                    placeholder="#A1B2C3"
+                    placeholderTextColor={Colors.textTertiary}
+                    autoCapitalize="characters"
+                    maxLength={7}
+                    style={styles.hexInput}
+                  />
+                  <Pressable
+                    style={styles.hexAddBtn}
+                    onPress={() => {
+                      const candidate = hexDraft.startsWith('#') ? hexDraft : `#${hexDraft}`;
+                      if (/^#[0-9A-Fa-f]{6}$/.test(candidate)) {
+                        setCustomColors((prev) =>
+                          prev.includes(candidate) ? prev : [...prev, candidate],
+                        );
+                        setSelectedColor(candidate);
+                        setHexDraft('');
+                        setShowHexInput(false);
+                      }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Save custom color"
+                  >
+                    <Ionicons name="checkmark" size={14} color="#fff" />
+                  </Pressable>
+                  <Pressable
+                    style={styles.hexCancelBtn}
+                    onPress={() => {
+                      setHexDraft('');
+                      setShowHexInput(false);
+                    }}
+                  >
+                    <Ionicons name="close" size={14} color={Colors.textSecondary} />
+                  </Pressable>
+                </View>
+              ) : null}
 
               <View style={styles.chipRow}>
                 {(tool === 'eraser' ? ERASER_SIZE_PRESETS : PEN_WIDTH_PRESETS).map((size) => {
@@ -644,11 +840,206 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
                 >
                   <Ionicons name="trash-outline" size={14} color={Colors.textSecondary} />
                 </Pressable>
+                <Pressable
+                  style={[styles.actionBtn, history.strokes.length === 0 && styles.actionBtnDisabled]}
+                  onPress={() => {
+                    if (history.strokes.length === 0) return;
+                    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+                    const width = 900;
+                    const height = 1200;
+                    const inner = history.strokes
+                      .map((stroke) => {
+                        const path = smoothPathFromPoints(stroke.points);
+                        const opacity = stroke.tool === 'highlighter' ? 0.36 : 0.92;
+                        return `<path d="${path}" stroke="${stroke.color}" stroke-width="${stroke.width}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" />`;
+                      })
+                      .join('');
+                    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${inner}</svg>`;
+                    const blob = new Blob([svg], { type: 'image/svg+xml' });
+                    const url = URL.createObjectURL(blob);
+                    const anchor = document.createElement('a');
+                    anchor.href = url;
+                    anchor.download = `easeverse-ink-${Date.now()}.svg`;
+                    document.body.appendChild(anchor);
+                    anchor.click();
+                    document.body.removeChild(anchor);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  }}
+                  disabled={history.strokes.length === 0}
+                  accessibilityRole="button"
+                  accessibilityLabel="Export ink as image"
+                >
+                  <Ionicons name="download-outline" size={14} color={Colors.textSecondary} />
+                </Pressable>
               </View>
 
               <Text style={styles.metaText}>
                 {history.strokes.length} stroke{history.strokes.length === 1 ? '' : 's'} • {enabled ? 'Drawing active' : 'Drawing paused'}
               </Text>
+
+              <View style={styles.chipRow}>
+                <Pressable
+                  style={[styles.toolChip, stabilization && styles.toolChipActive]}
+                  onPress={() => setStabilization((v) => !v)}
+                  accessibilityRole="switch"
+                  accessibilityLabel="Toggle brush stabilization"
+                  accessibilityState={{ checked: stabilization }}
+                >
+                  <Ionicons
+                    name="trending-down-outline"
+                    size={12}
+                    color={stabilization ? Colors.gradientStart : Colors.textSecondary}
+                  />
+                  <Text style={[styles.toolChipText, stabilization && styles.toolChipTextActive]}>
+                    Stabilize
+                  </Text>
+                </Pressable>
+              </View>
+
+              {(onTranscribe || onDetectedSections) && Platform.OS === 'web' ? (
+                <View style={styles.chipRow}>
+                  {onTranscribe ? (
+                    <Pressable
+                      style={[styles.toolChip, ocrBusy === 'transcribe' && styles.toolChipActive]}
+                      disabled={history.strokes.length === 0 || ocrBusy !== null}
+                      onPress={async () => {
+                        setOcrError(null);
+                        setOcrBusy('transcribe');
+                        try {
+                          const text = await transcribeStrokes(history.strokes);
+                          onTranscribe?.(text);
+                        } catch (err) {
+                          setOcrError(
+                            (err as Error).message || 'Transcription failed',
+                          );
+                        } finally {
+                          setOcrBusy(null);
+                        }
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Convert handwriting to typed text"
+                    >
+                      <Ionicons
+                        name={ocrBusy === 'transcribe' ? 'hourglass' : 'text-outline'}
+                        size={12}
+                        color={Colors.textSecondary}
+                      />
+                      <Text style={styles.toolChipText}>
+                        {ocrBusy === 'transcribe' ? 'Reading…' : 'Convert ink'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {onDetectedSections ? (
+                    <Pressable
+                      style={[styles.toolChip, ocrBusy === 'sections' && styles.toolChipActive]}
+                      disabled={history.strokes.length === 0 || ocrBusy !== null}
+                      onPress={async () => {
+                        setOcrError(null);
+                        setOcrBusy('sections');
+                        try {
+                          const sections = await detectSectionsFromStrokes(history.strokes);
+                          onDetectedSections?.(sections);
+                        } catch (err) {
+                          setOcrError(
+                            (err as Error).message || 'Section detection failed',
+                          );
+                        } finally {
+                          setOcrBusy(null);
+                        }
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Detect verses and chorus from handwriting"
+                    >
+                      <Ionicons
+                        name={ocrBusy === 'sections' ? 'hourglass' : 'list-outline'}
+                        size={12}
+                        color={Colors.textSecondary}
+                      />
+                      <Text style={styles.toolChipText}>
+                        {ocrBusy === 'sections' ? 'Reading…' : 'Detect sections'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+              {ocrError ? <Text style={styles.ocrErrorText}>{ocrError}</Text> : null}
+
+              {tool === 'lasso' && selectedIds.length > 0 ? (
+                <View style={styles.selectionBar}>
+                  <Text style={styles.selectionText}>
+                    {selectedIds.length} stroke{selectedIds.length === 1 ? '' : 's'} selected
+                  </Text>
+                  <View style={styles.selectionActions}>
+                    {(['up', 'down', 'left', 'right'] as const).map((dir) => (
+                      <Pressable
+                        key={dir}
+                        style={styles.actionBtn}
+                        onPress={() => {
+                          const delta = 8;
+                          const dx = dir === 'left' ? -delta : dir === 'right' ? delta : 0;
+                          const dy = dir === 'up' ? -delta : dir === 'down' ? delta : 0;
+                          const next = history.strokes.map((stroke) =>
+                            selectedIds.includes(stroke.id)
+                              ? createInkStroke(
+                                  translateStroke(stroke, dx, dy).points,
+                                  stroke.tool,
+                                  stroke.color,
+                                  stroke.width,
+                                  pressureSensitive,
+                                )
+                              : stroke,
+                          );
+                          // Preserve IDs by overriding generated id from createInkStroke
+                          const idMapped = next.map((stroke, idx) =>
+                            history.strokes[idx]
+                              ? { ...stroke, id: history.strokes[idx].id }
+                              : stroke,
+                          );
+                          dispatch({ type: 'commit', next: idMapped });
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Nudge selection ${dir}`}
+                      >
+                        <Ionicons
+                          name={
+                            dir === 'up'
+                              ? 'arrow-up'
+                              : dir === 'down'
+                                ? 'arrow-down'
+                                : dir === 'left'
+                                  ? 'arrow-back'
+                                  : 'arrow-forward'
+                          }
+                          size={12}
+                          color={Colors.textSecondary}
+                        />
+                      </Pressable>
+                    ))}
+                    <Pressable
+                      style={[styles.actionBtn, { backgroundColor: Colors.dangerUnderline + '22' }]}
+                      onPress={() => {
+                        const next = history.strokes.filter(
+                          (stroke) => !selectedIds.includes(stroke.id),
+                        );
+                        dispatch({ type: 'commit', next });
+                        setSelectedIds([]);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Delete selected strokes"
+                    >
+                      <Ionicons name="trash" size={12} color={Colors.dangerUnderline} />
+                    </Pressable>
+                    <Pressable
+                      style={styles.actionBtn}
+                      onPress={() => setSelectedIds([])}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear lasso selection"
+                    >
+                      <Ionicons name="close" size={12} color={Colors.textSecondary} />
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
             </View>
           )}
         </View>
@@ -666,18 +1057,21 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
         {...panResponder.panHandlers}
       >
         <Svg style={StyleSheet.absoluteFill}>
-          {displayedStrokes.map((stroke) => (
-            <Path
-              key={stroke.id}
-              d={stroke.path}
-              stroke={stroke.color}
-              strokeWidth={stroke.width}
-              strokeOpacity={stroke.opacity}
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
+          {displayedStrokes.map((stroke) => {
+            const selected = selectedIds.includes(stroke.id);
+            return (
+              <Path
+                key={stroke.id}
+                d={stroke.path}
+                stroke={stroke.color}
+                strokeWidth={selected ? stroke.width + 1.5 : stroke.width}
+                strokeOpacity={selected ? Math.min(1, stroke.opacity + 0.2) : stroke.opacity}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            );
+          })}
           {draftStroke && (
             <Path
               d={draftStroke.path}
@@ -687,6 +1081,15 @@ export default function PencilInkLayer({ visible, sessionKey }: PencilInkLayerPr
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
+            />
+          )}
+          {lassoPath && lassoPath.length >= 2 && (
+            <Path
+              d={smoothPathFromPoints(lassoPath) + ' Z'}
+              stroke={Colors.gradientStart}
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+              fill="rgba(255,122,24,0.08)"
             />
           )}
         </Svg>
@@ -819,6 +1222,78 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.9,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 0 },
+  },
+  colorDotAdd: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    borderColor: Colors.borderGlass,
+  },
+  hexInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  hexInputLabel: {
+    color: Colors.textTertiary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+  },
+  hexInput: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    color: Colors.textPrimary,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 13,
+  },
+  hexAddBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.gradientStart,
+  },
+  hexCancelBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  ocrErrorText: {
+    color: Colors.dangerUnderline,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 11,
+    marginTop: 4,
+  },
+  selectionBar: {
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.accentBorder,
+    backgroundColor: Colors.accentSubtle,
+    gap: 6,
+  },
+  selectionText: {
+    color: Colors.textPrimary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+  },
+  selectionActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   highlighterSample: {
     flexDirection: 'row',

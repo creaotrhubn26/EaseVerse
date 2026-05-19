@@ -36,6 +36,7 @@ import {
 } from "./whisper-stt";
 import { isGeminiAvailable } from "./gemini-coach";
 import { isClaudeAvailable } from "./claude-coach";
+import { createPairingToken, isPairingTokenValid } from "./pairing-tokens";
 import {
   coachPronunciationWithFallback,
   type PronounceResult,
@@ -1024,6 +1025,13 @@ function enforceOptionalApiKey(
   options?: { required?: boolean }
 ): boolean {
   const expectedKey = process.env[envVarName];
+  const providedKey = extractApiKey(req);
+
+  // Companion pairing tokens are accepted in place of EXTERNAL_API_KEY only.
+  if (envVarName === "EXTERNAL_API_KEY" && providedKey && isPairingTokenValid(providedKey)) {
+    return true;
+  }
+
   if (!expectedKey) {
     if (options?.required) {
       res
@@ -1034,7 +1042,6 @@ function enforceOptionalApiKey(
     return true;
   }
 
-  const providedKey = extractApiKey(req);
   if (providedKey !== expectedKey) {
     res.status(401).json({ error: "Unauthorized" });
     return false;
@@ -1986,6 +1993,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/v1/collab/lyrics", handleCollabLyricsUpsert);
   app.post("/api/v1/collab/protools", handleCollabProToolsSyncUpsert);
+
+  app.post("/api/v1/companion/pairing", (_req: Request, res: Response) => {
+    const entry = createPairingToken();
+    res.json({
+      token: entry.token,
+      expiresAt: new Date(entry.expiresAt).toISOString(),
+      ttlSeconds: Math.round((entry.expiresAt - Date.now()) / 1000),
+      usage: 'export EASEVERSE_API_KEY=$TOKEN && npm run companion:dev',
+    });
+  });
   app.post("/api/v1/learning/session", handleLearningSessionIngest);
   app.post("/api/v1/learning/easepocket", handleLearningEasePocketIngest);
   app.get("/api/v1/learning/profile", handleLearningProfileGet);

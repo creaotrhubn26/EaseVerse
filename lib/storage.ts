@@ -14,6 +14,29 @@ const EASEPOCKET_HISTORY_KEY = '@easeverse_easepocket_history';
 const LEARNING_USER_ID_KEY = '@easeverse_learning_user_id';
 const ONBOARDING_FLAGS_KEY = '@easeverse_onboarding_v1';
 const DRAFT_SESSION_KEY = '@easeverse_draft_session_v1';
+const INK_STROKES_PREFIX = '@easeverse_ink_v1:';
+
+export async function getInkStrokes(sessionKey: string): Promise<unknown[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(`${INK_STROKES_PREFIX}${sessionKey}`);
+    if (!raw) return null;
+    const parsed = safeParseJson(raw);
+    return Array.isArray(parsed) ? (parsed as unknown[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveInkStrokes(sessionKey: string, strokes: unknown[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      `${INK_STROKES_PREFIX}${sessionKey}`,
+      JSON.stringify(strokes),
+    );
+  } catch {
+    // Ignore.
+  }
+}
 
 export type DraftSession = {
   songId?: string;

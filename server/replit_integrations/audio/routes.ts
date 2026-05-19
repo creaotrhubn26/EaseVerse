@@ -118,7 +118,7 @@ export function registerAudioRoutes(app: Express, basePath = "/api/audio"): void
       res.write(`data: ${JSON.stringify({ type: "user_transcript", data: userTranscript })}\n\n`);
 
       // 6. Stream audio response from gpt-audio
-      const stream = await openai.chat.completions.create({
+      const stream = await openai!.chat.completions.create({
         model: "gpt-audio",
         modalities: ["text", "audio"],
         audio: { voice, format: "pcm16" },

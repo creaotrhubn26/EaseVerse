@@ -108,7 +108,7 @@ export default function SessionReviewScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const { id, fromRecording } = useLocalSearchParams<{ id: string; fromRecording?: string }>();
-  const { sessions } = useApp();
+  const { sessions, toggleFavorite } = useApp();
   const coach = usePronunciationCoach();
   const [activeFixWord, setActiveFixWord] = useState<string | null>(null);
   const [showAddedToast, setShowAddedToast] = useState(false);
@@ -244,7 +244,26 @@ export default function SessionReviewScreen() {
           <Ionicons name="arrow-back" size={backIconSize} color={Colors.textPrimary} />
         </Pressable>
         <Text style={styles.topBarTitle} numberOfLines={1} accessibilityRole="header">Session Review</Text>
-        <View style={{ width: 44 }} />
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            toggleFavorite(session.id);
+          }}
+          style={({ pressed }) => [
+            { width: 44, height: 44, alignItems: 'center' as const, justifyContent: 'center' as const },
+            pressed && { opacity: 0.6 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={session.favorite ? 'Remove from favorites' : 'Mark as favorite'}
+          accessibilityState={{ selected: session.favorite }}
+          testID="favorite-toggle"
+        >
+          <Ionicons
+            name={session.favorite ? 'star' : 'star-outline'}
+            size={backIconSize}
+            color={session.favorite ? Colors.warningUnderline : Colors.textPrimary}
+          />
+        </Pressable>
       </View>
 
       {showAddedToast && (

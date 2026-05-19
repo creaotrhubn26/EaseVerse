@@ -7,10 +7,21 @@ const resolvedOpenAiApiKey =
 
 export const hasImageAiCredentials = Boolean(resolvedOpenAiApiKey);
 
-export const openai = new OpenAI({
-  apiKey: resolvedOpenAiApiKey ?? "missing-openai-key",
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+export const openai: OpenAI | null = resolvedOpenAiApiKey
+  ? new OpenAI({
+      apiKey: resolvedOpenAiApiKey,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    })
+  : null;
+
+function requireOpenAi(): OpenAI {
+  if (!openai) {
+    throw new Error(
+      "OpenAI image client is not configured. Set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY.",
+    );
+  }
+  return openai;
+}
 
 /**
  * Generate an image and return as Buffer.
@@ -20,7 +31,7 @@ export async function generateImageBuffer(
   prompt: string,
   size: "1024x1024" | "512x512" | "256x256" = "1024x1024"
 ): Promise<Buffer> {
-  const response = await openai.images.generate({
+  const response = await requireOpenAi().images.generate({
     model: "gpt-image-1",
     prompt,
     size,
@@ -49,7 +60,7 @@ export async function editImages(
     )
   );
 
-  const response = await openai.images.edit({
+  const response = await requireOpenAi().images.edit({
     model: "gpt-image-1",
     image: images,
     prompt,

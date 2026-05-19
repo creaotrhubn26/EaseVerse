@@ -5,13 +5,17 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { ClerkProvider } from "@clerk/clerk-expo";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AppProvider } from "@/lib/AppContext";
+import { clerkTokenCache } from "@/lib/clerk-token-cache";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { ResizeMode, Video, AVPlaybackStatus } from "expo-av";
 import Colors from "@/constants/colors";
+
+const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 SplashScreen.preventAutoHideAsync();
 
@@ -67,6 +71,14 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="easepocket"
+        options={{
+          headerShown: false,
+          presentation: "card",
+          animation: "slide_from_bottom",
+        }}
+      />
+      <Stack.Screen
+        name="(auth)"
         options={{
           headerShown: false,
           presentation: "card",
@@ -170,14 +182,13 @@ export default function RootLayout() {
     return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
   }
 
-  return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <GestureHandlerRootView
-          style={{ flex: 1, backgroundColor: Colors.background }}
-        >
-          <KeyboardProvider>
-            <AppProvider>
+  const tree = (
+    <QueryClientProvider client={queryClient}>
+      <GestureHandlerRootView
+        style={{ flex: 1, backgroundColor: Colors.background }}
+      >
+        <KeyboardProvider>
+          <AppProvider>
               <StatusBar style="light" />
               <RootLayoutNav />
               {showIntro ? (
@@ -220,10 +231,24 @@ export default function RootLayout() {
                   </View>
                 </Animated.View>
               ) : null}
-            </AppProvider>
-          </KeyboardProvider>
-        </GestureHandlerRootView>
-      </QueryClientProvider>
+          </AppProvider>
+        </KeyboardProvider>
+      </GestureHandlerRootView>
+    </QueryClientProvider>
+  );
+
+  return (
+    <ErrorBoundary>
+      {clerkPublishableKey ? (
+        <ClerkProvider
+          publishableKey={clerkPublishableKey}
+          tokenCache={clerkTokenCache}
+        >
+          {tree}
+        </ClerkProvider>
+      ) : (
+        tree
+      )}
     </ErrorBoundary>
   );
 }

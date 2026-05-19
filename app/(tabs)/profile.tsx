@@ -21,6 +21,7 @@ import { useApp } from '@/lib/AppContext';
 import Toast from '@/components/Toast';
 import LogoHeader from '@/components/LogoHeader';
 import HowToUseEaseVerse from '@/components/HowToUseEaseVerse';
+import { AccountSection } from '@/components/AccountSection';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { parseSongSections } from '@/lib/lyrics-sections';
 import { fetchLearningRecommendations } from '@/lib/learning-client';
@@ -429,10 +430,7 @@ export default function ProfileScreen() {
     }
     return filters.length > 0 ? filters.join(', ') : 'all drafts';
   }, [lyricsSyncConfig.projectId, lyricsSyncConfig.source]);
-  const appIconSource =
-    Platform.OS === 'web'
-      ? require('@/assets/images/web/easeverse_logo_App.web.png')
-      : require('@/assets/images/easeverse_logo_App.png');
+  const appIconSource = require('@/assets/images/easeverse_logo_App.png');
   const apiHost = useMemo(() => {
     try {
       const parsed = new URL(apiBaseUrl);
@@ -830,6 +828,7 @@ export default function ProfileScreen() {
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}
       >
         <View style={{ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }}>
+        <AccountSection horizontalMargin={sectionPadding} />
         <View style={[styles.statsCard, { marginHorizontal: sectionPadding }]}>
           <LinearGradient
             colors={[Colors.gradientStart + '15', Colors.gradientEnd + '08']}

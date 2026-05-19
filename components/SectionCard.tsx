@@ -14,6 +14,11 @@ interface SectionCardProps {
   isLast: boolean;
 }
 
+function useCollapsed(initial: boolean) {
+  const [collapsed, setCollapsed] = React.useState(initial);
+  return [collapsed, () => setCollapsed((value) => !value)] as const;
+}
+
 const sectionColors: Record<string, string> = {
   verse: Colors.gradientStart,
   'pre-chorus': Colors.gradientMid,
@@ -28,14 +33,34 @@ export default function SectionCard({ section, index, onMoveUp, onMoveDown, isFi
   const responsive = useResponsiveLayout();
   const color = sectionColors[section.type] || Colors.textSecondary;
   const arrowIconSize = scaledIconSize(14, responsive);
+  const [collapsed, toggleCollapsed] = useCollapsed(false);
   return (
     <View style={styles.card}>
       <View style={styles.header}>
+        <Pressable
+          onPress={toggleCollapsed}
+          hitSlop={8}
+          style={styles.collapseToggle}
+          accessibilityRole="button"
+          accessibilityLabel={collapsed ? `Expand ${section.label}` : `Collapse ${section.label}`}
+          accessibilityState={{ expanded: !collapsed }}
+        >
+          <Ionicons
+            name={collapsed ? 'chevron-forward' : 'chevron-down'}
+            size={arrowIconSize}
+            color={Colors.textSecondary}
+          />
+        </Pressable>
         <Text style={styles.sectionNumber}>{index + 1}</Text>
         <View style={[styles.typeBadge, { borderColor: color + '50' }]}>
           <View style={[styles.typeDot, { backgroundColor: color }]} />
           <Text style={[styles.typeLabel, { color }]}>{section.label}</Text>
         </View>
+        {collapsed ? (
+          <Text style={styles.collapsedSummary} numberOfLines={1}>
+            {section.lines.length} lines
+          </Text>
+        ) : null}
         <View style={styles.arrows}>
           <Pressable
             onPress={onMoveUp}
@@ -71,11 +96,13 @@ export default function SectionCard({ section, index, onMoveUp, onMoveDown, isFi
           </Pressable>
         </View>
       </View>
-      <View style={styles.lines}>
-        {section.lines.map((line, i) => (
-          <Text key={i} style={styles.lineText} numberOfLines={1}>{line}</Text>
-        ))}
-      </View>
+      {collapsed ? null : (
+        <View style={styles.lines}>
+          {section.lines.map((line, i) => (
+            <Text key={i} style={styles.lineText} numberOfLines={1}>{line}</Text>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -138,5 +165,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
     marginRight: 6,
+  },
+  collapseToggle: {
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 2,
+  },
+  collapsedSummary: {
+    flex: 1,
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    marginLeft: 8,
   },
 });

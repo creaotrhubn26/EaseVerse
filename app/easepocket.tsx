@@ -18,6 +18,7 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { AudioModule, useAudioPlayer } from "expo-audio";
 import Colors from "@/constants/colors";
+import { useNarration } from "@/lib/useNarration";
 import { useApp } from "@/lib/AppContext";
 import { useRecording } from "@/lib/useRecording";
 import { analyzeConsonantPrecision, type EasePocketGrid as ApiGrid } from "@/lib/easepocket-client";
@@ -190,6 +191,8 @@ export default function EasePocketScreen() {
   const [tapStats, setTapStats] = useState<TapStats | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [consonantScore, setConsonantScore] = useState<Awaited<ReturnType<typeof analyzeConsonantPrecision>>>(null);
+  const narration = useNarration();
+  const REFERENCE_PHRASE = 'Crisp consonants cut through. Tip, top, kick.';
   const [toast, setToast] = useState<{ visible: boolean; message: string }>({
     visible: false,
     message: "",
@@ -1144,6 +1147,39 @@ export default function EasePocketScreen() {
 
           {consonantScore?.ok && (
             <View style={styles.consonantCard}>
+              <Pressable
+                onPress={() => {
+                  if (narration.state === 'playing' || narration.state === 'loading') {
+                    narration.stop();
+                  } else {
+                    void narration.speak(REFERENCE_PHRASE);
+                  }
+                }}
+                style={{
+                  flexDirection: 'row' as const,
+                  alignItems: 'center' as const,
+                  alignSelf: 'flex-start' as const,
+                  gap: 6,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: Colors.borderGlass,
+                  backgroundColor: Colors.surfaceGlass,
+                  marginBottom: 10,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={narration.state === 'playing' ? 'Stop reference' : 'Play reference TTS for consonant comparison'}
+              >
+                <Ionicons
+                  name={narration.state === 'playing' ? 'stop' : 'volume-high'}
+                  size={14}
+                  color={Colors.gradientStart}
+                />
+                <Text style={{ color: Colors.textPrimary, fontFamily: 'Inter_600SemiBold', fontSize: 12 }}>
+                  {narration.state === 'playing' ? 'Stop reference' : 'Play reference'}
+                </Text>
+              </Pressable>
               <View style={styles.statsRow}>
                 <StatPill
                   label="On-Time"
@@ -1162,17 +1198,33 @@ export default function EasePocketScreen() {
                       : e.class === "early"
                         ? Colors.warningUnderline
                         : Colors.dangerUnderline;
+                  const iconName: "checkmark-circle" | "arrow-back-circle" | "arrow-forward-circle" =
+                    e.class === "on"
+                      ? "checkmark-circle"
+                      : e.class === "early"
+                        ? "arrow-back-circle"
+                        : "arrow-forward-circle";
+                  const label = e.class === "on" ? "On" : e.class === "early" ? "Early" : "Late";
                   return (
-                    <View key={`${idx}-${e.tMs}`} style={styles.eventRow}>
-                      <Text style={styles.eventTime}>
-                        {Math.round(e.tMs)}ms
-                      </Text>
+                    <View
+                      key={`${idx}-${e.tMs}`}
+                      style={[
+                        styles.eventRow,
+                        {
+                          borderLeftWidth: 3,
+                          borderLeftColor: color,
+                          paddingLeft: 10,
+                          backgroundColor: color + "12",
+                          borderRadius: 8,
+                        },
+                      ]}
+                    >
+                      <Ionicons name={iconName} size={16} color={color} />
+                      <Text style={styles.eventTime}>{Math.round(e.tMs)}ms</Text>
                       <Text style={[styles.eventDev, { color }]}>
-                        {e.class === "on" ? "On" : e.class === "early" ? "Early" : "Late"} {formatMs(e.deviationMs)}
+                        {label} {formatMs(e.deviationMs)}
                       </Text>
-                      <Text style={styles.eventConf}>
-                        {Math.round(e.confidence * 100)}%
-                      </Text>
+                      <Text style={styles.eventConf}>{Math.round(e.confidence * 100)}%</Text>
                     </View>
                   );
                 })}

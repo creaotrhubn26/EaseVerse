@@ -566,12 +566,12 @@ export default function PracticeLoopScreen() {
             </LinearGradient>
           </Animated.View>
         </Pressable>
-        <Text style={styles.loopStatusText} accessibilityLiveRegion="polite">
+        <Text
+          style={[styles.loopStatusText, loopAudioError && styles.loopErrorText]}
+          accessibilityLiveRegion="polite"
+        >
           {loopStatusText}
         </Text>
-        {loopAudioError && (
-          <Text style={styles.loopErrorText}>{loopAudioError}</Text>
-        )}
       </View>
     </View>
   );

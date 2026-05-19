@@ -17,7 +17,7 @@ export function registerImageRoutes(app: Express, basePath = "/api/image"): void
         return res.status(400).json({ error: "Prompt is required" });
       }
 
-      const response = await openai.images.generate({
+      const response = await openai!.images.generate({
         model: "gpt-image-1",
         prompt,
         n: 1,

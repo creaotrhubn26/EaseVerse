@@ -369,6 +369,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     runAutoLyricsSync();
 
+    if (process.env.EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET === '1') {
+      return;
+    }
+
     const wsUrl = buildLyricsRealtimeSocketUrl(apiBaseUrl, lyricsSyncConfig);
     if (!wsUrl) {
       return;

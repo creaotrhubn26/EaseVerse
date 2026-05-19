@@ -21,6 +21,7 @@ import LogoHeader from '@/components/LogoHeader';
 import PencilInkLayer from '@/components/PencilInkLayer';
 import LyricsWriterStudio from '@/components/LyricsWriterStudio';
 import { useApp } from '@/lib/AppContext';
+import { isIPadLike } from '@/lib/device';
 import * as Storage from '@/lib/storage';
 import { parseSongSections } from '@/lib/lyrics-sections';
 import { resolveLyricsSyncConfig } from '@/lib/collab-lyrics';
@@ -274,7 +275,7 @@ function escapeHtml(value: string): string {
 export default function LyricsScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
-  const isNativeIpad = Platform.OS === 'ios' && Platform.isPad === true;
+  const isNativeIpad = isIPadLike();
   const { activeSong, songs, sessions, addSong, updateSong, setActiveSong } = useApp();
   const [activeTab, setActiveTab] = useState<TabKey>('write');
   const [editText, setEditText] = useState(activeSong?.lyrics || '');

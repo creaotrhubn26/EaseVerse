@@ -9,10 +9,7 @@ type LogoHeaderProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-const logoSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/easeverse_logo_App.web.png')
-    : require('@/assets/images/easeverse_logo_App.png');
+const logoSource = require('@/assets/images/easeverse_logo.png');
 
 export default function LogoHeader({ variant = 'compact', style }: LogoHeaderProps) {
   const responsive = useResponsiveLayout();

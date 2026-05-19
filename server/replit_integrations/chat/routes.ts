@@ -1,18 +1,17 @@
 import type { Express, Request, Response } from "express";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { chatStorage } from "./storage";
 
-const resolvedOpenAiApiKey =
-  process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-const hasChatAiCredentials = Boolean(resolvedOpenAiApiKey);
+const resolvedAnthropicApiKey = process.env.ANTHROPIC_API_KEY;
+const hasChatAiCredentials = Boolean(resolvedAnthropicApiKey);
 
-const openai = new OpenAI({
-  apiKey: resolvedOpenAiApiKey ?? "missing-openai-key",
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+const anthropic: Anthropic | null = resolvedAnthropicApiKey
+  ? new Anthropic({ apiKey: resolvedAnthropicApiKey })
+  : null;
+
+const CHAT_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-7";
 
 export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
-  // Get all conversations
   app.get(`${basePath}/conversations`, async (_req: Request, res: Response) => {
     try {
       const conversations = await chatStorage.getAllConversations();
@@ -23,7 +22,6 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
     }
   });
 
-  // Get single conversation with messages
   app.get(`${basePath}/conversations/:id`, async (req: Request, res: Response) => {
     try {
       const id = String(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id || "").trim();
@@ -42,7 +40,6 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
     }
   });
 
-  // Create new conversation
   app.post(`${basePath}/conversations`, async (req: Request, res: Response) => {
     try {
       const { title } = req.body;
@@ -54,7 +51,6 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
     }
   });
 
-  // Delete conversation
   app.delete(`${basePath}/conversations/:id`, async (req: Request, res: Response) => {
     try {
       const id = String(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id || "").trim();
@@ -69,13 +65,11 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
     }
   });
 
-  // Send message and get AI response (streaming)
   app.post(`${basePath}/conversations/:id/messages`, async (req: Request, res: Response) => {
     try {
-      if (!hasChatAiCredentials) {
+      if (!hasChatAiCredentials || !anthropic) {
         return res.status(503).json({
-          error:
-            "AI chat service is not configured. Set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY.",
+          error: "AI chat service is not configured. Set ANTHROPIC_API_KEY.",
         });
       }
 
@@ -87,47 +81,40 @@ export function registerChatRoutes(app: Express, basePath = "/api/chat"): void {
       }
       const { content } = req.body;
 
-      // Save user message
       await chatStorage.createMessage(conversationId, "user", content);
 
-      // Get conversation history for context
-      const messages = await chatStorage.getMessagesByConversation(conversationId);
-      const chatMessages = messages.map((m) => ({
+      const history = await chatStorage.getMessagesByConversation(conversationId);
+      const chatMessages: Anthropic.MessageParam[] = history.map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
       }));
 
-      // Set up SSE
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      // Stream response from OpenAI
-      const stream = await openai.chat.completions.create({
-        model: "gpt-5.1",
+      const stream = anthropic.messages.stream({
+        model: CHAT_MODEL,
+        max_tokens: 4096,
+        thinking: { type: "adaptive" },
         messages: chatMessages,
-        stream: true,
-        max_completion_tokens: 2048,
       });
 
       let fullResponse = "";
 
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || "";
-        if (content) {
-          fullResponse += content;
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
-        }
-      }
+      stream.on("text", (delta) => {
+        fullResponse += delta;
+        res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+      });
 
-      // Save assistant message
+      await stream.finalMessage();
+
       await chatStorage.createMessage(conversationId, "assistant", fullResponse);
 
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
       res.end();
     } catch (error) {
       console.error("Error sending message:", error);
-      // Check if headers already sent (SSE streaming started)
       if (res.headersSent) {
         res.write(`data: ${JSON.stringify({ error: "Failed to send message" })}\n\n`);
         res.end();

@@ -21,6 +21,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { BreathPacingCircle } from '@/components/BreathPacingCircle';
+import { useNarration } from '@/lib/useNarration';
 import {
   warmUpExercises,
   voiceSafetyRules,
@@ -64,6 +66,7 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
   const [timeLeft, setTimeLeft] = useState(exercise.durationSeconds);
   const [isRunning, setIsRunning] = useState(false);
   const [showTips, setShowTips] = useState(true);
+  const narration = useNarration();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useSharedValue(1);
 
@@ -125,6 +128,18 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
 
   return (
     <View style={styles.timerContainer}>
+      {exercise.category === 'breath' && isRunning ? (
+        <View style={{ marginBottom: 12 }}>
+          <BreathPacingCircle
+            inhaleSec={5}
+            holdSec={2}
+            exhaleSec={8}
+            restSec={1}
+            size={180}
+            active={isRunning}
+          />
+        </View>
+      ) : null}
       <Animated.View style={[styles.timerCircle, pulseStyle]}>
         <View style={[styles.timerProgress, { borderColor: `${exercise.categoryColor}30` }]}>
           <View style={[
@@ -194,6 +209,28 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
         >
           <Feather name="skip-forward" size={scaledIcon(11)} color={Colors.textSecondary} />
           <Text style={styles.skipBtnText}>Skip</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            if (narration.state === 'playing' || narration.state === 'loading') {
+              narration.stop();
+            } else {
+              void narration.speak(exercise.instruction);
+            }
+          }}
+          style={styles.skipBtn}
+          accessibilityRole="button"
+          accessibilityLabel={narration.state === 'playing' ? 'Stop coach demo' : 'Hear coach demo'}
+          accessibilityHint="Plays a voiced demo of the exercise instruction"
+        >
+          <Ionicons
+            name={narration.state === 'playing' ? 'stop' : narration.state === 'loading' ? 'hourglass' : 'volume-high'}
+            size={scaledIcon(11)}
+            color={Colors.textSecondary}
+          />
+          <Text style={styles.skipBtnText}>
+            {narration.state === 'playing' ? 'Stop' : 'Hear example'}
+          </Text>
         </Pressable>
       </View>
 

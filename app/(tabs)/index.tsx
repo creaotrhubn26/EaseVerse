@@ -25,6 +25,13 @@ import VUMeter from '@/components/VUMeter';
 import SongPickerModal from '@/components/SongPickerModal';
 import LogoHeader from '@/components/LogoHeader';
 import Toast from '@/components/Toast';
+import { MicPermissionRationale } from '@/components/MicPermissionRationale';
+import { OnboardingChecklist, type ChecklistStep } from '@/components/OnboardingChecklist';
+import { InlineLyricsEditor } from '@/components/InlineLyricsEditor';
+import { PostureReminder } from '@/components/PostureReminder';
+import { PitchOverlay } from '@/components/PitchOverlay';
+import { usePitchDetection } from '@/lib/usePitchDetection';
+import { useVibratoDetection } from '@/lib/useVibratoDetection';
 import { useApp } from '@/lib/AppContext';
 import { buildLiveLyricLines, getLiveLyricProgress } from '@/lib/live-lyrics';
 import * as Storage from '@/lib/storage';
@@ -36,10 +43,6 @@ import { buildSessionScoring } from '@shared/session-scoring';
 import type { LyricLine, SignalQuality, Session } from '@/lib/types';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
-const easeVerseLogoSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/web/easeverse_logo_App.web.png')
-    : require('@/assets/images/easeverse_logo_App.png');
 const warmupIconSource =
   Platform.OS === 'web'
     ? require('@/assets/images/web/warmup-icon.web.png')
@@ -155,7 +158,7 @@ function AnimatedTransportIcon({
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
-  const { activeSong, songs, sessions, setActiveSong, addSession, settings, updateSettings } =
+  const { activeSong, songs, sessions, setActiveSong, addSession, settings, updateSettings, updateSong } =
     useApp();
   const recording = useRecording();
   const metronomePlayer = useAudioPlayer(require('@/assets/sounds/metronome-click.wav'));
@@ -170,6 +173,54 @@ export default function SingScreen() {
   const [countInRemaining, setCountInRemaining] = useState<number | null>(null);
   const [lines, setLines] = useState<LyricLine[]>([]);
   const [showSongPicker, setShowSongPicker] = useState(false);
+  const [showMicRationale, setShowMicRationale] = useState(false);
+  const [showInlineEditor, setShowInlineEditor] = useState(false);
+  const [recoveredDraft, setRecoveredDraft] = useState<Storage.DraftSession | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const draft = await Storage.getDraftSession();
+        if (!cancelled && draft) {
+          const ageMs = Date.now() - draft.lastUpdatedAt;
+          if (ageMs < 24 * 60 * 60 * 1000 && draft.durationSeconds >= 3) {
+            setRecoveredDraft(draft);
+          } else {
+            await Storage.clearDraftSession();
+          }
+        }
+      } catch {
+        // Ignore.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const micRationaleSeenRef = useRef<boolean | null>(null);
+  const [onboardingFlags, setOnboardingFlags] = useState<Storage.OnboardingFlags | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const flags = await Storage.getOnboardingFlags();
+        if (!cancelled) {
+          micRationaleSeenRef.current = flags.micRationaleShown;
+          setOnboardingFlags(flags);
+        }
+      } catch {
+        if (!cancelled) {
+          micRationaleSeenRef.current = false;
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [liveTranscript, setLiveTranscript] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [liveTrackingSupported, setLiveTrackingSupported] = useState(false);
@@ -187,6 +238,25 @@ export default function SingScreen() {
   const isRecording = recording.isRecording;
   const isPaused = recording.isPaused;
   const duration = recording.duration;
+  const pitchReading = usePitchDetection(isRecording && !isPaused);
+  const vibratoReading = useVibratoDetection(pitchReading);
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const startedAt = Date.now() - duration * 1000;
+    const interval = setInterval(() => {
+      void Storage.saveDraftSession({
+        songId: activeSong?.id,
+        songTitle: activeSong?.title,
+        startedAt,
+        lastUpdatedAt: Date.now(),
+        transcript: liveTranscript,
+        lyrics: activeSong?.lyrics ?? '',
+        durationSeconds: duration,
+      });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isRecording, duration, liveTranscript, activeSong]);
 
   const lyricsText = activeSong?.lyrics || '';
   const lyricsLines = useMemo(
@@ -529,6 +599,38 @@ export default function SingScreen() {
     }
   }, [isRecording, isPaused, recording.audioLevel, feedbackThresholds]);
 
+  const recordingRedirectRef = useRef<'session' | 'practice'>('session');
+
+  const handleRestart = useCallback(async () => {
+    try {
+      await recording.stop();
+    } catch {
+      // Ignore stop errors while discarding take.
+    }
+    if (liveRecognizerRestartRef.current) {
+      clearTimeout(liveRecognizerRestartRef.current);
+      liveRecognizerRestartRef.current = null;
+    }
+    if (liveRecognizerRef.current && liveRecognizerActiveRef.current) {
+      try {
+        liveRecognizerRef.current.stop();
+      } catch {
+        // Ignore.
+      }
+      liveRecognizerActiveRef.current = false;
+    }
+    setLiveTranscript('');
+    setCoachHint(null);
+    coachHintIndexRef.current = 0;
+    setStatusText('Restarting take…');
+    void Storage.clearDraftSession();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setTimeout(() => {
+      void handleRecordPress();
+    }, 150);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording]);
+
   const handleStop = useCallback(async () => {
     const result = await recording.stop();
     if (liveRecognizerRestartRef.current) {
@@ -628,8 +730,15 @@ export default function SingScreen() {
         addSession(session);
         // Persist immediately so a hard navigation doesn't drop the new session.
         await Storage.saveSession(session);
+        void Storage.clearDraftSession();
         void ingestSessionLearningEvent({ session });
-        router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
+        const dest = recordingRedirectRef.current;
+        recordingRedirectRef.current = 'session';
+        if (dest === 'practice') {
+          router.push({ pathname: '/practice/[id]', params: { id: session.id } });
+        } else {
+          router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
+        }
       } finally {
         setIsAnalyzing(false);
         setAnalysisStatus(null);
@@ -667,6 +776,21 @@ export default function SingScreen() {
     }
 
     if (!isRecording) {
+      const isAutomatedBrowser =
+        Platform.OS === 'web' &&
+        typeof navigator !== 'undefined' &&
+        (navigator as Navigator & { webdriver?: boolean }).webdriver === true;
+      if (
+        !isAutomatedBrowser &&
+        recording.hasPermission !== true &&
+        micRationaleSeenRef.current === false
+      ) {
+        micRationaleSeenRef.current = true;
+        void Storage.updateOnboardingFlags({ micRationaleShown: true });
+        setShowMicRationale(true);
+        return;
+      }
+
       setLiveTranscript('');
       coachHintIndexRef.current = 0;
 
@@ -722,7 +846,6 @@ export default function SingScreen() {
   const quickDockButtonSize = Math.max(58, quickDockIconSize + 12);
   const transportImageSize = tierValue(responsive.tier, [34, 38, 42, 50, 62, 76, 92]);
   const transportButtonSize = tierValue(responsive.tier, [50, 54, 58, 66, 78, 94, 112]);
-  const noSongLogoSize = tierValue(responsive.tier, [110, 124, 146, 170, 210, 252, 300]);
   const noSongStateIconSize = tierValue(responsive.tier, [120, 140, 164, 196, 240, 290, 340]);
   const recordButtonSize = tierValue(responsive.tier, [88, 96, 104, 116, 136, 164, 196]);
   const scaledIcon = useMemo(
@@ -767,6 +890,75 @@ export default function SingScreen() {
         onHide={() => setToast((current) => ({ ...current, visible: false }))}
       />
       <LogoHeader />
+      {!isRecording && !isAnalyzing && onboardingFlags && !onboardingFlags.postureReminderDismissed && activeSong ? (
+        <PostureReminder
+          onDismiss={() => {
+            void Storage.updateOnboardingFlags({ postureReminderDismissed: true }).then(
+              setOnboardingFlags,
+            );
+          }}
+        />
+      ) : null}
+      {recoveredDraft ? (
+        <View style={styles.draftBanner}>
+          <Ionicons name="time-outline" size={16} color={Colors.gradientStart} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.draftBannerTitle}>Draft recovered</Text>
+            <Text style={styles.draftBannerSubtitle}>
+              Last take{recoveredDraft.songTitle ? ` of "${recoveredDraft.songTitle}"` : ''} ran ~{Math.round(recoveredDraft.durationSeconds)}s
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => {
+              void Storage.clearDraftSession();
+              setRecoveredDraft(null);
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss draft recovery"
+          >
+            <Ionicons name="close" size={16} color={Colors.textSecondary} />
+          </Pressable>
+        </View>
+      ) : null}
+      {onboardingFlags && !onboardingFlags.checklistDismissed ? (
+        <OnboardingChecklist
+          steps={[
+            {
+              id: 'language',
+              label: `Velg språk (${settings.language})`,
+              done: onboardingFlags.languageConfirmed,
+              onPress: () => {
+                void Storage.updateOnboardingFlags({ languageConfirmed: true }).then(
+                  setOnboardingFlags,
+                );
+                router.push('/(tabs)/profile');
+              },
+            },
+            {
+              id: 'accent',
+              label: `Velg accent goal (${settings.accentGoal})`,
+              done: onboardingFlags.accentConfirmed,
+              onPress: () => {
+                void Storage.updateOnboardingFlags({ accentConfirmed: true }).then(
+                  setOnboardingFlags,
+                );
+                router.push('/(tabs)/profile');
+              },
+            },
+            {
+              id: 'firstTake',
+              label: 'Ta din første take',
+              done: sessions.length > 0,
+            },
+          ] satisfies ChecklistStep[]}
+          onDismiss={() => {
+            void Storage.updateOnboardingFlags({ checklistDismissed: true }).then(
+              setOnboardingFlags,
+            );
+          }}
+        />
+      ) : null}
       <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <View style={styles.songSelectorSlot}>
           {activeSong ? (
@@ -789,6 +981,22 @@ export default function SingScreen() {
         </View>
 
         <View style={styles.topRight}>
+          {activeSong && (
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowInlineEditor(true);
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Edit lyrics inline"
+              accessibilityHint="Opens an in-place editor for the current song lyrics"
+              testID="inline-edit-button"
+              style={({ pressed }) => [styles.editLyricsBtn, pressed && { opacity: 0.6 }]}
+            >
+              <Ionicons name="create-outline" size={scaledIcon(11)} color={Colors.textSecondary} />
+            </Pressable>
+          )}
           {activeSong && (
             <View style={[styles.genreBadge, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
               <Ionicons name={genreProfile.icon} size={scaledIcon(9)} color={genreProfile.color} />
@@ -938,6 +1146,11 @@ export default function SingScreen() {
         ]}
       >
         <VUMeter isActive={isRecording && !isPaused} audioLevel={recording.audioLevel} />
+        {isRecording && !isPaused ? (
+          <View style={styles.pitchOverlayWrap}>
+            <PitchOverlay reading={pitchReading} vibrato={vibratoReading} />
+          </View>
+        ) : null}
 
         {activeSong && !isRecording && !isAnalyzing && (
           <View style={styles.genreStyleHint}>
@@ -1007,31 +1220,73 @@ export default function SingScreen() {
           />
 
           {isRecording ? (
-            <Pressable
-              style={({ pressed }) => [
-                styles.transportBtn,
-                {
-                  width: transportButtonSize,
-                  height: transportButtonSize,
-                  borderRadius: Math.round(transportButtonSize * 0.32),
-                },
-                pressed && styles.transportBtnPressed,
-              ]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                handleStop();
-              }}
-              testID="stop-button"
-              accessibilityRole="button"
-              accessibilityLabel="Stop recording"
-              accessibilityHint="Stops recording and opens session review"
-            >
-              <AnimatedTransportIcon
-                source={stopControlIconSource}
-                size={transportImageSize}
-                active
-              />
-            </Pressable>
+            <>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.transportBtn,
+                  {
+                    width: transportButtonSize,
+                    height: transportButtonSize,
+                    borderRadius: Math.round(transportButtonSize * 0.32),
+                  },
+                  pressed && styles.transportBtnPressed,
+                ]}
+                onPress={handleRestart}
+                testID="restart-button"
+                accessibilityRole="button"
+                accessibilityLabel="Restart take"
+                accessibilityHint="Discards the current take and starts a new one"
+              >
+                <Ionicons name="refresh" size={Math.round(transportImageSize * 0.55)} color="#fff" />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.transportBtn,
+                  {
+                    width: transportButtonSize,
+                    height: transportButtonSize,
+                    borderRadius: Math.round(transportButtonSize * 0.32),
+                  },
+                  pressed && styles.transportBtnPressed,
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  recordingRedirectRef.current = 'practice';
+                  void handleStop();
+                }}
+                testID="practice-from-recording-button"
+                accessibilityRole="button"
+                accessibilityLabel="Practice this part"
+                accessibilityHint="Stops recording and opens practice loop for the new session"
+              >
+                <Ionicons name="repeat" size={Math.round(transportImageSize * 0.55)} color="#fff" />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.transportBtn,
+                  {
+                    width: transportButtonSize,
+                    height: transportButtonSize,
+                    borderRadius: Math.round(transportButtonSize * 0.32),
+                  },
+                  pressed && styles.transportBtnPressed,
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  handleStop();
+                }}
+                testID="stop-button"
+                accessibilityRole="button"
+                accessibilityLabel="Stop recording"
+                accessibilityHint="Stops recording and opens session review"
+              >
+                <AnimatedTransportIcon
+                  source={stopControlIconSource}
+                  size={transportImageSize}
+                  active
+                />
+              </Pressable>
+            </>
           ) : (
             <Pressable
               style={({ pressed }) => [
@@ -1087,19 +1342,6 @@ export default function SingScreen() {
               { width: '100%' as const, maxWidth: responsive.cardMaxWidth },
             ]}
           >
-            <Image
-              source={easeVerseLogoSource}
-              style={[
-                styles.emptyStateTopLogo,
-                {
-                  width: noSongLogoSize,
-                  height: noSongLogoSize,
-                },
-              ]}
-              resizeMode="contain"
-              accessibilityRole="image"
-              accessibilityLabel="EaseVerse logo"
-            />
             <Pressable
               onPress={() => {
                 Haptics.selectionAsync();
@@ -1206,6 +1448,32 @@ export default function SingScreen() {
         onSelect={(song) => setActiveSong(song)}
         onClose={() => setShowSongPicker(false)}
       />
+
+      {activeSong ? (
+        <InlineLyricsEditor
+          visible={showInlineEditor}
+          initialLyrics={activeSong.lyrics}
+          title={activeSong.title}
+          onCancel={() => setShowInlineEditor(false)}
+          onSave={(lyrics) => {
+            updateSong({ ...activeSong, lyrics, updatedAt: Date.now() });
+            setShowInlineEditor(false);
+          }}
+        />
+      ) : null}
+
+      <MicPermissionRationale
+        visible={showMicRationale}
+        onAllow={() => {
+          setShowMicRationale(false);
+          void recording.requestPermission().then((granted) => {
+            if (granted) {
+              void handleRecordPress();
+            }
+          });
+        }}
+        onCancel={() => setShowMicRationale(false)}
+      />
     </View>
   );
 }
@@ -1244,6 +1512,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  pitchOverlayWrap: {
+    marginTop: 10,
+    alignItems: 'center' as const,
+  },
+  draftBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.accentBorder,
+  },
+  draftBannerTitle: {
+    color: Colors.textPrimary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+  },
+  draftBannerSubtitle: {
+    color: Colors.textTertiary,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  editLyricsBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
   },
   genreBadge: {
     flexDirection: 'row',
@@ -1454,9 +1760,6 @@ const styles = StyleSheet.create({
   emptyCard: {
     alignItems: 'center',
     gap: 16,
-  },
-  emptyStateTopLogo: {
-    marginBottom: -6,
   },
   emptyStateIcon: {
     marginBottom: -4,

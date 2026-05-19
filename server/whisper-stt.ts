@@ -7,7 +7,7 @@ import { pipeline, AutomaticSpeechRecognitionPipeline } from '@xenova/transforme
 import { readFile, writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import * as wavefilePkg from 'wavefile';
+import wavefilePkg from 'wavefile';
 import { spawn } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
 

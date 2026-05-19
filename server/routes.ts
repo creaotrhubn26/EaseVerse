@@ -13,7 +13,6 @@ import {
 } from "./easepocket/worker";
 import {
   textToSpeech,
-  openai,
   speechToText,
   ensureWavFormat,
   ensureCompatibleFormat,
@@ -35,7 +34,12 @@ import {
   getWhisperStatus,
   preloadWhisper,
 } from "./whisper-stt";
-import { getPronunciationCoaching, isGeminiAvailable } from "./gemini-coach";
+import { isGeminiAvailable } from "./gemini-coach";
+import { isClaudeAvailable } from "./claude-coach";
+import {
+  coachPronunciationWithFallback,
+  type PronounceResult,
+} from "./pronunciation-coach";
 
 const supportedVoices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] as const;
 const voiceSchema = z.enum(supportedVoices);
@@ -61,11 +65,6 @@ const pronounceRequestSchema = z.object({
   accentGoal: z.string().trim().max(32).optional(),
 });
 
-const pronounceResultSchema = z.object({
-  phonetic: z.string().trim().min(1).max(120),
-  tip: z.string().trim().min(1).max(160),
-  slow: z.string().trim().min(1).max(120),
-});
 
 const sessionScoreRequestSchema = z.object({
   lyrics: z.string().trim().min(1).max(10000),
@@ -1301,14 +1300,29 @@ function getOpenApiSpec(req: Request) {
 }
 
 function ensureAiConfigured(res: Response): boolean {
-  // Accept either OpenAI or Gemini/Whisper (free alternatives)
-  if (hasOpenAiCredentials || isGeminiAvailable() || isWhisperAvailable()) {
+  if (
+    hasOpenAiCredentials ||
+    isGeminiAvailable() ||
+    isClaudeAvailable() ||
+    isWhisperAvailable()
+  ) {
     return true;
   }
 
   res.status(503).json({
     error:
-      "AI service is not configured. Set GEMINI_API_KEY (free) or OPENAI_API_KEY.",
+      "AI service is not configured. Set ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY.",
+  });
+  return false;
+}
+
+function ensureOpenAiConfigured(res: Response): boolean {
+  if (hasOpenAiCredentials) {
+    return true;
+  }
+  res.status(503).json({
+    error:
+      "OpenAI is not configured. This endpoint requires AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY.",
   });
   return false;
 }
@@ -1351,7 +1365,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const handleTts = async (req: Request, res: Response) => {
     try {
-      if (!ensureAiConfigured(res)) {
+      if (!ensureOpenAiConfigured(res)) {
         return;
       }
 
@@ -1444,90 +1458,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const languageHint = language?.trim() || "English";
       const accentHint = accentGoal?.trim();
 
-      let resolved = { phonetic: word, tip: "Enunciate clearly", slow: word };
-
-      // Try Gemini first (free tier alternative)
-      if (isGeminiAvailable()) {
-        try {
-          resolved = await getPronunciationCoaching({
-            word,
-            context: contextLine,
-            language: languageHint,
-            accentGoal: accentHint,
-          });
-        } catch (geminiError) {
-          console.warn('Gemini pronunciation failed, trying OpenAI fallback:', geminiError);
-          
-          // Fall back to OpenAI if Gemini fails
-          if (hasOpenAiCredentials) {
-            const completion = await openai.chat.completions.create({
-              model: "gpt-4o-mini",
-              response_format: { type: "json_object" },
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    `You are a vocal pronunciation coach for singers. Return strict JSON with keys: phonetic, tip, slow. Tip must be in ${languageHint}.`,
-                },
-                {
-                  role: "user",
-                  content: contextLine
-                    ? `Word: "${word}" in lyric line: "${contextLine}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`
-                    : `Word: "${word}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`,
-                },
-              ],
-              temperature: 0.2,
-              max_tokens: 150,
-            });
-
-            const content = completion.choices[0]?.message?.content;
-            if (content) {
-              try {
-                const rawJson = JSON.parse(content);
-                const parsedResult = pronounceResultSchema.safeParse(rawJson);
-                if (parsedResult.success) {
-                  resolved = parsedResult.data;
-                }
-              } catch {
-                // Keep fallback values
-              }
-            }
-          }
-        }
-      } else if (hasOpenAiCredentials) {
-        // Use OpenAI if Gemini not available
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content:
-                `You are a vocal pronunciation coach for singers. Return strict JSON with keys: phonetic, tip, slow. Tip must be in ${languageHint}.`,
-            },
-            {
-              role: "user",
-              content: contextLine
-                ? `Word: "${word}" in lyric line: "${contextLine}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`
-                : `Word: "${word}".${accentHint ? ` Accent goal: ${accentHint}.` : ""} Keep tip under 15 words.`,
-            },
-          ],
-          temperature: 0.2,
-          max_tokens: 150,
+      let resolved: PronounceResult;
+      try {
+        resolved = await coachPronunciationWithFallback({
+          word,
+          context: contextLine,
+          language: languageHint,
+          accentGoal: accentHint,
         });
-
-        const content = completion.choices[0]?.message?.content;
-        if (content) {
-          try {
-            const rawJson = JSON.parse(content);
-            const parsedResult = pronounceResultSchema.safeParse(rawJson);
-            if (parsedResult.success) {
-              resolved = parsedResult.data;
-            }
-          } catch {
-            // Keep fallback values
-          }
-        }
+      } catch {
+        resolved = { phonetic: word, tip: "Enunciate clearly", slow: word };
       }
 
       // Prefer ElevenLabs for more natural pronunciation playback when configured.

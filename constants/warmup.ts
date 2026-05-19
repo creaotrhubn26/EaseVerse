@@ -221,6 +221,9 @@ export const warmUpExercises: WarmUpExercise[] = [
       '"Unique New York, unique New York" — repeat 3x',
       '"She sells seashells by the seashore" — repeat 3x',
       '"Peter Piper picked a peck of pickled peppers" — repeat 3x',
+      '"Toy boat, toy boat, toy boat" — 5x getting faster',
+      '"Irish wristwatch, Swiss wristwatch" — articulate the W and R',
+      '"The sixth sick sheik\'s sixth sheep\'s sick" — slow, then medium',
       'Start slow, then build speed while keeping clarity',
     ],
     tips: [

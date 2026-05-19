@@ -31,6 +31,7 @@ export default function RecordButton({
 }: RecordButtonProps) {
   const pulseAnim = useSharedValue(0);
   const pressScale = useSharedValue(1);
+  const touchPulseAnim = useSharedValue(0);
   const accessibilityLabel = !isRecording
     ? 'Start recording'
     : isPaused
@@ -62,6 +63,18 @@ export default function RecordButton({
     transform: [{ scale: interpolate(pulseAnim.value, [0, 1], [1, 1.25]) }],
   }));
 
+  const touchPulseStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(touchPulseAnim.value, [0, 1], [0, 0.5]),
+    transform: [{ scale: interpolate(touchPulseAnim.value, [0, 1], [1, 1.4]) }],
+  }));
+
+  const handlePressIn = () => {
+    touchPulseAnim.value = withSequence(
+      withTiming(1, { duration: 140, easing: Easing.out(Easing.cubic) }),
+      withTiming(0, { duration: 300, easing: Easing.in(Easing.cubic) }),
+    );
+  };
+
   const buttonScale = useAnimatedStyle(() => ({
     transform: [{ scale: pressScale.value }],
   }));
@@ -84,9 +97,17 @@ export default function RecordButton({
           pulseStyle,
         ]}
       />
+      <Animated.View
+        style={[
+          styles.pulseRing,
+          { width: size + 28, height: size + 28, borderRadius: (size + 28) / 2, pointerEvents: 'none' as const },
+          touchPulseStyle,
+        ]}
+      />
       <Animated.View style={buttonScale}>
         <Pressable
           onPress={handlePress}
+          onPressIn={handlePressIn}
           style={[styles.pressable, !isRecording && styles.pressableIdle]}
           testID="record-button"
           accessibilityRole="button"

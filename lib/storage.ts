@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Song, Session, UserSettings } from './types';
+import { detectInitialAccentGoal, detectInitialLanguage } from './detect-locale';
 
 const SONGS_KEY = '@lyricflow_songs';
 const SESSIONS_KEY = '@lyricflow_sessions';
@@ -11,6 +12,89 @@ const LYRICS_CAPTURE_INBOX_KEY = '@easeverse_lyrics_capture_inbox';
 const EASEPOCKET_PREFS_KEY = '@easeverse_easepocket_prefs';
 const EASEPOCKET_HISTORY_KEY = '@easeverse_easepocket_history';
 const LEARNING_USER_ID_KEY = '@easeverse_learning_user_id';
+const ONBOARDING_FLAGS_KEY = '@easeverse_onboarding_v1';
+const DRAFT_SESSION_KEY = '@easeverse_draft_session_v1';
+
+export type DraftSession = {
+  songId?: string;
+  songTitle?: string;
+  startedAt: number;
+  lastUpdatedAt: number;
+  transcript: string;
+  lyrics: string;
+  durationSeconds: number;
+};
+
+export async function getDraftSession(): Promise<DraftSession | null> {
+  try {
+    const raw = await AsyncStorage.getItem(DRAFT_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = safeParseJson(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed as DraftSession;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveDraftSession(draft: DraftSession): Promise<void> {
+  try {
+    await AsyncStorage.setItem(DRAFT_SESSION_KEY, JSON.stringify(draft));
+  } catch {
+    // Ignore.
+  }
+}
+
+export async function clearDraftSession(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(DRAFT_SESSION_KEY);
+  } catch {
+    // Ignore.
+  }
+}
+
+export type OnboardingFlags = {
+  micRationaleShown: boolean;
+  languageConfirmed: boolean;
+  accentConfirmed: boolean;
+  checklistDismissed: boolean;
+  postureReminderDismissed?: boolean;
+};
+
+const defaultOnboardingFlags: OnboardingFlags = {
+  micRationaleShown: false,
+  languageConfirmed: false,
+  accentConfirmed: false,
+  checklistDismissed: false,
+  postureReminderDismissed: false,
+};
+
+export async function getOnboardingFlags(): Promise<OnboardingFlags> {
+  try {
+    const raw = await AsyncStorage.getItem(ONBOARDING_FLAGS_KEY);
+    if (!raw) return defaultOnboardingFlags;
+    const parsed = safeParseJson(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return defaultOnboardingFlags;
+    }
+    return { ...defaultOnboardingFlags, ...(parsed as Partial<OnboardingFlags>) };
+  } catch {
+    return defaultOnboardingFlags;
+  }
+}
+
+export async function updateOnboardingFlags(
+  patch: Partial<OnboardingFlags>,
+): Promise<OnboardingFlags> {
+  const current = await getOnboardingFlags();
+  const next = { ...current, ...patch };
+  try {
+    await AsyncStorage.setItem(ONBOARDING_FLAGS_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore persistence failures.
+  }
+  return next;
+}
 
 export type EasePocketMode = 'subdivision' | 'silent' | 'consonant' | 'pocket' | 'slow';
 export type EasePocketGrid = 'beat' | '8th' | '16th';
@@ -160,15 +244,23 @@ export async function deleteSession(id: string): Promise<void> {
   await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions.filter(s => s.id !== id)));
 }
 
+function settingsForFirstLaunch(): UserSettings {
+  return {
+    ...defaultSettings,
+    language: detectInitialLanguage(),
+    accentGoal: detectInitialAccentGoal(),
+  };
+}
+
 export async function getSettings(): Promise<UserSettings> {
   const data = await AsyncStorage.getItem(SETTINGS_KEY);
   if (!data) {
-    return defaultSettings;
+    return settingsForFirstLaunch();
   }
   const parsed = safeParseJson(data);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     await AsyncStorage.removeItem(SETTINGS_KEY);
-    return defaultSettings;
+    return settingsForFirstLaunch();
   }
   return { ...defaultSettings, ...(parsed as Partial<UserSettings>) };
 }

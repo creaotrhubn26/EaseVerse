@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import crypto from "node:crypto";
-import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
+import { isClerkConfigured, requireAuthOrPairing } from "../_lib/auth.js";
 import { createTake, getTakeWithAnalysis } from "../_lib/takes-db.js";
 import { processTake } from "../_lib/take-processor.js";
 
@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isClerkConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
   }
-  const userId = await requireAuth(req, res);
+  const userId = await requireAuthOrPairing(req, res);
   if (!userId) return;
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return res.status(503).json({

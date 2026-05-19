@@ -232,3 +232,26 @@ export async function fetchCollabLyricsList(
   const data = await parseJsonOrThrow<{ items?: CollabLyricsItem[] }>(response, 'Fetch collab lyrics list');
   return Array.isArray(data.items) ? data.items : [];
 }
+
+export async function uploadTake(
+  config: CompanionConfig,
+  args: { file: Buffer; filename: string; absolutePath: string; externalTrackId?: string }
+): Promise<{ url: string; pathname: string }> {
+  if (!config.pairingToken) {
+    throw new Error('uploadTake: missing pairingToken (set EASEVERSE_PAIR_TOKEN)');
+  }
+  const { upload } = await import('@vercel/blob/client');
+  const baseUrl = preferredApiBaseUrl || normalizeBaseUrl(config.apiBaseUrl);
+  const blob = new Blob([new Uint8Array(args.file)]);
+  const result = await upload(args.filename, blob, {
+    access: 'public',
+    handleUploadUrl: `${baseUrl}/api/takes/upload`,
+    clientPayload: JSON.stringify({
+      externalTrackId: args.externalTrackId ?? config.trackId ?? null,
+      sourcePath: args.absolutePath,
+      filename: args.filename,
+    }),
+    headers: { Authorization: `Bearer ${config.pairingToken}` },
+  });
+  return { url: result.url, pathname: result.pathname };
+}

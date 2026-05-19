@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClerkClient, verifyToken } from "@clerk/backend";
+import { resolvePairingToken } from "./pairing-db.js";
 
 const secretKey = process.env.CLERK_SECRET_KEY;
 const publishableKey =
@@ -48,6 +49,29 @@ export async function requireAuth(
     res.status(401).json({ error: "Invalid or expired token" });
     return null;
   }
+}
+
+export async function requireAuthOrPairing(
+  req: VercelRequest,
+  res: VercelResponse,
+): Promise<string | null> {
+  const header = req.headers.authorization;
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) {
+    res.status(401).json({ error: "Missing bearer token" });
+    return null;
+  }
+
+  if (token.startsWith("pair_")) {
+    const record = await resolvePairingToken(token);
+    if (!record) {
+      res.status(401).json({ error: "Invalid or expired pairing token" });
+      return null;
+    }
+    return record.userId;
+  }
+
+  return requireAuth(req, res);
 }
 
 export async function fetchUserEmail(userId: string): Promise<string | null> {

@@ -1,9 +1,10 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { loadCompanionConfig } from './config';
-import { fetchCollabLyricsList, fetchProToolsSyncList, upsertProToolsSync } from './api';
+import { fetchCollabLyricsList, fetchProToolsSyncList, upsertProToolsSync, uploadTake } from './api';
 import { FileProToolsAdapter } from './adapters/file-adapter';
 import { ProToolsSessionInfoAdapter } from './adapters/protools-session-info-adapter';
 import { PullSnapshotWriter } from './adapters/pull-writer';
+import { markUploaded, readTakeBytes, scanAudioFolder } from './adapters/take-watcher';
 
 async function run(): Promise<void> {
   const config = loadCompanionConfig();
@@ -25,6 +26,9 @@ async function run(): Promise<void> {
     pullEnabled: config.pullEnabled,
     importFilePath: config.importFilePath,
     pullTrackId: config.pullTrackId,
+    audioWatchPath: config.audioWatchPath,
+    audioStabilizeMs: config.audioStabilizeMs,
+    pairingToken: config.pairingToken ? 'set' : 'missing',
   });
 
   for (;;) {
@@ -45,6 +49,32 @@ async function run(): Promise<void> {
           takeScores: result.takeScores.length,
           pronunciationFeedback: result.pronunciationFeedback.length,
         });
+      }
+
+      if (config.audioWatchPath && config.pairingToken) {
+        const candidates = await scanAudioFolder(config);
+        for (const candidate of candidates) {
+          try {
+            const bytes = await readTakeBytes(candidate.absolutePath);
+            const result = await uploadTake(config, {
+              file: bytes,
+              filename: candidate.filename,
+              absolutePath: candidate.absolutePath,
+              externalTrackId: config.trackId,
+            });
+            markUploaded(candidate.absolutePath);
+            console.log('[companion] uploaded take', {
+              filename: candidate.filename,
+              size: candidate.size,
+              storageUrl: result.url,
+            });
+          } catch (error) {
+            console.warn('[companion] take upload failed', {
+              filename: candidate.filename,
+              error: (error as Error).message,
+            });
+          }
+        }
       }
 
       if (config.pullEnabled && pullWriter) {

@@ -32,6 +32,19 @@ npm run companion:dev
 - `PROTOOLS_PULL_ENABLED` (`true` to enable pull mode; auto-enabled if `PROTOOLS_IMPORT_FILE` is set)
 - `PROTOOLS_PULL_TRACK_ID` (optional; only pull one `externalTrackId`)
 - `PROTOOLS_VERBOSE` (`true`/`false`)
+- `PROTOOLS_AUDIO_WATCH` (path to Pro Tools `Audio Files/` folder to scan for new takes)
+- `EASEVERSE_PAIR_TOKEN` (one-time pairing token from `/admin` → "Pair companion" — required when `PROTOOLS_AUDIO_WATCH` is set)
+- `PROTOOLS_AUDIO_STABILIZE_MS` (default `1500`; how long a file must keep the same size/mtime before upload)
+- `PROTOOLS_AUDIO_EXTENSIONS` (default `.wav,.aif,.aiff`)
+
+## Audio take auto-upload
+
+When `PROTOOLS_AUDIO_WATCH` and `EASEVERSE_PAIR_TOKEN` are both set, the
+companion polls the folder and pushes each new stable WAV/AIFF straight to
+EaseVerse via direct-blob-upload (`/api/takes/upload`). Files are uploaded
+once; the watcher remembers what it has sent for the lifetime of the
+process. The pairing token has a 15 minute TTL — generate a new one if it
+expires.
 
 If `PROTOOLS_SESSION_INFO_FILE` is set, the companion uses real Session Info parsing mode.
 

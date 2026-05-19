@@ -13,6 +13,10 @@ export interface CompanionConfig {
   pullEnabled: boolean;
   pullTrackId?: string;
   logVerbose: boolean;
+  audioWatchPath?: string;
+  pairingToken?: string;
+  audioStabilizeMs: number;
+  audioExtensions: string[];
 }
 
 function readPositiveInt(value: string | undefined, fallback: number): number {
@@ -50,5 +54,12 @@ export function loadCompanionConfig(): CompanionConfig {
       Boolean(process.env.PROTOOLS_IMPORT_FILE?.trim()),
     pullTrackId: process.env.PROTOOLS_PULL_TRACK_ID?.trim() || undefined,
     logVerbose: process.env.PROTOOLS_VERBOSE === 'true',
+    audioWatchPath: process.env.PROTOOLS_AUDIO_WATCH?.trim() || undefined,
+    pairingToken: process.env.EASEVERSE_PAIR_TOKEN?.trim() || undefined,
+    audioStabilizeMs: readPositiveInt(process.env.PROTOOLS_AUDIO_STABILIZE_MS, 1500),
+    audioExtensions: (process.env.PROTOOLS_AUDIO_EXTENSIONS?.trim() || '.wav,.aif,.aiff')
+      .split(',')
+      .map((ext) => ext.trim().toLowerCase())
+      .filter((ext) => ext.startsWith('.')),
   };
 }

@@ -45,12 +45,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       uploaded_at: string;
       duration_sec: number | null;
       status: string;
+      storage_url: string;
       transcript: string | null;
       ai_notes: string | null;
       pitch_mean_hz: number | null;
       energy_avg_db: number | null;
     }>(
-      `SELECT t.id, t.filename, t.uploaded_at, t.duration_sec, t.status,
+      `SELECT t.id, t.filename, t.uploaded_at, t.duration_sec, t.status, t.storage_url,
               a.transcript, a.ai_notes, a.pitch_mean_hz, a.energy_avg_db
        FROM takes t
        LEFT JOIN take_analyses a ON a.take_id = t.id
@@ -78,6 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         uploadedAt: t.uploaded_at,
         durationSec: t.duration_sec,
         status: t.status,
+        audioUrl: t.storage_url,
         transcript: t.transcript,
         aiNotes: t.ai_notes,
         pitchMeanHz: t.pitch_mean_hz,

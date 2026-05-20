@@ -62,7 +62,7 @@ async function run(): Promise<void> {
               absolutePath: candidate.absolutePath,
               externalTrackId: config.trackId,
             });
-            markUploaded(candidate.absolutePath);
+            await markUploaded(candidate.absolutePath);
             console.log('[companion] uploaded take', {
               filename: candidate.filename,
               size: candidate.size,

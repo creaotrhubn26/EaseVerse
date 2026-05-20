@@ -109,6 +109,80 @@ export async function createTake(args: {
   return rows[0] ? mapTakeRow(rows[0]) : null;
 }
 
+export async function listTakesForGroup(
+  userId: string,
+  externalTrackId: string,
+): Promise<Array<TakeRow & { analysis: TakeAnalysisRow | null }>> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  const { rows } = await p.query<TakeRowDb & {
+    analysis_take_id: string | null;
+    transcript: string | null;
+    pitch_mean_hz: number | null;
+    pitch_stddev_cents: number | null;
+    vibrato_rate_hz: number | null;
+    energy_avg_db: number | null;
+    energy_stddev_db: number | null;
+    timing_score: number | null;
+    pronunciation_score: number | null;
+    ai_notes: string | null;
+    best_take_in_group: boolean | null;
+    processed_at: string | null;
+  }>(
+    `SELECT t.*,
+            a.take_id AS analysis_take_id,
+            a.transcript, a.pitch_mean_hz, a.pitch_stddev_cents,
+            a.vibrato_rate_hz, a.energy_avg_db, a.energy_stddev_db,
+            a.timing_score, a.pronunciation_score, a.ai_notes,
+            a.best_take_in_group, a.processed_at
+     FROM takes t
+     LEFT JOIN take_analyses a ON a.take_id = t.id
+     WHERE t.user_id = $1 AND t.external_track_id = $2
+     ORDER BY t.uploaded_at ASC`,
+    [userId, externalTrackId],
+  );
+  return rows.map((row) => {
+    const take = mapTakeRow(row);
+    if (!row.analysis_take_id) return { ...take, analysis: null };
+    return {
+      ...take,
+      analysis: {
+        takeId: row.analysis_take_id,
+        transcript: row.transcript,
+        pitchMeanHz: row.pitch_mean_hz,
+        pitchStddevCents: row.pitch_stddev_cents,
+        vibratoRateHz: row.vibrato_rate_hz,
+        energyAvgDb: row.energy_avg_db,
+        energyStddevDb: row.energy_stddev_db,
+        timingScore: row.timing_score,
+        pronunciationScore: row.pronunciation_score,
+        aiNotes: row.ai_notes,
+        bestTakeInGroup: Boolean(row.best_take_in_group),
+        processedAt: row.processed_at,
+      },
+    };
+  });
+}
+
+export async function setBestTakeFlags(
+  externalTrackId: string,
+  userId: string,
+  bestTakeId: string,
+): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await ensureSchema();
+  await p.query(
+    `UPDATE take_analyses
+     SET best_take_in_group = (take_id = $1)
+     WHERE take_id IN (
+       SELECT id FROM takes WHERE user_id = $2 AND external_track_id = $3
+     )`,
+    [bestTakeId, userId, externalTrackId],
+  );
+}
+
 export async function listTakesForUser(userId: string, limit = 50): Promise<TakeRow[]> {
   const p = getPool();
   if (!p) return [];

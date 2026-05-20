@@ -1,10 +1,57 @@
-import { readdir, stat, readFile } from 'node:fs/promises';
+import { readdir, stat, readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import type { CompanionConfig } from '../config';
 
 type SeenEntry = { size: number; mtimeMs: number; stableSince: number; uploaded: boolean };
 
 const seen = new Map<string, SeenEntry>();
+const stateFile = path.join(os.homedir(), '.easeverse-companion', 'seen.json');
+
+// Pro Tools writes a lot of derived files alongside the actual takes. Skip
+// them so we don't upload fade renders, undo snapshots, or temp scratch.
+const PROTOOLS_INTERNAL_PREFIXES = ['.', '~', '#'];
+const PROTOOLS_INTERNAL_SUBSTRINGS = [
+  'fade',
+  'wavecache',
+  'autosave',
+  'reverse',
+  'session file backups',
+  '.tmp',
+];
+
+function isProToolsInternal(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  if (PROTOOLS_INTERNAL_PREFIXES.some((p) => filename.startsWith(p))) return true;
+  return PROTOOLS_INTERNAL_SUBSTRINGS.some((s) => lower.includes(s));
+}
+
+let stateLoaded = false;
+
+async function loadState(): Promise<void> {
+  if (stateLoaded) return;
+  stateLoaded = true;
+  try {
+    const raw = await readFile(stateFile, 'utf-8');
+    const parsed = JSON.parse(raw) as Record<string, SeenEntry>;
+    for (const [key, value] of Object.entries(parsed)) seen.set(key, value);
+  } catch {
+    // First run or no state file yet.
+  }
+}
+
+async function persistState(): Promise<void> {
+  try {
+    await mkdir(path.dirname(stateFile), { recursive: true });
+    const snapshot: Record<string, SeenEntry> = {};
+    for (const [key, value] of seen.entries()) {
+      if (value.uploaded) snapshot[key] = value;
+    }
+    await writeFile(stateFile, JSON.stringify(snapshot, null, 2), 'utf-8');
+  } catch (error) {
+    console.warn('[companion] could not persist seen-state', (error as Error).message);
+  }
+}
 
 export type PendingTake = {
   absolutePath: string;
@@ -15,6 +62,8 @@ export type PendingTake = {
 export async function scanAudioFolder(config: CompanionConfig): Promise<PendingTake[]> {
   const root = config.audioWatchPath;
   if (!root) return [];
+
+  await loadState();
 
   let entries: string[];
   try {
@@ -32,7 +81,7 @@ export async function scanAudioFolder(config: CompanionConfig): Promise<PendingT
   for (const entry of entries) {
     const ext = path.extname(entry).toLowerCase();
     if (!config.audioExtensions.includes(ext)) continue;
-    if (entry.startsWith('.')) continue;
+    if (isProToolsInternal(entry)) continue;
 
     const absolutePath = path.join(root, entry);
     let info;
@@ -74,9 +123,12 @@ export async function scanAudioFolder(config: CompanionConfig): Promise<PendingT
   return pending;
 }
 
-export function markUploaded(absolutePath: string): void {
+export async function markUploaded(absolutePath: string): Promise<void> {
   const entry = seen.get(absolutePath);
-  if (entry) entry.uploaded = true;
+  if (entry) {
+    entry.uploaded = true;
+    await persistState();
+  }
 }
 
 export async function readTakeBytes(absolutePath: string): Promise<Buffer> {

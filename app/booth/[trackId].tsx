@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, router } from "expo-router";
@@ -19,6 +20,7 @@ type BoothTake = {
   uploadedAt: string;
   durationSec: number | null;
   status: string;
+  audioUrl: string;
   transcript: string | null;
   aiNotes: string | null;
   pitchMeanHz: number | null;
@@ -98,7 +100,7 @@ export default function BoothScreen() {
           ) : (
             data?.takes.map((t) => (
               <View key={t.id} style={styles.takeRow}>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, gap: 6 }}>
                   <Text style={styles.takeName} numberOfLines={1}>
                     {t.filename}
                   </Text>
@@ -108,6 +110,18 @@ export default function BoothScreen() {
                     {t.energyAvgDb !== null ? `${t.energyAvgDb} dB · ` : ""}
                     {new Date(t.uploadedAt).toLocaleTimeString()}
                   </Text>
+                  {Platform.OS === "web" && t.audioUrl ? (
+                    <audio
+                      controls
+                      preload="none"
+                      src={t.audioUrl}
+                      style={{
+                        width: "100%",
+                        height: 32,
+                        marginTop: 2,
+                      }}
+                    />
+                  ) : null}
                   {t.aiNotes ? <Text style={styles.takeNotes}>{t.aiNotes}</Text> : null}
                 </View>
                 <Text style={[styles.statusBadge, { color: statusColor(t.status) }]}>{t.status}</Text>

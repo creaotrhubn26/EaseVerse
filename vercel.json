@@ -6,9 +6,6 @@
   "functions": {
     "api/**/*.ts": {
       "maxDuration": 30
-    },
-    "api/cron/**/*.ts": {
-      "maxDuration": 60
     }
   },
   "crons": [

@@ -2,9 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { listQueuedTakes } from "../_lib/takes-db.js";
 import { processTake } from "../_lib/take-processor.js";
 
-export const config = { maxDuration: 60 };
-
-const MAX_PER_RUN = 5;
+const MAX_PER_RUN = 3;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const expected = process.env.CRON_SECRET;
@@ -17,6 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const queued = await listQueuedTakes(MAX_PER_RUN);
+  console.log("[cron] process-queued-takes picked", queued.length, "takes");
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];
 
   for (const take of queued) {
@@ -24,6 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await processTake(take);
       results.push({ id: take.id, ok: true });
     } catch (err) {
+      console.warn("[cron] take failed", take.id, (err as Error).message);
       results.push({ id: take.id, ok: false, error: (err as Error).message });
     }
   }

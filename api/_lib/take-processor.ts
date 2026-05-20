@@ -182,6 +182,15 @@ export async function processTake(take: TakeRow): Promise<void> {
     });
 
     await markTakeDone(take.id, analysis.durationSec);
+
+    if (take.externalTrackId) {
+      try {
+        const { rankAndMarkBestTake } = await import("./take-grouping.js");
+        await rankAndMarkBestTake(take.userId, take.externalTrackId);
+      } catch (err) {
+        console.warn("rankAndMarkBestTake failed:", (err as Error).message);
+      }
+    }
   } catch (error) {
     console.error("Process take failed:", error);
     await markTakeError(take.id, (error as Error).message || "Unknown error");

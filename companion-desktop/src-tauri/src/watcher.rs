@@ -266,9 +266,10 @@ async fn upload_take(
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    if !complete.status().is_success() {
+    let complete_status = complete.status();
+    if !complete_status.is_success() {
         let body = complete.text().await.unwrap_or_default();
-        return Err(format!("completion notify failed: {} {}", complete.status(), body));
+        return Err(format!("completion notify failed: {} {}", complete_status, body));
     }
     Ok(blob.url)
 }

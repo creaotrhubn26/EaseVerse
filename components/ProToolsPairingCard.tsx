@@ -10,9 +10,13 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
-import { apiRequest } from "@/lib/query-client";
+import { authedFetch } from "@/lib/authed-fetch";
+import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 
-type Props = { horizontalMargin?: number };
+type Props = {
+  horizontalMargin?: number;
+  getToken?: () => Promise<string | null>;
+};
 
 type PairingResponse = {
   token: string;
@@ -21,7 +25,21 @@ type PairingResponse = {
   usage: string;
 };
 
-export function ProToolsPairingCard({ horizontalMargin = 16 }: Props) {
+export function ProToolsPairingCard(props: Props) {
+  if (props.getToken) {
+    return <PairingCardInner {...props} getToken={props.getToken} />;
+  }
+  if (!CLERK_CONFIGURED) return null;
+  return <PairingCardWithAuth {...props} />;
+}
+
+function PairingCardWithAuth(props: Omit<Props, "getToken">) {
+  const { useAuth } = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+  const { getToken } = useAuth();
+  return <PairingCardInner {...props} getToken={getToken} />;
+}
+
+function PairingCardInner({ horizontalMargin = 16, getToken }: Props & { getToken: () => Promise<string | null> }) {
   const [pairing, setPairing] = useState<PairingResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +50,11 @@ export function ProToolsPairingCard({ horizontalMargin = 16 }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiRequest("POST", "/api/v1/companion/pairing", {});
+      const token = await getToken();
+      const response = await authedFetch("/api/companion/pairing", token, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
       if (!response.ok) {
         throw new Error(`Failed: ${response.status}`);
       }
@@ -48,7 +70,7 @@ export function ProToolsPairingCard({ horizontalMargin = 16 }: Props) {
 
   function copyCommand() {
     if (!pairing) return;
-    const cmd = `export EASEVERSE_API_KEY=${pairing.token} && npm run companion:dev`;
+    const cmd = `export EASEVERSE_PAIR_TOKEN=${pairing.token} && npm run companion:dev`;
     if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
       void navigator.clipboard.writeText(cmd).then(
         () => {
@@ -81,7 +103,7 @@ export function ProToolsPairingCard({ horizontalMargin = 16 }: Props) {
             {pairing.token}
           </Text>
           <Text style={styles.commandHint}>
-            export EASEVERSE_API_KEY={pairing.token} && npm run companion:dev
+            export EASEVERSE_PAIR_TOKEN={pairing.token} && npm run companion:dev
           </Text>
           <View style={styles.row}>
             <Pressable
@@ -156,22 +178,24 @@ export function ProToolsPairingCard({ horizontalMargin = 16 }: Props) {
           <GuideStep n={3} title="Run companion with the token">
             <Text style={styles.code}>
               export EASEVERSE_API_BASE_URL=https://easeverse.vercel.app{`\n`}
-              export EASEVERSE_API_KEY=&lt;your token&gt;{`\n`}
-              export PROTOOLS_SESSION_INFO_FILE=/tmp/pt-session.txt{`\n`}
+              export EASEVERSE_PAIR_TOKEN=&lt;your token&gt;{`\n`}
+              export PROTOOLS_AUDIO_WATCH=~/ProTools/Sessions/MyProj/Audio\ Files{`\n`}
               npm run companion:dev
             </Text>
           </GuideStep>
-          <GuideStep n={4} title="Export from Pro Tools">
-            In Pro Tools, run <Text style={styles.code}>File → Export → Session Info as Text…</Text>
-            {` `}and save to the path you pointed{` `}
-            <Text style={styles.code}>PROTOOLS_SESSION_INFO_FILE</Text>{` `}
-            at. The companion auto-detects file changes.
+          <GuideStep n={4} title="Audio takes upload automatically">
+            Every stable .wav/.aif inside{` `}
+            <Text style={styles.code}>PROTOOLS_AUDIO_WATCH</Text>{` `}
+            is pushed to{` `}
+            <Text style={styles.code}>/api/takes/upload</Text>{` `}
+            and shows up in the vocalist booth view in real time.
           </GuideStep>
-          <GuideStep n={5} title="What gets synced">
-            Tempo (BPM), markers, take names, and any pronunciation feedback are
-            pushed to{` `}
-            <Text style={styles.code}>/api/v1/collab/protools</Text>{` `}
-            and appear in your EaseVerse session list.
+          <GuideStep n={5} title="Optional: sync session metadata">
+            For BPM + markers + take names, also set{` `}
+            <Text style={styles.code}>PROTOOLS_SESSION_INFO_FILE</Text>{` `}
+            and run{` `}
+            <Text style={styles.code}>File → Export → Session Info as Text…</Text>{` `}
+            in Pro Tools.
           </GuideStep>
           <GuideStep n={6} title="Two-way sync (optional)">
             Set{` `}
@@ -180,9 +204,9 @@ export function ProToolsPairingCard({ horizontalMargin = 16 }: Props) {
             snapshot for Pro Tools-side ingestion.
           </GuideStep>
           <Text style={styles.guideNote}>
-            Pairing tokens are accepted in place of EXTERNAL_API_KEY for{` `}
-            <Text style={styles.code}>/api/v1/*</Text> routes. They live in
-            server memory and disappear after 15 minutes or a server restart.
+            Pairing tokens are scoped to your user and accepted by{` `}
+            <Text style={styles.code}>/api/takes/upload</Text>. They expire
+            after 15 minutes — generate a new one any time.
           </Text>
         </View>
       ) : null}

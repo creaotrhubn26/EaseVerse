@@ -204,6 +204,21 @@ function TakeRow({ take, getToken }: { take: TakeRecord; getToken: () => Promise
     };
   }, [take.status, take.id, analysis, getToken]);
 
+  const [boothCopied, setBoothCopied] = useState(false);
+
+  function copyBoothUrl() {
+    if (!take.externalTrackId) return;
+    if (Platform.OS !== "web" || typeof window === "undefined" || !navigator.clipboard) return;
+    const url = `${window.location.origin}/booth/${encodeURIComponent(take.externalTrackId)}`;
+    void navigator.clipboard.writeText(url).then(
+      () => {
+        setBoothCopied(true);
+        setTimeout(() => setBoothCopied(false), 1500);
+      },
+      () => undefined,
+    );
+  }
+
   return (
     <View style={styles.takeRow}>
       <View style={styles.takeRowHeader}>
@@ -218,6 +233,21 @@ function TakeRow({ take, getToken }: { take: TakeRecord; getToken: () => Promise
             {new Date(take.uploadedAt).toLocaleString()}
           </Text>
         </View>
+        {take.externalTrackId && Platform.OS === "web" ? (
+          <Pressable
+            onPress={copyBoothUrl}
+            style={styles.boothBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Copy vocalist booth URL"
+          >
+            <Ionicons
+              name={boothCopied ? "checkmark" : "link"}
+              size={13}
+              color={Colors.textPrimary}
+            />
+            <Text style={styles.boothBtnText}>{boothCopied ? "Copied" : "Booth URL"}</Text>
+          </Pressable>
+        ) : null}
         <View style={[styles.statusPill, { borderColor: statusColor + "55" }]}>
           <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
           <Text style={[styles.statusText, { color: statusColor }]}>{take.status}</Text>
@@ -341,6 +371,22 @@ const styles = StyleSheet.create({
   },
   takeName: { color: Colors.textPrimary, fontFamily: "Inter_600SemiBold", fontSize: 13 },
   takeMeta: { color: Colors.textTertiary, fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 2 },
+  boothBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surface,
+  },
+  boothBtnText: {
+    color: Colors.textPrimary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+  },
   statusPill: {
     flexDirection: "row",
     alignItems: "center",

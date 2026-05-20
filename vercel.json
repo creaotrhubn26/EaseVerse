@@ -6,8 +6,14 @@
   "functions": {
     "api/**/*.ts": {
       "maxDuration": 30
+    },
+    "api/cron/**/*.ts": {
+      "maxDuration": 60
     }
   },
+  "crons": [
+    { "path": "/api/cron/process-queued-takes", "schedule": "*/5 * * * *" }
+  ],
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]

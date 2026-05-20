@@ -21,55 +21,76 @@ const clerkConfigured = Boolean(process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 export default function SignInScreen() {
   const insets = useSafeAreaInsets();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
   if (!clerkConfigured) {
     return <NotConfigured />;
   }
-
-  return (
-    <SignInForm
-      insetsTop={insets.top}
-      email={email}
-      setEmail={setEmail}
-      password={password}
-      setPassword={setPassword}
-      error={error}
-      setError={setError}
-      submitting={submitting}
-      setSubmitting={setSubmitting}
-    />
-  );
+  return <SignInForm insetsTop={insets.top} />;
 }
 
-function SignInForm(props: {
-  insetsTop: number;
-  email: string;
-  setEmail: (v: string) => void;
-  password: string;
-  setPassword: (v: string) => void;
-  error: string | null;
-  setError: (v: string | null) => void;
-  submitting: boolean;
-  setSubmitting: (v: boolean) => void;
-}) {
+function SignInForm({ insetsTop }: { insetsTop: number }) {
   const { signIn, isLoaded, setActive } = useSignIn();
-  const {
-    insetsTop,
-    email,
-    setEmail,
-    password,
-    setPassword,
-    error,
-    setError,
-    submitting,
-    setSubmitting,
-  } = props;
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [stage, setStage] = useState<'identifier' | 'code'>('identifier');
+  const [mode, setMode] = useState<'password' | 'email_code'>('email_code');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit() {
+  async function sendEmailCode() {
+    if (!isLoaded || submitting || !email.trim()) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const attempt = await signIn.create({ identifier: email.trim() });
+      const firstFactor = attempt.supportedFirstFactors?.find(
+        (f) => f.strategy === 'email_code',
+      ) as { emailAddressId: string; strategy: 'email_code' } | undefined;
+      if (!firstFactor) {
+        throw new Error('Email-code sign-in not available for this account');
+      }
+      await signIn.prepareFirstFactor({
+        strategy: 'email_code',
+        emailAddressId: firstFactor.emailAddressId,
+      });
+      setStage('code');
+    } catch (err) {
+      const message =
+        (err as { errors?: { message?: string }[] }).errors?.[0]?.message ??
+        (err as Error).message ??
+        'Could not send code. Check the email and try again.';
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function verifyEmailCode() {
+    if (!isLoaded || submitting || !code.trim()) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const attempt = await signIn.attemptFirstFactor({
+        strategy: 'email_code',
+        code: code.trim(),
+      });
+      if (attempt.status === 'complete') {
+        await setActive({ session: attempt.createdSessionId });
+        router.replace('/(tabs)');
+      } else {
+        setError('Additional verification needed. Use a different method.');
+      }
+    } catch (err) {
+      const message =
+        (err as { errors?: { message?: string }[] }).errors?.[0]?.message ??
+        'Wrong or expired code. Try again or resend.';
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handlePasswordSubmit() {
     if (!isLoaded || submitting) return;
     setError(null);
     setSubmitting(true);
@@ -91,6 +112,19 @@ function SignInForm(props: {
     }
   }
 
+  function handlePrimary() {
+    if (mode === 'password') return handlePasswordSubmit();
+    if (stage === 'identifier') return sendEmailCode();
+    return verifyEmailCode();
+  }
+
+  const primaryLabel =
+    mode === 'password'
+      ? 'Sign in'
+      : stage === 'identifier'
+        ? 'Send code'
+        : 'Verify code';
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -102,39 +136,72 @@ function SignInForm(props: {
       >
         <BackButton />
         <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>Sign in to sync sessions across devices.</Text>
+        <Text style={styles.subtitle}>
+          {mode === 'email_code'
+            ? stage === 'identifier'
+              ? "We'll email you a 6-digit code."
+              : `Enter the code we sent to ${email}.`
+            : 'Sign in to sync sessions across devices.'}
+        </Text>
 
-        <Label>Email</Label>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@example.com"
-          placeholderTextColor={Colors.textTertiary}
-          autoCapitalize="none"
-          autoComplete="email"
-          keyboardType="email-address"
-          inputMode="email"
-          style={styles.input}
-          editable={!submitting}
-        />
+        {stage === 'identifier' ? (
+          <>
+            <Label>Email</Label>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              placeholderTextColor={Colors.textTertiary}
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              inputMode="email"
+              style={styles.input}
+              editable={!submitting}
+              onSubmitEditing={mode === 'password' ? handlePrimary : sendEmailCode}
+            />
 
-        <Label>Password</Label>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="••••••••"
-          placeholderTextColor={Colors.textTertiary}
-          autoCapitalize="none"
-          autoComplete="password"
-          secureTextEntry
-          style={styles.input}
-          editable={!submitting}
-          onSubmitEditing={handleSubmit}
-        />
+            {mode === 'password' ? (
+              <>
+                <Label>Password</Label>
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor={Colors.textTertiary}
+                  autoCapitalize="none"
+                  autoComplete="password"
+                  secureTextEntry
+                  style={styles.input}
+                  editable={!submitting}
+                  onSubmitEditing={handlePrimary}
+                />
+              </>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <Label>Code</Label>
+            <TextInput
+              value={code}
+              onChangeText={setCode}
+              placeholder="123456"
+              placeholderTextColor={Colors.textTertiary}
+              autoCapitalize="none"
+              keyboardType="number-pad"
+              inputMode="numeric"
+              maxLength={6}
+              style={styles.input}
+              editable={!submitting}
+              onSubmitEditing={verifyEmailCode}
+              autoFocus
+            />
+          </>
+        )}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Pressable onPress={handleSubmit} disabled={submitting} accessibilityRole="button">
+        <Pressable onPress={handlePrimary} disabled={submitting} accessibilityRole="button">
           <LinearGradient
             colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd] as const}
             start={{ x: 0, y: 0 }}
@@ -144,10 +211,38 @@ function SignInForm(props: {
             {submitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.submitText}>Sign in</Text>
+              <Text style={styles.submitText}>{primaryLabel}</Text>
             )}
           </LinearGradient>
         </Pressable>
+
+        {stage === 'code' ? (
+          <Pressable
+            onPress={() => {
+              setStage('identifier');
+              setCode('');
+              setError(null);
+            }}
+            disabled={submitting}
+            accessibilityRole="button"
+            style={styles.linkButton}
+          >
+            <Text style={styles.footerLink}>Back to email</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => {
+              setMode(mode === 'password' ? 'email_code' : 'password');
+              setError(null);
+            }}
+            accessibilityRole="button"
+            style={styles.linkButton}
+          >
+            <Text style={styles.footerLink}>
+              {mode === 'password' ? 'Use email code instead' : 'Use password instead'}
+            </Text>
+          </Pressable>
+        )}
 
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>Don&apos;t have an account?</Text>

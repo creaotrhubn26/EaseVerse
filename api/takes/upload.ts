@@ -25,19 +25,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  if (!isClerkConfigured()) {
-    return res.status(503).json({ error: "Auth is not configured." });
-  }
-  const userId = await requireAuthOrPairing(req, res);
-  if (!userId) return;
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return res.status(503).json({
       error: "Vercel Blob is not configured. Enable Vercel Blob in the project and add BLOB_READ_WRITE_TOKEN.",
     });
   }
 
+  const body = req.body as HandleUploadBody;
+  // blob.upload-completed comes from Vercel Blob's webhook (no Bearer); only
+  // blob.generate-client-token comes from the user and needs Clerk/pairing auth.
+  const isClientTokenRequest =
+    typeof body === "object" && body !== null && (body as { type?: string }).type === "blob.generate-client-token";
+
+  let userIdForClientToken: string | null = null;
+  if (isClientTokenRequest) {
+    if (!isClerkConfigured()) {
+      return res.status(503).json({ error: "Auth is not configured." });
+    }
+    userIdForClientToken = await requireAuthOrPairing(req, res);
+    if (!userIdForClientToken) return;
+  }
+
   try {
-    const body = req.body as HandleUploadBody;
     const jsonResponse = await handleUpload({
       body,
       request: req as unknown as Request,
@@ -47,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           allowedContentTypes: ALLOWED_CONTENT_TYPES,
           maximumSizeInBytes: 200 * 1024 * 1024,
           tokenPayload: JSON.stringify({
-            userId,
+            userId: userIdForClientToken,
             externalTrackId: payload?.externalTrackId ?? null,
             sourcePath: payload?.sourcePath ?? null,
             filename: payload?.filename ?? null,
@@ -55,22 +64,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        const meta = tokenPayload ? JSON.parse(tokenPayload) : {};
-        if (!meta.userId) return;
-        const takeId = crypto.randomBytes(12).toString("base64url");
-        await createTake({
-          id: takeId,
-          userId: meta.userId,
-          externalTrackId: meta.externalTrackId,
-          sourcePath: meta.sourcePath,
-          filename: meta.filename || blob.pathname,
-          storageUrl: blob.url,
+        console.log("[takes/upload] onUploadCompleted fired", {
+          blobUrl: blob.url,
+          blobPathname: blob.pathname,
+          hasTokenPayload: !!tokenPayload,
         });
-        const take = await getTakeWithAnalysis(takeId);
-        if (take) {
-          void processTake(take).catch((err) =>
-            console.warn("processTake failed:", err),
-          );
+        try {
+          const meta = tokenPayload ? JSON.parse(tokenPayload) : {};
+          console.log("[takes/upload] parsed meta", { hasUserId: !!meta.userId, externalTrackId: meta.externalTrackId });
+          if (!meta.userId) {
+            console.warn("[takes/upload] missing userId in tokenPayload, skipping createTake");
+            return;
+          }
+          const takeId = crypto.randomBytes(12).toString("base64url");
+          await createTake({
+            id: takeId,
+            userId: meta.userId,
+            externalTrackId: meta.externalTrackId,
+            sourcePath: meta.sourcePath,
+            filename: meta.filename || blob.pathname,
+            storageUrl: blob.url,
+          });
+          console.log("[takes/upload] createTake OK", { takeId, externalTrackId: meta.externalTrackId });
+          const take = await getTakeWithAnalysis(takeId);
+          if (take) {
+            void processTake(take).catch((err) =>
+              console.warn("[takes/upload] processTake failed:", err),
+            );
+          }
+        } catch (err) {
+          console.error("[takes/upload] onUploadCompleted ERROR:", err);
+          throw err;
         }
       },
     });

@@ -16,11 +16,13 @@ import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
 import { formatTimestamp } from "@/lib/parse-timestamps";
 import {
+  fetchTakeRanking,
   fetchTakes,
   getComp,
   saveCompSegments,
   type CompRecord,
   type CompSegment,
+  type TakeRanking,
   type TakeRecord,
 } from "@/lib/takes-client";
 
@@ -44,6 +46,30 @@ function CompInner() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const waveformRefs = useRef<Map<string, TakeWaveformHandle | null>>(new Map());
+  const [ranking, setRanking] = useState<TakeRanking | null>(null);
+
+  useEffect(() => {
+    if (!comp?.externalTrackId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await getToken();
+        const r = await fetchTakeRanking(token, comp.externalTrackId!);
+        if (!cancelled) setRanking(r);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [comp?.externalTrackId, getToken]);
+
+  function autoFillFromAI() {
+    const s = ranking?.suggestion;
+    if (!s) return;
+    setSegments([{ takeId: s.takeId, startSec: s.startSec, endSec: s.endSec, sectionLabel: s.sectionLabel }]);
+  }
 
   const dirty = useMemo(() => {
     if (segments.length !== serverSegments.length) return true;
@@ -180,7 +206,20 @@ function CompInner() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Text style={styles.sectionLabel}>Comp plan ({segments.length} segment{segments.length === 1 ? "" : "s"})</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Text style={styles.sectionLabel}>Comp plan ({segments.length} segment{segments.length === 1 ? "" : "s"})</Text>
+        {ranking?.suggestion ? (
+          <Pressable
+            onPress={autoFillFromAI}
+            style={styles.aiBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Auto-fill comp from AI ranking"
+          >
+            <Ionicons name="sparkles" size={11} color={Colors.gradientMid} />
+            <Text style={styles.aiBtnText}>AI fill</Text>
+          </Pressable>
+        ) : null}
+      </View>
       {segments.length === 0 ? (
         <Text style={styles.empty}>Empty — add segments from a take below.</Text>
       ) : (
@@ -224,6 +263,16 @@ function CompInner() {
         <View key={take.id} style={styles.takeBlock}>
           <View style={styles.takeHeader}>
             <Text style={styles.takeName} numberOfLines={1}>{take.filename}</Text>
+            {(() => {
+              const r = ranking?.ranked.find((x) => x.takeId === take.id);
+              if (!r) return null;
+              const isTop = ranking?.ranked[0]?.takeId === take.id;
+              return (
+                <Text style={[styles.scoreBadge, isTop && styles.scoreBadgeTop]}>
+                  {isTop ? "★ " : ""}score {r.score}
+                </Text>
+              );
+            })()}
             <Pressable
               onPress={() => addSegmentFromTake(take)}
               style={styles.addBtn}
@@ -340,4 +389,31 @@ const styles = StyleSheet.create({
   },
   addBtnText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 11 },
   error: { color: Colors.dangerUnderline, fontFamily: "Inter_500Medium", fontSize: 12 },
+  aiBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.gradientMid + "55",
+    backgroundColor: Colors.surface,
+  },
+  aiBtnText: { color: Colors.gradientMid, fontFamily: "Inter_700Bold", fontSize: 11 },
+  scoreBadge: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  scoreBadgeTop: {
+    color: Colors.gradientMid,
+    borderColor: Colors.gradientMid + "55",
+    backgroundColor: Colors.gradientMid + "11",
+  },
 });

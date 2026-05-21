@@ -256,6 +256,34 @@ export async function saveCompSegments(
   return json.segments;
 }
 
+export type TakeRanking = {
+  trackId: string;
+  ranked: Array<{
+    takeId: string;
+    score: number;
+    components: {
+      timing: number | null;
+      pronunciation: number | null;
+      pitchStability: number | null;
+      energyConsistency: number | null;
+    };
+  }>;
+  suggestion: { takeId: string; startSec: number; endSec: number; sectionLabel: string } | null;
+};
+
+export async function fetchTakeRanking(
+  token: string | null,
+  externalTrackId: string,
+): Promise<TakeRanking> {
+  const res = await authedFetch(
+    `/api/takes/rank?trackId=${encodeURIComponent(externalTrackId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(`Rank fetch failed: ${res.status}`);
+  return (await res.json()) as TakeRanking;
+}
+
 export async function deleteComp(token: string | null, compId: string): Promise<void> {
   const res = await authedFetch(
     `/api/takes/comps?id=${encodeURIComponent(compId)}`,

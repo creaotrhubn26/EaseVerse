@@ -15,6 +15,7 @@ import Colors from "@/constants/colors";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
 import { formatTimestamp } from "@/lib/parse-timestamps";
+import { buildCompBuffer, bufferDurationSec, playBuffer } from "@/lib/stitch-comp";
 import {
   fetchTakeRanking,
   fetchTakes,
@@ -64,6 +65,50 @@ function CompInner() {
       cancelled = true;
     };
   }, [comp?.externalTrackId, getToken]);
+
+  const [previewing, setPreviewing] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const previewHandleRef = useRef<{ stop: () => void } | null>(null);
+  const [previewDuration, setPreviewDuration] = useState<number | null>(null);
+
+  async function handlePreview() {
+    if (previewing) {
+      previewHandleRef.current?.stop();
+      previewHandleRef.current = null;
+      setPreviewing(false);
+      return;
+    }
+    if (segments.length === 0) return;
+    setPreviewBusy(true);
+    try {
+      const stitchSegments = segments.map((s) => {
+        const take = takes.find((t) => t.id === s.takeId);
+        return {
+          takeId: s.takeId,
+          audioUrl: take?.storageUrl || "",
+          startSec: s.startSec,
+          endSec: s.endSec,
+        };
+      }).filter((s) => s.audioUrl);
+      const buffer = await buildCompBuffer(stitchSegments);
+      if (!buffer) return;
+      setPreviewDuration(bufferDurationSec(buffer));
+      const handle = playBuffer(buffer);
+      previewHandleRef.current = handle;
+      setPreviewing(true);
+      handle.node.onended = () => {
+        previewHandleRef.current = null;
+        setPreviewing(false);
+      };
+    } catch (err) {
+      console.warn("preview failed:", err);
+      setError((err as Error).message);
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
+  useEffect(() => () => previewHandleRef.current?.stop(), []);
 
   function autoFillFromAI() {
     const s = ranking?.suggestion;
@@ -193,6 +238,25 @@ function CompInner() {
             {comp.name}
           </Text>
         </View>
+        {Platform.OS === "web" && segments.length > 0 ? (
+          <Pressable
+            onPress={handlePreview}
+            disabled={previewBusy}
+            style={[styles.previewBtn, previewBusy && { opacity: 0.5 }]}
+            accessibilityRole="button"
+            accessibilityLabel={previewing ? "Stop preview" : "Play comp preview"}
+          >
+            <Ionicons
+              name={previewing ? "stop" : "play"}
+              size={12}
+              color={Colors.gradientStart}
+            />
+            <Text style={styles.previewBtnText}>
+              {previewBusy ? "Building…" : previewing ? "Stop" : "Preview"}
+              {previewDuration ? ` (${formatTimestamp(previewDuration)})` : ""}
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={handleSave}
           disabled={!dirty || saving}
@@ -331,6 +395,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gradientStart,
   },
   saveBtnText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 13 },
+  previewBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.gradientStart + "66",
+    backgroundColor: Colors.surface,
+  },
+  previewBtnText: { color: Colors.gradientStart, fontFamily: "Inter_700Bold", fontSize: 12 },
   sectionLabel: {
     color: Colors.textTertiary,
     fontFamily: "Inter_600SemiBold",

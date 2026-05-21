@@ -143,6 +143,53 @@ export async function fetchVoteTally(
   return (await response.json()) as ConsensusTally;
 }
 
+export type TakeRegion = {
+  id: string;
+  takeId: string;
+  startSec: number;
+  endSec: number;
+  label: string | null;
+  color: string | null;
+  autoLoop: boolean;
+  createdByUserId: string;
+  createdAt: string;
+};
+
+export async function listRegions(token: string | null, takeId: string): Promise<TakeRegion[]> {
+  const res = await authedFetch(
+    `/api/takes/regions?takeId=${encodeURIComponent(takeId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(`List regions failed: ${res.status}`);
+  const json = (await res.json()) as { regions: TakeRegion[] };
+  return json.regions;
+}
+
+export async function createRegion(
+  token: string | null,
+  takeId: string,
+  args: { startSec: number; endSec: number; label?: string; autoLoop?: boolean },
+): Promise<TakeRegion> {
+  const res = await authedFetch(
+    `/api/takes/regions?takeId=${encodeURIComponent(takeId)}`,
+    token,
+    { method: "POST", body: JSON.stringify(args) },
+  );
+  if (!res.ok) throw new Error(`Create region failed: ${res.status}`);
+  const json = (await res.json()) as { region: TakeRegion };
+  return json.region;
+}
+
+export async function deleteRegion(token: string | null, regionId: string): Promise<void> {
+  const res = await authedFetch(
+    `/api/takes/regions?id=${encodeURIComponent(regionId)}`,
+    token,
+    { method: "DELETE" },
+  );
+  if (!res.ok) throw new Error(`Delete region failed: ${res.status}`);
+}
+
 export async function lockDecision(token: string | null, takeId: string): Promise<TakeRecord> {
   const response = await authedFetch(
     `/api/takes/lock?id=${encodeURIComponent(takeId)}`,

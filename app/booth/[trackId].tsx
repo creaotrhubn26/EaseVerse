@@ -13,10 +13,19 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, router } from "expo-router";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
-import { parseProducerNote } from "@/lib/parse-timestamps";
+import { parseProducerNote, formatTimestamp } from "@/lib/parse-timestamps";
 import { castVote, clearVote, fetchVoteTally, type ConsensusVote } from "@/lib/takes-client";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
+
+type BoothRegion = {
+  id: string;
+  startSec: number;
+  endSec: number;
+  label: string | null;
+  color: string | null;
+  autoLoop: boolean;
+};
 
 type BoothTake = {
   id: string;
@@ -31,6 +40,7 @@ type BoothTake = {
   producerMemoDurationSec: number | null;
   decisionLockedAt: string | null;
   consensus: { agree: number; disagree: number };
+  regions: BoothRegion[];
   transcript: string | null;
   aiNotes: string | null;
   pitchMeanHz: number | null;
@@ -216,8 +226,41 @@ function TakeCard({ take }: { take: BoothTake }) {
             ref={waveformRef}
             audioUrl={take.audioUrl}
             markers={noteMarkers}
+            regions={take.regions.map((r) => ({
+              start: r.startSec,
+              end: r.endSec,
+              label: r.label ?? undefined,
+              color: r.color ?? Colors.gradientStart,
+            }))}
             height={48}
           />
+        ) : null}
+        {take.regions.length > 0 && Platform.OS === "web" ? (
+          <View style={styles.regionList}>
+            <Text style={styles.regionsHeader}>Producer asks for:</Text>
+            {take.regions.map((r) => (
+              <View key={r.id} style={styles.regionRow}>
+                <Text style={styles.regionLabel} numberOfLines={1}>
+                  {r.label || "Section"} · {formatTimestamp(r.startSec)}–{formatTimestamp(r.endSec)}
+                </Text>
+                <Pressable
+                  onPress={() => waveformRef.current?.loopRegion(r.startSec, r.endSec)}
+                  style={styles.loopBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Loop ${r.label || "section"}`}
+                >
+                  <Ionicons name="repeat" size={11} color={Colors.gradientStart} />
+                  <Text style={styles.loopBtnText}>Loop</Text>
+                </Pressable>
+              </View>
+            ))}
+            <Pressable
+              onPress={() => waveformRef.current?.clearLoop()}
+              style={[styles.loopBtn, { alignSelf: "flex-start" }]}
+            >
+              <Text style={[styles.loopBtnText, { color: Colors.textSecondary }]}>Stop loop</Text>
+            </Pressable>
+          </View>
         ) : null}
         {take.producerMemoUrl && Platform.OS === "web" ? (
           <View style={styles.memoBlock}>
@@ -524,6 +567,50 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  regionList: {
+    marginTop: 6,
+    gap: 4,
+  },
+  regionsHeader: {
+    color: Colors.gradientStart,
+    fontFamily: "Inter_700Bold",
+    fontSize: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  regionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
+    backgroundColor: Colors.gradientStart + "12",
+    borderWidth: 1,
+    borderColor: Colors.gradientStart + "44",
+  },
+  regionLabel: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+  },
+  loopBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.gradientStart + "66",
+    backgroundColor: Colors.surface,
+  },
+  loopBtnText: {
+    color: Colors.gradientStart,
+    fontFamily: "Inter_700Bold",
+    fontSize: 10,
   },
   aiNotesBlock: { marginTop: 4 },
   aiNotesLabel: {

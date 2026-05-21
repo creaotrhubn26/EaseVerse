@@ -8,6 +8,8 @@ export type TakeWaveformHandle = {
   seekTo: (seconds: number) => void;
   play: () => void;
   pause: () => void;
+  loopRegion: (startSec: number, endSec: number) => void;
+  clearLoop: () => void;
 };
 
 type Props = {
@@ -15,8 +17,10 @@ type Props = {
   markers?: Array<{ seconds: number; label?: string; color?: string }>;
   regions?: Array<{ start: number; end: number; label?: string; color?: string }>;
   height?: number;
+  enableDragCreate?: boolean;
   onReady?: (durationSec: number) => void;
   onSeek?: (seconds: number) => void;
+  onRegionDrawn?: (startSec: number, endSec: number) => void;
 };
 
 // Lazy-load wavesurfer only on web; bail to a plain <audio> on native.
@@ -28,7 +32,7 @@ export const TakeWaveform = forwardRef<TakeWaveformHandle, Props>(function TakeW
 });
 
 const TakeWaveformWeb = forwardRef<TakeWaveformHandle, Props>(function TakeWaveformWeb(
-  { audioUrl, markers = [], regions = [], height = 56, onReady, onSeek },
+  { audioUrl, markers = [], regions = [], height = 56, enableDragCreate, onReady, onSeek, onRegionDrawn },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -41,6 +45,12 @@ const TakeWaveformWeb = forwardRef<TakeWaveformHandle, Props>(function TakeWavef
     getDuration: () => number;
     getCurrentTime: () => number;
   } | null>(null);
+  const loopRef = useRef<{ start: number; end: number } | null>(null);
+  const regionsPluginRef = useRef<{
+    on: (event: string, cb: (...args: unknown[]) => void) => void;
+    enableDragSelection: (opts: { color: string }) => void;
+    clearRegions: () => void;
+  } | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSec, setCurrentSec] = useState(0);
   const [durationSec, setDurationSec] = useState(0);
@@ -51,6 +61,9 @@ const TakeWaveformWeb = forwardRef<TakeWaveformHandle, Props>(function TakeWavef
     let cancelled = false;
     void (async () => {
       const { default: WaveSurfer } = await import("wavesurfer.js");
+      const RegionsPluginMod = enableDragCreate
+        ? await import("wavesurfer.js/dist/plugins/regions.js")
+        : null;
       if (cancelled || !containerRef.current) return;
       const ws = WaveSurfer.create({
         container: containerRef.current,
@@ -67,13 +80,34 @@ const TakeWaveformWeb = forwardRef<TakeWaveformHandle, Props>(function TakeWavef
         interact: true,
       }) as unknown as typeof wsRef.current;
       wsRef.current = ws;
+      if (RegionsPluginMod && ws) {
+        const RegionsPlugin = (RegionsPluginMod as { default?: { create: () => unknown }; create?: () => unknown }).default ?? RegionsPluginMod;
+        const regionsPlugin = (RegionsPlugin as { create: () => unknown }).create() as typeof regionsPluginRef.current;
+        regionsPluginRef.current = regionsPlugin;
+        (ws as unknown as { registerPlugin: (p: unknown) => unknown }).registerPlugin(regionsPlugin);
+        regionsPlugin!.enableDragSelection({ color: Colors.gradientStart + "44" });
+        regionsPlugin!.on("region-created", (...args: unknown[]) => {
+          const region = args[0] as { start: number; end: number; remove: () => void };
+          if (onRegionDrawn) onRegionDrawn(region.start, region.end);
+          // Remove the visual region from plugin — we render our own overlays
+          // after the parent persists it.
+          region.remove();
+        });
+      }
       ws!.on("ready", () => {
         const d = ws!.getDuration();
         setDurationSec(d);
         setLoading(false);
         onReady?.(d);
       });
-      ws!.on("audioprocess", () => setCurrentSec(ws!.getCurrentTime()));
+      ws!.on("audioprocess", () => {
+        const t = ws!.getCurrentTime();
+        setCurrentSec(t);
+        const loop = loopRef.current;
+        if (loop && t >= loop.end) {
+          ws!.setTime(loop.start);
+        }
+      });
       ws!.on("seeking", () => setCurrentSec(ws!.getCurrentTime()));
       ws!.on("play", () => setIsPlaying(true));
       ws!.on("pause", () => setIsPlaying(false));
@@ -100,6 +134,14 @@ const TakeWaveformWeb = forwardRef<TakeWaveformHandle, Props>(function TakeWavef
       },
       pause() {
         wsRef.current?.pause();
+      },
+      loopRegion(startSec: number, endSec: number) {
+        loopRef.current = { start: startSec, end: endSec };
+        wsRef.current?.setTime(startSec);
+        void wsRef.current?.play();
+      },
+      clearLoop() {
+        loopRef.current = null;
       },
     }),
     [],

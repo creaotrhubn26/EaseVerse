@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Pool } from "pg";
+import { listRegionsForTakes } from "./_lib/takes-db.js";
 
 let pool: Pool | null = null;
 function getPool(): Pool | null {
@@ -81,6 +82,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       : null;
 
+    const regionMap = await listRegionsForTakes(takeRows.map((t) => t.id));
+
     return res.status(200).json({
       trackId: trackIdQuery,
       lyrics,
@@ -103,6 +106,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           agree: Number(t.agree_count ?? 0),
           disagree: Number(t.disagree_count ?? 0),
         },
+        regions: (regionMap.get(t.id) ?? []).map((r) => ({
+          id: r.id,
+          startSec: r.startSec,
+          endSec: r.endSec,
+          label: r.label,
+          color: r.color,
+          autoLoop: r.autoLoop,
+        })),
         transcript: t.transcript,
         aiNotes: t.ai_notes,
         pitchMeanHz: t.pitch_mean_hz,

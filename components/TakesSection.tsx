@@ -27,6 +27,12 @@ import {
 import { formatTimestamp, parseProducerNote } from "@/lib/parse-timestamps";
 import { listProjects, type ProjectListItem } from "@/lib/projects-client";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
+import {
+  createRegion,
+  deleteRegion,
+  listRegions,
+  type TakeRegion,
+} from "@/lib/takes-client";
 
 type Props = { horizontalMargin?: number };
 
@@ -279,6 +285,57 @@ function TakeRow({
     disagreeComments: [],
   });
   const [lockBusy, setLockBusy] = useState(false);
+  const [regions, setRegions] = useState<TakeRegion[]>([]);
+  const [pendingRegion, setPendingRegion] = useState<{ start: number; end: number } | null>(null);
+  const [regionLabel, setRegionLabel] = useState("");
+  const [regionBusy, setRegionBusy] = useState(false);
+
+  useEffect(() => {
+    if (take.status !== "done") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await getToken();
+        const list = await listRegions(token, take.id);
+        if (!cancelled) setRegions(list);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [take.id, take.status, getToken]);
+
+  async function saveRegion() {
+    if (!pendingRegion) return;
+    setRegionBusy(true);
+    try {
+      const token = await getToken();
+      const created = await createRegion(token, take.id, {
+        startSec: pendingRegion.start,
+        endSec: pendingRegion.end,
+        label: regionLabel.trim() || undefined,
+      });
+      setRegions((prev) => [...prev, created].sort((a, b) => a.startSec - b.startSec));
+      setPendingRegion(null);
+      setRegionLabel("");
+    } catch (err) {
+      console.warn("create region failed:", err);
+    } finally {
+      setRegionBusy(false);
+    }
+  }
+
+  async function removeRegion(id: string) {
+    try {
+      const token = await getToken();
+      await deleteRegion(token, id);
+      setRegions((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      console.warn("delete region failed:", err);
+    }
+  }
 
   useEffect(() => {
     if (!take.producerDecision) return;
@@ -617,11 +674,88 @@ function TakeRow({
             ref={waveformRef}
             audioUrl={take.storageUrl}
             markers={noteMarkers}
-            height={44}
+            regions={regions.map((r) => ({
+              start: r.startSec,
+              end: r.endSec,
+              label: r.label ?? undefined,
+              color: r.color ?? Colors.gradientStart,
+            }))}
+            height={48}
+            enableDragCreate
+            onRegionDrawn={(start, end) => {
+              setPendingRegion({ start, end });
+              setRegionLabel("");
+            }}
             onSeek={(s) => {
               currentTimeRef.current = s;
             }}
           />
+        ) : null}
+        {pendingRegion ? (
+          <View style={styles.regionPrompt}>
+            <Text style={styles.regionPromptLabel}>
+              New region · {formatTimestamp(pendingRegion.start)} → {formatTimestamp(pendingRegion.end)}
+            </Text>
+            <TextInput
+              value={regionLabel}
+              onChangeText={setRegionLabel}
+              placeholder="Label (e.g. 'Chorus 2 — kjør igjen')"
+              placeholderTextColor={Colors.textTertiary}
+              style={styles.producerNoteInput}
+              autoFocus
+              maxLength={80}
+            />
+            <View style={{ flexDirection: "row", gap: 6, justifyContent: "flex-end" }}>
+              <Pressable onPress={() => setPendingRegion(null)} style={styles.voteBtn}>
+                <Text style={styles.voteBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={saveRegion}
+                disabled={regionBusy}
+                style={[styles.voteBtn, !regionBusy && styles.voteBtnActive]}
+              >
+                <Text style={[styles.voteBtnText, !regionBusy && { color: Colors.gradientStart }]}>
+                  {regionBusy ? "…" : "Save region"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+        {regions.length > 0 ? (
+          <View style={styles.regionList}>
+            {regions.map((r) => (
+              <View key={r.id} style={styles.regionRow}>
+                <Text style={styles.regionLabel} numberOfLines={1}>
+                  {r.label || "(no label)"} · {formatTimestamp(r.startSec)}–{formatTimestamp(r.endSec)}
+                </Text>
+                <Pressable
+                  onPress={() => waveformRef.current?.loopRegion(r.startSec, r.endSec)}
+                  style={styles.regionBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Loop region"
+                >
+                  <Ionicons name="repeat" size={11} color={Colors.gradientStart} />
+                  <Text style={styles.regionBtnText}>Loop</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => removeRegion(r.id)}
+                  style={styles.regionBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete region"
+                >
+                  <Ionicons name="trash" size={11} color={Colors.dangerUnderline} />
+                </Pressable>
+              </View>
+            ))}
+            <Pressable
+              onPress={() => waveformRef.current?.clearLoop()}
+              style={[styles.regionBtn, { alignSelf: "flex-start" }]}
+              accessibilityRole="button"
+              accessibilityLabel="Stop looping"
+            >
+              <Text style={[styles.regionBtnText, { color: Colors.textSecondary }]}>Stop loop</Text>
+            </Pressable>
+          </View>
         ) : null}
         <TextInput
           value={noteDraft}
@@ -901,6 +1035,76 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
+  },
+  regionPrompt: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.gradientStart + "55",
+    gap: 6,
+  },
+  regionPromptLabel: {
+    color: Colors.gradientStart,
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  regionList: {
+    marginTop: 8,
+    gap: 4,
+  },
+  regionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  regionLabel: {
+    flex: 1,
+    color: Colors.textSecondary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+  },
+  regionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surface,
+  },
+  regionBtnText: {
+    color: Colors.gradientStart,
+    fontFamily: "Inter_700Bold",
+    fontSize: 10,
+  },
+  voteBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surface,
+  },
+  voteBtnActive: {
+    borderColor: Colors.gradientStart,
+    backgroundColor: Colors.gradientStart + "1c",
+  },
+  voteBtnText: {
+    color: Colors.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
   },
   consensusBox: {
     marginTop: 6,

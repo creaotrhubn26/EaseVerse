@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import crypto from "node:crypto";
 
 let pool: Pool | null = null;
 let ensured = false;
@@ -46,6 +47,19 @@ async function ensureSchema(): Promise<void> {
       PRIMARY KEY (take_id, user_id)
     );
     CREATE INDEX IF NOT EXISTS take_consensus_votes_take_idx ON take_consensus_votes (take_id);
+
+    CREATE TABLE IF NOT EXISTS take_regions (
+      id TEXT PRIMARY KEY,
+      take_id TEXT NOT NULL REFERENCES takes(id) ON DELETE CASCADE,
+      start_sec REAL NOT NULL,
+      end_sec REAL NOT NULL,
+      label TEXT,
+      color TEXT,
+      auto_loop BOOLEAN NOT NULL DEFAULT FALSE,
+      created_by_user_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS take_regions_take_idx ON take_regions (take_id);
     CREATE INDEX IF NOT EXISTS takes_user_uploaded_idx ON takes (user_id, uploaded_at DESC);
     CREATE INDEX IF NOT EXISTS takes_status_idx ON takes (status);
 
@@ -499,6 +513,142 @@ export async function lockTakeDecision(args: {
     [args.takeId, args.userId],
   );
   return rows[0] ? mapTakeRow(rows[0]) : null;
+}
+
+export type TakeRegion = {
+  id: string;
+  takeId: string;
+  startSec: number;
+  endSec: number;
+  label: string | null;
+  color: string | null;
+  autoLoop: boolean;
+  createdByUserId: string;
+  createdAt: string;
+};
+
+type TakeRegionDb = {
+  id: string;
+  take_id: string;
+  start_sec: number;
+  end_sec: number;
+  label: string | null;
+  color: string | null;
+  auto_loop: boolean;
+  created_by_user_id: string;
+  created_at: string;
+};
+
+function mapRegion(row: TakeRegionDb): TakeRegion {
+  return {
+    id: row.id,
+    takeId: row.take_id,
+    startSec: row.start_sec,
+    endSec: row.end_sec,
+    label: row.label,
+    color: row.color,
+    autoLoop: Boolean(row.auto_loop),
+    createdByUserId: row.created_by_user_id,
+    createdAt: row.created_at,
+  };
+}
+
+export async function createTakeRegion(args: {
+  takeId: string;
+  startSec: number;
+  endSec: number;
+  label?: string | null;
+  color?: string | null;
+  autoLoop?: boolean;
+  createdByUserId: string;
+}): Promise<TakeRegion | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const id = `rgn_${crypto.randomBytes(9).toString("base64url")}`;
+  const start = Math.max(0, args.startSec);
+  const end = Math.max(start + 0.05, args.endSec);
+  const { rows } = await p.query<TakeRegionDb>(
+    `INSERT INTO take_regions
+      (id, take_id, start_sec, end_sec, label, color, auto_loop, created_by_user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING *`,
+    [
+      id,
+      args.takeId,
+      start,
+      end,
+      args.label?.slice(0, 80) ?? null,
+      args.color ?? null,
+      args.autoLoop ?? false,
+      args.createdByUserId,
+    ],
+  );
+  return rows[0] ? mapRegion(rows[0]) : null;
+}
+
+export async function listRegionsForTake(takeId: string): Promise<TakeRegion[]> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  const { rows } = await p.query<TakeRegionDb>(
+    `SELECT * FROM take_regions WHERE take_id = $1 ORDER BY start_sec ASC`,
+    [takeId],
+  );
+  return rows.map(mapRegion);
+}
+
+export async function listRegionsForTakes(takeIds: string[]): Promise<Map<string, TakeRegion[]>> {
+  const map = new Map<string, TakeRegion[]>();
+  if (takeIds.length === 0) return map;
+  const p = getPool();
+  if (!p) return map;
+  await ensureSchema();
+  const { rows } = await p.query<TakeRegionDb>(
+    `SELECT * FROM take_regions WHERE take_id = ANY($1::text[]) ORDER BY start_sec ASC`,
+    [takeIds],
+  );
+  for (const row of rows) {
+    const r = mapRegion(row);
+    const existing = map.get(r.takeId) ?? [];
+    existing.push(r);
+    map.set(r.takeId, existing);
+  }
+  return map;
+}
+
+export async function deleteTakeRegion(args: {
+  regionId: string;
+  userId: string;
+  isAdmin?: boolean;
+}): Promise<boolean> {
+  const p = getPool();
+  if (!p) return false;
+  await ensureSchema();
+  const { rowCount } = await p.query(
+    args.isAdmin
+      ? `DELETE FROM take_regions WHERE id = $1`
+      : `DELETE FROM take_regions WHERE id = $1 AND created_by_user_id = $2`,
+    args.isAdmin ? [args.regionId] : [args.regionId, args.userId],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+export async function updateTakeRegionLoop(args: {
+  regionId: string;
+  userId: string;
+  autoLoop: boolean;
+}): Promise<TakeRegion | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const { rows } = await p.query<TakeRegionDb>(
+    `UPDATE take_regions SET auto_loop = $3
+     WHERE id = $1 AND created_by_user_id = $2
+     RETURNING *`,
+    [args.regionId, args.userId, args.autoLoop],
+  );
+  return rows[0] ? mapRegion(rows[0]) : null;
 }
 
 export async function unlockTakeDecision(args: {

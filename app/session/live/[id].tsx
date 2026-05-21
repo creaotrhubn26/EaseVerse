@@ -14,14 +14,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import {
+  armSession,
   endSession,
   joinSession,
   leaveSession,
   sendHeartbeat,
   sessionStreamUrl,
+  stopSession,
   type LiveParticipant,
   type LiveSession,
 } from "@/lib/sessions-client";
+import { startClick, type ClickHandle } from "@/lib/click-track";
+import { uploadTake } from "@/lib/takes-client";
 
 export default function LiveSessionScreen() {
   if (!CLERK_CONFIGURED) return null;
@@ -39,6 +43,14 @@ function Inner() {
   const [micArmed, setMicArmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const clickRef = useRef<ClickHandle | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [countdownMs, setCountdownMs] = useState<number | null>(null);
+  const [bpmInput, setBpmInput] = useState("96");
+  const [clickRequested, setClickRequested] = useState(true);
 
   // Join on mount + leave on unmount.
   useEffect(() => {
@@ -96,6 +108,132 @@ function Inner() {
   }, [id]);
 
   const isProducer = !!session && user?.id === session.startedByUserId;
+
+  // Countdown ticker driven by session.recordingStartsAt
+  useEffect(() => {
+    if (!session?.recordingStartsAt) {
+      setCountdownMs(null);
+      return;
+    }
+    const target = new Date(session.recordingStartsAt).getTime();
+    const tick = () => {
+      const remaining = target - Date.now();
+      setCountdownMs(remaining > 0 ? remaining : 0);
+      if (remaining <= 0) clearInterval(timer);
+    };
+    tick();
+    const timer = setInterval(tick, 100);
+    return () => clearInterval(timer);
+  }, [session?.recordingStartsAt]);
+
+  // Auto-start recording when countdown hits zero (mic must be armed)
+  useEffect(() => {
+    if (!session?.recordingStartsAt) return;
+    if (!micArmed) return;
+    if (recording) return;
+    const target = new Date(session.recordingStartsAt).getTime();
+    const delay = Math.max(0, target - Date.now());
+    const timer = setTimeout(async () => {
+      try {
+        if (Platform.OS !== "web") return;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+        chunksRef.current = [];
+        const recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+        recorder.onstop = async () => {
+          const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+          streamRef.current?.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+          if (blob.size < 2000 || !session) return;
+          try {
+            const token = await getToken();
+            if (!token) return;
+            const filename = `live-${session.id}-${user?.id || "anon"}-${Date.now()}.webm`;
+            const file = new File([blob], filename, { type: blob.type });
+            await uploadTake({
+              file,
+              externalTrackId: session.externalTrackId || session.id,
+              token,
+              projectId: session.projectId,
+            });
+          } catch (err) {
+            setError("Upload failed: " + (err as Error).message);
+          }
+        };
+        recorder.start();
+        recorderRef.current = recorder;
+        setRecording(true);
+        const t = await getToken();
+        await sendHeartbeat(t, String(id), { micArmed: true, recording: true });
+      } catch (err) {
+        setError("Mic access failed: " + (err as Error).message);
+      }
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [session?.recordingStartsAt, micArmed, recording, session, getToken, id, user?.id]);
+
+  // Stop recorder when producer clears the arm state
+  useEffect(() => {
+    if (session?.recordingStartsAt) return;
+    if (!recording) return;
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+    void (async () => {
+      const t = await getToken();
+      try {
+        await sendHeartbeat(t, String(id), { recording: false });
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [session?.recordingStartsAt, recording, getToken, id]);
+
+  // Click track follows session.clickOn + session.bpm, gated to recording window
+  useEffect(() => {
+    const shouldRun = session?.clickOn && session.recordingStartsAt && session.bpm && !session.recordingStoppedAt;
+    if (shouldRun) {
+      if (!clickRef.current) {
+        clickRef.current = startClick({ bpm: session!.bpm!, beatsPerBar: 4, accentDownbeat: true });
+      }
+    } else {
+      clickRef.current?.stop();
+      clickRef.current = null;
+    }
+    return () => {
+      // unmount-only cleanup is via separate effect below
+    };
+  }, [session?.clickOn, session?.bpm, session?.recordingStartsAt, session?.recordingStoppedAt]);
+
+  useEffect(() => () => {
+    clickRef.current?.stop();
+    recorderRef.current?.stop();
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
+
+  async function handleRecAll() {
+    if (!session) return;
+    try {
+      const token = await getToken();
+      const bpm = Math.max(20, Math.min(300, parseInt(bpmInput, 10) || 96));
+      await armSession(token, session.id, { countdownSec: 4, bpm, clickOn: clickRequested });
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function handleStopAll() {
+    if (!session) return;
+    try {
+      const token = await getToken();
+      await stopSession(token, session.id);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
   const onlineCount = participants.filter((p) => p.isOnline).length;
   const recordingCount = participants.filter((p) => p.recording).length;
 
@@ -170,6 +308,15 @@ function Inner() {
         )}
       </View>
 
+      {countdownMs !== null && countdownMs > 0 ? (
+        <View style={styles.countdown}>
+          <Text style={styles.countdownText}>{Math.ceil(countdownMs / 1000)}</Text>
+          <Text style={styles.countdownHint}>
+            {micArmed ? "Get ready — your mic auto-records" : "Arm your mic to join the take"}
+          </Text>
+        </View>
+      ) : null}
+
       {Platform.OS === "web" ? (
         <View style={styles.controls}>
           <Pressable
@@ -187,6 +334,58 @@ function Inner() {
               {micArmed ? "Mic armed" : "Arm mic"}
             </Text>
           </Pressable>
+
+          {isProducer ? (
+            <>
+              {session?.recordingStartsAt && !session.recordingStoppedAt ? (
+                <Pressable onPress={handleStopAll} style={[styles.controlBtn, styles.stopBtn]}>
+                  <Ionicons name="stop" size={16} color="#fff" />
+                  <Text style={[styles.controlText, { color: "#fff" }]}>Stop all</Text>
+                </Pressable>
+              ) : (
+                <>
+                  <View style={[styles.controlBtn, { paddingHorizontal: 8, gap: 4 }]}>
+                    <Text style={[styles.controlText, { fontSize: 11 }]}>BPM</Text>
+                    {typeof document !== "undefined" ? (
+                      <input
+                        type="number"
+                        value={bpmInput}
+                        onChange={(e) => setBpmInput(e.target.value)}
+                        min={20}
+                        max={300}
+                        style={{
+                          width: 50,
+                          padding: "4px 6px",
+                          borderRadius: 6,
+                          border: "1px solid #262833",
+                          background: "#1a1c25",
+                          color: "#f3f4f8",
+                          font: "12px Inter, sans-serif",
+                        }}
+                      />
+                    ) : null}
+                  </View>
+                  <Pressable
+                    onPress={() => setClickRequested((v) => !v)}
+                    style={[styles.controlBtn, clickRequested && styles.controlBtnActive]}
+                  >
+                    <Ionicons
+                      name="musical-notes"
+                      size={14}
+                      color={clickRequested ? "#fff" : Colors.textPrimary}
+                    />
+                    <Text style={[styles.controlText, clickRequested && { color: "#fff" }]}>
+                      Click
+                    </Text>
+                  </Pressable>
+                  <Pressable onPress={handleRecAll} style={[styles.controlBtn, styles.recBtn]}>
+                    <Ionicons name="radio-button-on" size={16} color="#fff" />
+                    <Text style={[styles.controlText, { color: "#fff" }]}>Rec all (4)</Text>
+                  </Pressable>
+                </>
+              )}
+            </>
+          ) : null}
         </View>
       ) : null}
     </ScrollView>
@@ -332,4 +531,26 @@ const styles = StyleSheet.create({
   },
   controlBtnActive: { backgroundColor: Colors.gradientStart, borderColor: Colors.gradientStart },
   controlText: { color: Colors.textPrimary, fontFamily: "Inter_700Bold", fontSize: 13 },
+  recBtn: { backgroundColor: Colors.dangerUnderline, borderColor: Colors.dangerUnderline },
+  stopBtn: { backgroundColor: Colors.textPrimary, borderColor: Colors.textPrimary },
+  countdown: {
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: Colors.gradientStart + "1c",
+    borderWidth: 2,
+    borderColor: Colors.gradientStart,
+    alignItems: "center",
+    gap: 6,
+  },
+  countdownText: {
+    color: Colors.gradientStart,
+    fontFamily: "Inter_700Bold",
+    fontSize: 56,
+    lineHeight: 60,
+  },
+  countdownHint: {
+    color: Colors.textSecondary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+  },
 });

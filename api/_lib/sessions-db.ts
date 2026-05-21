@@ -27,6 +27,11 @@ async function ensureSchema(): Promise<void> {
       status TEXT NOT NULL DEFAULT 'active'
     );
     CREATE INDEX IF NOT EXISTS live_sessions_project_idx ON live_sessions (project_id, started_at DESC);
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS bpm INTEGER;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS recording_armed_at TIMESTAMPTZ;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS recording_starts_at TIMESTAMPTZ;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS recording_stopped_at TIMESTAMPTZ;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS click_on BOOLEAN NOT NULL DEFAULT FALSE;
 
     CREATE TABLE IF NOT EXISTS live_session_participants (
       session_id TEXT NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
@@ -52,6 +57,11 @@ export type LiveSessionRow = {
   startedAt: string;
   endedAt: string | null;
   status: "active" | "ended";
+  bpm: number | null;
+  recordingArmedAt: string | null;
+  recordingStartsAt: string | null;
+  recordingStoppedAt: string | null;
+  clickOn: boolean;
 };
 
 export type LiveParticipantRow = {
@@ -91,6 +101,11 @@ export async function createLiveSession(args: {
     started_at: string;
     ended_at: string | null;
     status: LiveSessionRow["status"];
+    bpm: number | null;
+    recording_armed_at: string | null;
+    recording_starts_at: string | null;
+    recording_stopped_at: string | null;
+    click_on: boolean;
   }>(
     `INSERT INTO live_sessions (id, project_id, external_track_id, started_by_user_id)
      VALUES ($1, $2, $3, $4) RETURNING *`,
@@ -128,6 +143,11 @@ export async function getActiveSessionForProject(
     started_at: string;
     ended_at: string | null;
     status: LiveSessionRow["status"];
+    bpm: number | null;
+    recording_armed_at: string | null;
+    recording_starts_at: string | null;
+    recording_stopped_at: string | null;
+    click_on: boolean;
   }>(
     `SELECT * FROM live_sessions WHERE project_id = $1 AND status = 'active'
      ORDER BY started_at DESC LIMIT 1`,
@@ -148,6 +168,11 @@ export async function getLiveSession(sessionId: string): Promise<LiveSessionRow 
     started_at: string;
     ended_at: string | null;
     status: LiveSessionRow["status"];
+    bpm: number | null;
+    recording_armed_at: string | null;
+    recording_starts_at: string | null;
+    recording_stopped_at: string | null;
+    click_on: boolean;
   }>(`SELECT * FROM live_sessions WHERE id = $1`, [sessionId]);
   return rows[0] ? mapSession(rows[0]) : null;
 }
@@ -251,6 +276,11 @@ function mapSession(row: {
   started_at: string;
   ended_at: string | null;
   status: LiveSessionRow["status"];
+  bpm: number | null;
+  recording_armed_at: string | null;
+  recording_starts_at: string | null;
+  recording_stopped_at: string | null;
+  click_on: boolean;
 }): LiveSessionRow {
   return {
     id: row.id,
@@ -260,5 +290,99 @@ function mapSession(row: {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     status: row.status,
+    bpm: row.bpm,
+    recordingArmedAt: row.recording_armed_at,
+    recordingStartsAt: row.recording_starts_at,
+    recordingStoppedAt: row.recording_stopped_at,
+    clickOn: Boolean(row.click_on),
   };
+}
+
+export async function armRecording(args: {
+  sessionId: string;
+  userId: string;
+  countdownSec: number;
+  bpm?: number;
+  clickOn?: boolean;
+}): Promise<LiveSessionRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const startsAt = new Date(Date.now() + args.countdownSec * 1000).toISOString();
+  const { rows } = await p.query<{
+    id: string;
+    project_id: string;
+    external_track_id: string | null;
+    started_by_user_id: string;
+    started_at: string;
+    ended_at: string | null;
+    status: LiveSessionRow["status"];
+    bpm: number | null;
+    recording_armed_at: string | null;
+    recording_starts_at: string | null;
+    recording_stopped_at: string | null;
+    click_on: boolean;
+  }>(
+    `UPDATE live_sessions SET
+       recording_armed_at = NOW(),
+       recording_starts_at = $3,
+       recording_stopped_at = NULL,
+       bpm = COALESCE($4, bpm),
+       click_on = COALESCE($5, click_on)
+     WHERE id = $1 AND started_by_user_id = $2 AND status = 'active'
+     RETURNING *`,
+    [
+      args.sessionId,
+      args.userId,
+      startsAt,
+      args.bpm ?? null,
+      typeof args.clickOn === "boolean" ? args.clickOn : null,
+    ],
+  );
+  return rows[0] ? mapSession(rows[0]) : null;
+}
+
+export async function stopRecording(args: {
+  sessionId: string;
+  userId: string;
+}): Promise<LiveSessionRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const { rows } = await p.query<{
+    id: string;
+    project_id: string;
+    external_track_id: string | null;
+    started_by_user_id: string;
+    started_at: string;
+    ended_at: string | null;
+    status: LiveSessionRow["status"];
+    bpm: number | null;
+    recording_armed_at: string | null;
+    recording_starts_at: string | null;
+    recording_stopped_at: string | null;
+    click_on: boolean;
+  }>(
+    `UPDATE live_sessions SET recording_stopped_at = NOW(), recording_armed_at = NULL, recording_starts_at = NULL
+     WHERE id = $1 AND started_by_user_id = $2 AND status = 'active'
+     RETURNING *`,
+    [args.sessionId, args.userId],
+  );
+  return rows[0] ? mapSession(rows[0]) : null;
+}
+
+export async function updateSessionBpm(args: {
+  sessionId: string;
+  userId: string;
+  bpm: number;
+  clickOn?: boolean;
+}): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await ensureSchema();
+  await p.query(
+    `UPDATE live_sessions SET bpm = $3, click_on = COALESCE($4, click_on)
+     WHERE id = $1 AND started_by_user_id = $2 AND status = 'active'`,
+    [args.sessionId, args.userId, args.bpm, typeof args.clickOn === "boolean" ? args.clickOn : null],
+  );
 }

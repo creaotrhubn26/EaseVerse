@@ -9,6 +9,11 @@ export type LiveSession = {
   startedAt: string;
   endedAt: string | null;
   status: "active" | "ended";
+  bpm: number | null;
+  recordingArmedAt: string | null;
+  recordingStartsAt: string | null;
+  recordingStoppedAt: string | null;
+  clickOn: boolean;
 };
 
 export type LiveParticipant = {
@@ -81,6 +86,42 @@ export async function leaveSession(token: string | null, sessionId: string): Pro
     method: "DELETE",
   });
   if (!res.ok) throw new Error(`Leave session failed: ${res.status}`);
+}
+
+export async function armSession(
+  token: string | null,
+  sessionId: string,
+  args: { countdownSec?: number; bpm?: number; clickOn?: boolean },
+): Promise<LiveSession> {
+  const res = await authedFetch(`/api/sessions/arm?id=${encodeURIComponent(sessionId)}`, token, {
+    method: "POST",
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) throw new Error(`Arm failed: ${res.status}`);
+  const json = (await res.json()) as { session: LiveSession };
+  return json.session;
+}
+
+export async function stopSession(token: string | null, sessionId: string): Promise<LiveSession> {
+  const res = await authedFetch(`/api/sessions/arm?id=${encodeURIComponent(sessionId)}`, token, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`Stop failed: ${res.status}`);
+  const json = (await res.json()) as { session: LiveSession };
+  return json.session;
+}
+
+export async function updateBpm(
+  token: string | null,
+  sessionId: string,
+  bpm: number,
+  clickOn?: boolean,
+): Promise<void> {
+  const res = await authedFetch(`/api/sessions/arm?id=${encodeURIComponent(sessionId)}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ bpm, clickOn }),
+  });
+  if (!res.ok) throw new Error(`BPM update failed: ${res.status}`);
 }
 
 export function sessionStreamUrl(sessionId: string): string {

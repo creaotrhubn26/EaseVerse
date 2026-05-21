@@ -3,6 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 const MAC_DMG_URL =
   process.env.COMPANION_DOWNLOAD_MAC_DMG ||
   "https://mzwnzsczjuvu1w1a.public.blob.vercel-storage.com/downloads/easeverse-companion-0.1.0-mac-x64.dmg";
+const MAC_ARM_DMG_URL = process.env.COMPANION_DOWNLOAD_MAC_ARM_DMG || null;
 const WINDOWS_MSI_URL = process.env.COMPANION_DOWNLOAD_WIN_MSI || null;
 const LINUX_APPIMAGE_URL = process.env.COMPANION_DOWNLOAD_LINUX || null;
 
@@ -14,6 +15,14 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({
     version: "0.1.0",
     downloads: [
+      MAC_ARM_DMG_URL
+        ? {
+            platform: "macOS",
+            arch: "Apple Silicon (arm64)",
+            url: MAC_ARM_DMG_URL,
+            filename: "easeverse-companion-0.1.0-mac-arm64.dmg",
+          }
+        : null,
       MAC_DMG_URL
         ? {
             platform: "macOS",

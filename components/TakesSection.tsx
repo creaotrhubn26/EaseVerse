@@ -24,8 +24,9 @@ import {
   type TakeAnalysis,
   type TakeRecord,
 } from "@/lib/takes-client";
-import { formatTimestamp } from "@/lib/parse-timestamps";
+import { formatTimestamp, parseProducerNote } from "@/lib/parse-timestamps";
 import { listProjects, type ProjectListItem } from "@/lib/projects-client";
+import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
 
 type Props = { horizontalMargin?: number };
 
@@ -261,6 +262,8 @@ function TakeRow({
   const [savingNote, setSavingNote] = useState(false);
   const [decisionUpdating, setDecisionUpdating] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const waveformRef = useRef<TakeWaveformHandle | null>(null);
+  const currentTimeRef = useRef<number>(0);
   const noteSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const memoRecorderRef = useRef<MediaRecorder | null>(null);
   const memoChunksRef = useRef<BlobPart[]>([]);
@@ -395,13 +398,17 @@ function TakeRow({
   }
 
   function insertTimestampAtCursor() {
-    const seconds = audioRef.current?.currentTime ?? 0;
+    const seconds = currentTimeRef.current || audioRef.current?.currentTime || 0;
     const stamp = `@${formatTimestamp(seconds)} `;
     const { start, end } = noteSelectionRef.current;
     const next = noteDraft.slice(0, start) + stamp + noteDraft.slice(end);
     setNoteDraft(next);
     setNoteDirty(next !== (take.producerNote ?? ""));
   }
+
+  const noteMarkers = parseProducerNote(take.producerNote)
+    .filter((s): s is { kind: "timestamp"; raw: string; seconds: number } => s.kind === "timestamp")
+    .map((s) => ({ seconds: s.seconds, label: s.raw, color: Colors.gradientMid }));
 
   useEffect(() => {
     if (!noteDirty) setNoteDraft(take.producerNote ?? "");
@@ -606,14 +613,14 @@ function TakeRow({
           />
         ) : null}
         {Platform.OS === "web" && take.storageUrl && take.status === "done" ? (
-          <audio
-            ref={(node) => {
-              audioRef.current = node;
+          <TakeWaveform
+            ref={waveformRef}
+            audioUrl={take.storageUrl}
+            markers={noteMarkers}
+            height={44}
+            onSeek={(s) => {
+              currentTimeRef.current = s;
             }}
-            controls
-            preload="none"
-            src={take.storageUrl}
-            style={{ width: "100%", height: 28 }}
           />
         ) : null}
         <TextInput

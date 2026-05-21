@@ -16,6 +16,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { parseProducerNote } from "@/lib/parse-timestamps";
 import { castVote, clearVote, fetchVoteTally, type ConsensusVote } from "@/lib/takes-client";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
 
 type BoothTake = {
   id: string;
@@ -126,7 +127,11 @@ function useBoothAuth(): { getToken: () => Promise<string | null> } {
 
 function TakeCard({ take }: { take: BoothTake }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const waveformRef = useRef<TakeWaveformHandle | null>(null);
   const noteSegments = parseProducerNote(take.producerNote);
+  const noteMarkers = noteSegments
+    .filter((s): s is { kind: "timestamp"; raw: string; seconds: number } => s.kind === "timestamp")
+    .map((s) => ({ seconds: s.seconds, label: s.raw, color: Colors.gradientMid }));
   const [myVote, setMyVote] = useState<ConsensusVote | null>(null);
   const [tally, setTally] = useState(take.consensus);
   const [voting, setVoting] = useState(false);
@@ -182,6 +187,11 @@ function TakeCard({ take }: { take: BoothTake }) {
   }
 
   function scrubTo(seconds: number) {
+    if (waveformRef.current) {
+      waveformRef.current.seekTo(seconds);
+      waveformRef.current.play();
+      return;
+    }
     const el = audioRef.current;
     if (!el) return;
     el.currentTime = seconds;
@@ -202,14 +212,11 @@ function TakeCard({ take }: { take: BoothTake }) {
           {new Date(take.uploadedAt).toLocaleTimeString()}
         </Text>
         {Platform.OS === "web" && take.audioUrl ? (
-          <audio
-            ref={(node) => {
-              audioRef.current = node;
-            }}
-            controls
-            preload="none"
-            src={take.audioUrl}
-            style={{ width: "100%", height: 32, marginTop: 2 }}
+          <TakeWaveform
+            ref={waveformRef}
+            audioUrl={take.audioUrl}
+            markers={noteMarkers}
+            height={48}
           />
         ) : null}
         {take.producerMemoUrl && Platform.OS === "web" ? (

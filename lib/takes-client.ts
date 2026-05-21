@@ -271,6 +271,27 @@ export type TakeRanking = {
   suggestion: { takeId: string; startSec: number; endSec: number; sectionLabel: string } | null;
 };
 
+export type DetectedSection = {
+  label: string;
+  type: string;
+  startSec: number;
+  endSec: number;
+  lyricsFirstWord: string;
+};
+
+export async function fetchTakeSections(
+  token: string | null,
+  takeId: string,
+): Promise<{ sections: DetectedSection[]; wordCount: number }> {
+  const res = await authedFetch(
+    `/api/takes/sections?id=${encodeURIComponent(takeId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(`Sections fetch failed: ${res.status}`);
+  return (await res.json()) as { sections: DetectedSection[]; wordCount: number };
+}
+
 export async function fetchTakeRanking(
   token: string | null,
   externalTrackId: string,

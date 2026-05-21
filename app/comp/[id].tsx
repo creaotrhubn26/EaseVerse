@@ -18,11 +18,13 @@ import { formatTimestamp } from "@/lib/parse-timestamps";
 import { buildCompBuffer, bufferDurationSec, playBuffer } from "@/lib/stitch-comp";
 import {
   fetchTakeRanking,
+  fetchTakeSections,
   fetchTakes,
   getComp,
   saveCompSegments,
   type CompRecord,
   type CompSegment,
+  type DetectedSection,
   type TakeRanking,
   type TakeRecord,
 } from "@/lib/takes-client";
@@ -48,6 +50,32 @@ function CompInner() {
   const [error, setError] = useState<string | null>(null);
   const waveformRefs = useRef<Map<string, TakeWaveformHandle | null>>(new Map());
   const [ranking, setRanking] = useState<TakeRanking | null>(null);
+  const [sectionsByTake, setSectionsByTake] = useState<Map<string, DetectedSection[]>>(new Map());
+
+  useEffect(() => {
+    if (takes.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const token = await getToken();
+      const results = await Promise.all(
+        takes.map(async (t) => {
+          try {
+            const r = await fetchTakeSections(token, t.id);
+            return [t.id, r.sections] as const;
+          } catch {
+            return [t.id, [] as DetectedSection[]] as const;
+          }
+        }),
+      );
+      if (cancelled) return;
+      const map = new Map<string, DetectedSection[]>();
+      for (const [id, secs] of results) map.set(id, secs);
+      setSectionsByTake(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [takes, getToken]);
 
   useEffect(() => {
     if (!comp?.externalTrackId) return;
@@ -348,28 +376,60 @@ function CompInner() {
             </Pressable>
           </View>
           {Platform.OS === "web" && take.storageUrl ? (
-            <TakeWaveform
-              ref={(node) => {
-                waveformRefs.current.set(take.id, node);
-              }}
-              audioUrl={take.storageUrl}
-              regions={segments
-                .filter((s) => s.takeId === take.id)
-                .map((s, i) => ({
-                  start: s.startSec,
-                  end: s.endSec,
-                  label: `${i + 1}`,
-                  color: Colors.gradientStart,
+            <>
+              <TakeWaveform
+                ref={(node) => {
+                  waveformRefs.current.set(take.id, node);
+                }}
+                audioUrl={take.storageUrl}
+                regions={segments
+                  .filter((s) => s.takeId === take.id)
+                  .map((s, i) => ({
+                    start: s.startSec,
+                    end: s.endSec,
+                    label: `${i + 1}`,
+                    color: Colors.gradientStart,
+                  }))}
+                markers={(sectionsByTake.get(take.id) ?? []).map((sec) => ({
+                  seconds: sec.startSec,
+                  label: sec.label,
+                  color: Colors.gradientMid,
                 }))}
-              height={48}
-              enableDragCreate
-              onRegionDrawn={(start, end) => {
-                setSegments((prev) => [
-                  ...prev,
-                  { takeId: take.id, startSec: start, endSec: end },
-                ]);
-              }}
-            />
+                height={48}
+                enableDragCreate
+                onRegionDrawn={(start, end) => {
+                  setSegments((prev) => [
+                    ...prev,
+                    { takeId: take.id, startSec: start, endSec: end },
+                  ]);
+                }}
+              />
+              {(sectionsByTake.get(take.id)?.length ?? 0) > 0 ? (
+                <View style={styles.sectionRow}>
+                  {sectionsByTake.get(take.id)?.map((sec, i) => (
+                    <Pressable
+                      key={`${sec.label}-${i}`}
+                      onPress={() =>
+                        setSegments((prev) => [
+                          ...prev,
+                          {
+                            takeId: take.id,
+                            startSec: sec.startSec,
+                            endSec: sec.endSec,
+                            sectionLabel: sec.label,
+                          },
+                        ])
+                      }
+                      style={styles.sectionChip}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${sec.label} from this take`}
+                    >
+                      <Text style={styles.sectionChipText}>+ {sec.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </>
           ) : null}
         </View>
       ))}
@@ -491,5 +551,19 @@ const styles = StyleSheet.create({
     color: Colors.gradientMid,
     borderColor: Colors.gradientMid + "55",
     backgroundColor: Colors.gradientMid + "11",
+  },
+  sectionRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  sectionChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.gradientMid + "55",
+    backgroundColor: Colors.surface,
+  },
+  sectionChipText: {
+    color: Colors.gradientMid,
+    fontFamily: "Inter_700Bold",
+    fontSize: 10,
   },
 });

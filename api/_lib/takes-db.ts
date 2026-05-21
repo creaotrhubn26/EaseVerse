@@ -116,6 +116,7 @@ async function ensureSchema(): Promise<void> {
       best_take_in_group BOOLEAN DEFAULT FALSE,
       processed_at TIMESTAMPTZ
     );
+    ALTER TABLE take_analyses ADD COLUMN IF NOT EXISTS transcript_words JSONB;
   `);
   ensured = true;
 }
@@ -157,6 +158,7 @@ export type ConsensusTally = {
 export type TakeAnalysisRow = {
   takeId: string;
   transcript: string | null;
+  transcriptWords: Array<{ word: string; start: number; end: number }> | null;
   pitchMeanHz: number | null;
   pitchStddevCents: number | null;
   vibratoRateHz: number | null;
@@ -265,6 +267,7 @@ export async function listTakesForGroup(
       analysis: {
         takeId: row.analysis_take_id,
         transcript: row.transcript,
+        transcriptWords: null,
         pitchMeanHz: row.pitch_mean_hz,
         pitchStddevCents: row.pitch_stddev_cents,
         vibratoRateHz: row.vibrato_rate_hz,
@@ -318,6 +321,7 @@ export async function getTakeWithAnalysis(takeId: string): Promise<
   const { rows } = await p.query<TakeRowDb & {
     analysis_take_id: string | null;
     transcript: string | null;
+    transcript_words: Array<{ word: string; start: number; end: number }> | null;
     pitch_mean_hz: number | null;
     pitch_stddev_cents: number | null;
     vibrato_rate_hz: number | null;
@@ -331,7 +335,7 @@ export async function getTakeWithAnalysis(takeId: string): Promise<
   }>(
     `SELECT t.*,
             a.take_id AS analysis_take_id,
-            a.transcript, a.pitch_mean_hz, a.pitch_stddev_cents,
+            a.transcript, a.transcript_words, a.pitch_mean_hz, a.pitch_stddev_cents,
             a.vibrato_rate_hz, a.energy_avg_db, a.energy_stddev_db,
             a.timing_score, a.pronunciation_score, a.ai_notes,
             a.best_take_in_group, a.processed_at
@@ -349,6 +353,7 @@ export async function getTakeWithAnalysis(takeId: string): Promise<
     analysis: {
       takeId: row.analysis_take_id,
       transcript: row.transcript,
+      transcriptWords: Array.isArray(row.transcript_words) ? row.transcript_words : null,
       pitchMeanHz: row.pitch_mean_hz,
       pitchStddevCents: row.pitch_stddev_cents,
       vibratoRateHz: row.vibrato_rate_hz,
@@ -401,12 +406,13 @@ export async function upsertTakeAnalysis(args: Partial<TakeAnalysisRow> & { take
   await ensureSchema();
   await p.query(
     `INSERT INTO take_analyses
-      (take_id, transcript, pitch_mean_hz, pitch_stddev_cents, vibrato_rate_hz,
+      (take_id, transcript, transcript_words, pitch_mean_hz, pitch_stddev_cents, vibrato_rate_hz,
        energy_avg_db, energy_stddev_db, timing_score, pronunciation_score,
        ai_notes, best_take_in_group, processed_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
      ON CONFLICT (take_id) DO UPDATE SET
        transcript = COALESCE(EXCLUDED.transcript, take_analyses.transcript),
+       transcript_words = COALESCE(EXCLUDED.transcript_words, take_analyses.transcript_words),
        pitch_mean_hz = COALESCE(EXCLUDED.pitch_mean_hz, take_analyses.pitch_mean_hz),
        pitch_stddev_cents = COALESCE(EXCLUDED.pitch_stddev_cents, take_analyses.pitch_stddev_cents),
        vibrato_rate_hz = COALESCE(EXCLUDED.vibrato_rate_hz, take_analyses.vibrato_rate_hz),
@@ -420,6 +426,7 @@ export async function upsertTakeAnalysis(args: Partial<TakeAnalysisRow> & { take
     [
       args.takeId,
       args.transcript ?? null,
+      args.transcriptWords ? JSON.stringify(args.transcriptWords) : null,
       args.pitchMeanHz ?? null,
       args.pitchStddevCents ?? null,
       args.vibratoRateHz ?? null,

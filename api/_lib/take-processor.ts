@@ -19,7 +19,12 @@ const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-7";
 const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 const openaiClient: OpenAI | null = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null;
 
-async function transcribeWithOpenAi(buffer: Uint8Array, filename: string): Promise<string | null> {
+export type TranscriptWord = { word: string; start: number; end: number };
+
+async function transcribeWithOpenAi(
+  buffer: Uint8Array,
+  filename: string,
+): Promise<{ text: string; words: TranscriptWord[] } | null> {
   if (!openaiClient) return null;
   try {
     const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
@@ -27,9 +32,18 @@ async function transcribeWithOpenAi(buffer: Uint8Array, filename: string): Promi
     const result = await openaiClient.audio.transcriptions.create({
       file,
       model: "whisper-1",
-      response_format: "text",
+      response_format: "verbose_json",
+      timestamp_granularities: ["word"],
     });
-    return typeof result === "string" ? result : (result as { text?: string }).text ?? null;
+    const text = typeof result === "string" ? result : (result as { text?: string }).text ?? "";
+    const rawWords =
+      typeof result === "object" && result !== null && Array.isArray((result as { words?: unknown[] }).words)
+        ? ((result as { words: Array<{ word: string; start: number; end: number }> }).words)
+        : [];
+    return {
+      text,
+      words: rawWords.map((w) => ({ word: String(w.word ?? ""), start: Number(w.start ?? 0), end: Number(w.end ?? 0) })),
+    };
   } catch (error) {
     console.warn("Whisper transcription failed:", error);
     return null;
@@ -140,7 +154,9 @@ export async function processTake(take: TakeRow): Promise<void> {
     const buffer = new Uint8Array(arrayBuffer);
 
     const analysis = analyzeWavBuffer(buffer);
-    const transcript = await transcribeWithOpenAi(buffer, take.filename);
+    const transcribed = await transcribeWithOpenAi(buffer, take.filename);
+    const transcript = transcribed?.text ?? null;
+    const words = transcribed?.words ?? [];
 
     let aiNotes: ClaudeNotes | null = null;
     if (take.externalTrackId) {
@@ -172,6 +188,7 @@ export async function processTake(take: TakeRow): Promise<void> {
     await upsertTakeAnalysis({
       takeId: take.id,
       transcript,
+      transcriptWords: words.length > 0 ? words : null,
       pitchMeanHz: analysis.pitchMeanHz,
       pitchStddevCents: analysis.pitchStddevCents,
       energyAvgDb: analysis.energyAvgDb,

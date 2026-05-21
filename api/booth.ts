@@ -140,6 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error("Booth fetch failed:", error);
-    return res.status(500).json({ error: "Booth fetch failed" });
+    const msg = (error as Error)?.message || String(error);
+    return res.status(500).json({ error: "Booth fetch failed", detail: msg.slice(0, 300) });
   }
 }

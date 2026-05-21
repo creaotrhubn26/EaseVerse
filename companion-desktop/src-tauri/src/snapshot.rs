@@ -267,10 +267,26 @@ fn urlencoding(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
 
-pub async fn write_export_files(out_dir: &Path, snapshot: &CompanionSnapshot) -> Result<(bool, bool), String> {
+pub async fn write_export_files(
+    out_dir: &Path,
+    snapshot: &CompanionSnapshot,
+    include_markers: bool,
+    include_regions: bool,
+    include_keepers: bool,
+) -> Result<(bool, bool), String> {
     tokio::fs::create_dir_all(out_dir).await.map_err(|e| e.to_string())?;
-    let markers = build_markers_txt(snapshot);
-    let keepers = build_keepers_txt(snapshot);
+
+    // Build a filtered view of the snapshot based on the producer's opt-ins.
+    let filtered = CompanionSnapshot {
+        generated_at: snapshot.generated_at.clone(),
+        keepers: if include_keepers { snapshot.keepers.clone() } else { Vec::new() },
+        markers: if include_markers { snapshot.markers.clone() } else { Vec::new() },
+        regions: if include_regions { snapshot.regions.clone() } else { Vec::new() },
+        pending_comp_exports: snapshot.pending_comp_exports.clone(),
+    };
+
+    let markers = build_markers_txt(&filtered);
+    let keepers = build_keepers_txt(&filtered);
 
     let markers_path = out_dir.join("easeverse-markers.txt");
     let keepers_path = out_dir.join("easeverse-keepers.txt");
@@ -330,7 +346,13 @@ pub async fn run_snapshot_loop(
                             ),
                         );
                         if let Some(dir) = &export_dir {
-                            match write_export_files(dir, &snap).await {
+                            match write_export_files(
+                                dir,
+                                &snap,
+                                config.export_include_markers,
+                                config.export_include_regions,
+                                config.export_include_keepers,
+                            ).await {
                                 Ok((m, k)) => {
                                     if m || k {
                                         let _ = app.emit(

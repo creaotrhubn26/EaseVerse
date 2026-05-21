@@ -25,7 +25,15 @@ pub struct CompanionConfig {
     pub export_dir: String,
     #[serde(rename = "sessionInfoPath", default)]
     pub session_info_path: String,
+    #[serde(rename = "exportIncludeMarkers", default = "default_true")]
+    pub export_include_markers: bool,
+    #[serde(rename = "exportIncludeRegions", default = "default_true")]
+    pub export_include_regions: bool,
+    #[serde(rename = "exportIncludeKeepers", default = "default_true")]
+    pub export_include_keepers: bool,
 }
+
+fn default_true() -> bool { true }
 
 pub struct AppState {
     pub watcher_handle: Mutex<Option<oneshot::Sender<()>>>,

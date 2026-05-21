@@ -30,6 +30,25 @@ npm run build
 # Output lands in src-tauri/target/release/bundle/
 ```
 
+## One-click "Import to Pro Tools"
+
+The app ships with two helper scripts that automate Pro Tools' "Import
+Session Data" dialog so a producer can click one button instead of
+walking the File menu by hand. Works in Pro Tools 12 / 2018 / 2023 —
+no Avid Developer, AAX, VST3, or Scripting SDK access required.
+
+**Windows:** install AutoHotkey 1.1 or 2.0 (https://www.autohotkey.com).
+Companion calls `AutoHotkey.exe scripts/easeverse-import.ahk
+<markers.txt>` for you.
+
+**macOS:** grant Accessibility permission on first run
+(System Settings → Privacy & Security → Accessibility → add
+EaseVerse Companion). Companion calls
+`osascript scripts/easeverse-import.applescript <markers.txt>`.
+
+The button is disabled until you set an Export folder; it imports the
+latest `easeverse-markers.txt` from that folder.
+
 ## How a studio uses the app
 
 1. Producer opens `https://easeverse.vercel.app/admin`, clicks

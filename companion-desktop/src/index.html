@@ -243,6 +243,16 @@
         color: var(--muted);
         font-style: italic;
       }
+      .check {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-soft);
+        cursor: pointer;
+        user-select: none;
+      }
+      .check input { accent-color: var(--accent); cursor: pointer; }
 
       .token-row { align-items: stretch; }
       .token-meta {
@@ -426,6 +436,14 @@
               (Memory Locations).
             </div>
           </div>
+          <div>
+            <div class="field-label">What to include in the export files</div>
+            <div class="row" style="gap:16px; flex-wrap:wrap">
+              <label class="check"><input id="incMarkers" type="checkbox" checked /> Markers (from notes)</label>
+              <label class="check"><input id="incRegions" type="checkbox" checked /> Loop-punch regions</label>
+              <label class="check"><input id="incKeepers" type="checkbox" checked /> Keepers list</label>
+            </div>
+          </div>
           <div class="row" style="justify-content:flex-end">
             <button id="importBtn" class="primary" disabled title="Sends a UI-automation script to Pro Tools to import the latest markers.txt">
               ⇪ Import to Pro Tools
@@ -569,6 +587,9 @@
           trackId: $("trackId").value.trim(),
           exportDir: $("exportDir").value.trim(),
           sessionInfoPath: $("sessionInfoPath").value.trim(),
+          exportIncludeMarkers: $("incMarkers").checked,
+          exportIncludeRegions: $("incRegions").checked,
+          exportIncludeKeepers: $("incKeepers").checked,
         };
       }
 
@@ -581,6 +602,9 @@
           $("trackId").value = cfg.trackId || "";
           $("exportDir").value = cfg.exportDir || "";
           $("sessionInfoPath").value = cfg.sessionInfoPath || "";
+          $("incMarkers").checked = cfg.exportIncludeMarkers !== false;
+          $("incRegions").checked = cfg.exportIncludeRegions !== false;
+          $("incKeepers").checked = cfg.exportIncludeKeepers !== false;
           if (cfg.pairToken) startCountdown();
         } catch (e) {
           appendLog("load_config error: " + e, "err");

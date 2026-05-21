@@ -2,6 +2,8 @@ import { upload } from "@vercel/blob/client";
 import { authedFetch } from "./authed-fetch";
 import { getApiUrl } from "./query-client";
 
+export type ProducerDecision = "keeper" | "redo" | null;
+
 export type TakeRecord = {
   id: string;
   userId: string;
@@ -14,6 +16,8 @@ export type TakeRecord = {
   uploadedAt: string;
   status: "queued" | "processing" | "done" | "error";
   errorMessage: string | null;
+  producerNote: string | null;
+  producerDecision: ProducerDecision;
 };
 
 export type TakeAnalysis = {
@@ -61,6 +65,20 @@ export async function triggerProcessTake(token: string | null, takeId: string): 
   await authedFetch(`/api/takes/process?id=${encodeURIComponent(takeId)}`, token, {
     method: "POST",
   });
+}
+
+export async function updateTakeFeedback(
+  token: string | null,
+  takeId: string,
+  patch: { producerNote?: string | null; producerDecision?: ProducerDecision | "clear" },
+): Promise<TakeRecord> {
+  const response = await authedFetch(
+    `/api/takes/feedback?id=${encodeURIComponent(takeId)}`,
+    token,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+  if (!response.ok) throw new Error(`Feedback update failed: ${response.status}`);
+  return (await response.json()) as TakeRecord;
 }
 
 export async function fetchTakeDetail(

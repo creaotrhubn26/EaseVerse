@@ -21,6 +21,8 @@ type BoothTake = {
   durationSec: number | null;
   status: string;
   audioUrl: string;
+  producerNote: string | null;
+  producerDecision: "keeper" | "redo" | null;
   transcript: string | null;
   aiNotes: string | null;
   pitchMeanHz: number | null;
@@ -122,9 +124,34 @@ export default function BoothScreen() {
                       }}
                     />
                   ) : null}
-                  {t.aiNotes ? <Text style={styles.takeNotes}>{t.aiNotes}</Text> : null}
+                  {t.producerNote ? (
+                    <View style={styles.producerNoteBlock}>
+                      <Text style={styles.producerNoteLabel}>Producer note</Text>
+                      <Text style={styles.producerNoteText}>{t.producerNote}</Text>
+                    </View>
+                  ) : null}
+                  {t.aiNotes ? (
+                    <View style={styles.aiNotesBlock}>
+                      <Text style={styles.aiNotesLabel}>AI feedback</Text>
+                      <Text style={styles.takeNotes}>{t.aiNotes}</Text>
+                    </View>
+                  ) : null}
                 </View>
-                <Text style={[styles.statusBadge, { color: statusColor(t.status) }]}>{t.status}</Text>
+                <View style={{ alignItems: "flex-end", gap: 6 }}>
+                  {t.producerDecision ? (
+                    <Text
+                      style={[
+                        styles.decisionBadge,
+                        t.producerDecision === "keeper"
+                          ? styles.decisionKeeper
+                          : styles.decisionRedo,
+                      ]}
+                    >
+                      {t.producerDecision === "keeper" ? "Keeper" : "Re-do"}
+                    </Text>
+                  ) : null}
+                  <Text style={[styles.statusBadge, { color: statusColor(t.status) }]}>{t.status}</Text>
+                </View>
               </View>
             ))
           )}
@@ -188,6 +215,54 @@ const styles = StyleSheet.create({
   takeMeta: { color: Colors.textTertiary, fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 2 },
   takeNotes: { color: Colors.textSecondary, fontFamily: "Inter_500Medium", fontSize: 12, marginTop: 4, lineHeight: 17 },
   statusBadge: { fontFamily: "Inter_700Bold", fontSize: 11, textTransform: "uppercase" },
+  decisionBadge: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  decisionKeeper: {
+    color: Colors.successUnderline,
+    borderColor: Colors.successUnderline + "66",
+    backgroundColor: Colors.successUnderline + "1c",
+  },
+  decisionRedo: {
+    color: Colors.dangerUnderline,
+    borderColor: Colors.dangerUnderline + "66",
+    backgroundColor: Colors.dangerUnderline + "1c",
+  },
+  producerNoteBlock: {
+    marginTop: 6,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.gradientMid + "15",
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.gradientMid,
+    gap: 2,
+  },
+  producerNoteLabel: {
+    color: Colors.gradientMid,
+    fontFamily: "Inter_700Bold",
+    fontSize: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  producerNoteText: {
+    color: Colors.textPrimary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  aiNotesBlock: { marginTop: 4 },
+  aiNotesLabel: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   empty: { color: Colors.textTertiary, fontFamily: "Inter_500Medium", fontSize: 12, fontStyle: "italic" },
   error: { color: Colors.dangerUnderline, fontFamily: "Inter_500Medium", fontSize: 12, marginTop: 24 },
 });

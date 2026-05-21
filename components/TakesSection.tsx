@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,7 +14,9 @@ import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import {
   fetchTakeDetail,
   fetchTakes,
+  updateTakeFeedback,
   uploadTake,
+  type ProducerDecision,
   type TakeAnalysis,
   type TakeRecord,
 } from "@/lib/takes-client";
@@ -174,15 +177,68 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
         ) : takes.length === 0 ? (
           <Text style={styles.empty}>No takes yet. Upload your first one above.</Text>
         ) : (
-          takes.map((t) => <TakeRow key={t.id} take={t} getToken={getToken} />)
+          takes.map((t) => (
+            <TakeRow
+              key={t.id}
+              take={t}
+              getToken={getToken}
+              onTakeUpdated={(updated) =>
+                setTakes((prev) => prev.map((tt) => (tt.id === updated.id ? { ...tt, ...updated } : tt)))
+              }
+            />
+          ))
         )}
       </View>
     </View>
   );
 }
 
-function TakeRow({ take, getToken }: { take: TakeRecord; getToken: () => Promise<string | null> }) {
+function TakeRow({
+  take,
+  getToken,
+  onTakeUpdated,
+}: {
+  take: TakeRecord;
+  getToken: () => Promise<string | null>;
+  onTakeUpdated: (updated: TakeRecord) => void;
+}) {
   const [analysis, setAnalysis] = useState<TakeAnalysis | null>(null);
+  const [noteDraft, setNoteDraft] = useState(take.producerNote ?? "");
+  const [noteDirty, setNoteDirty] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+  const [decisionUpdating, setDecisionUpdating] = useState(false);
+
+  useEffect(() => {
+    if (!noteDirty) setNoteDraft(take.producerNote ?? "");
+  }, [noteDirty, take.producerNote]);
+
+  async function saveNote() {
+    if (!noteDirty) return;
+    setSavingNote(true);
+    try {
+      const token = await getToken();
+      const updated = await updateTakeFeedback(token, take.id, { producerNote: noteDraft });
+      onTakeUpdated(updated);
+      setNoteDirty(false);
+    } catch (err) {
+      console.warn("save note failed:", err);
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  async function setDecision(next: ProducerDecision | "clear") {
+    setDecisionUpdating(true);
+    try {
+      const token = await getToken();
+      const updated = await updateTakeFeedback(token, take.id, { producerDecision: next });
+      onTakeUpdated(updated);
+    } catch (err) {
+      console.warn("decision update failed:", err);
+    } finally {
+      setDecisionUpdating(false);
+    }
+  }
   const statusColor =
     take.status === "done"
       ? Colors.successUnderline
@@ -285,7 +341,77 @@ function TakeRow({ take, getToken }: { take: TakeRecord; getToken: () => Promise
           ) : null}
         </View>
       ) : null}
+      <View style={styles.producerBox}>
+        <View style={styles.decisionRow}>
+          <DecisionChip
+            active={take.producerDecision === "keeper"}
+            label="Keeper"
+            color={Colors.successUnderline}
+            onPress={() =>
+              setDecision(take.producerDecision === "keeper" ? "clear" : "keeper")
+            }
+            disabled={decisionUpdating}
+          />
+          <DecisionChip
+            active={take.producerDecision === "redo"}
+            label="Re-do"
+            color={Colors.dangerUnderline}
+            onPress={() =>
+              setDecision(take.producerDecision === "redo" ? "clear" : "redo")
+            }
+            disabled={decisionUpdating}
+          />
+        </View>
+        <TextInput
+          value={noteDraft}
+          onChangeText={(t) => {
+            setNoteDraft(t);
+            setNoteDirty(t !== (take.producerNote ?? ""));
+          }}
+          onBlur={saveNote}
+          placeholder="Producer note — e.g. more breath on chorus 2"
+          placeholderTextColor={Colors.textTertiary}
+          style={styles.producerNoteInput}
+          multiline
+          maxLength={1000}
+          accessibilityLabel="Producer note for vocalist"
+        />
+        {noteDirty || savingNote ? (
+          <Text style={styles.noteHint}>{savingNote ? "Saving…" : "Edited — tap away to save"}</Text>
+        ) : null}
+      </View>
     </View>
+  );
+}
+
+function DecisionChip({
+  active,
+  label,
+  color,
+  onPress,
+  disabled,
+}: {
+  active: boolean;
+  label: string;
+  color: string;
+  onPress: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        styles.decisionChip,
+        active && { borderColor: color, backgroundColor: color + "22" },
+        disabled && { opacity: 0.5 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`Mark take ${label}`}
+      accessibilityState={{ selected: active }}
+    >
+      <Text style={[styles.decisionChipText, active && { color }]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -386,6 +512,48 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontFamily: "Inter_600SemiBold",
     fontSize: 11,
+  },
+  producerBox: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderGlass,
+    gap: 8,
+  },
+  decisionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  decisionChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surface,
+  },
+  decisionChipText: {
+    color: Colors.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+  },
+  producerNoteInput: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: Colors.textPrimary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    minHeight: 38,
+  },
+  noteHint: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 10,
+    fontStyle: "italic",
   },
   statusPill: {
     flexDirection: "row",

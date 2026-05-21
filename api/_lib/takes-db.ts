@@ -27,8 +27,12 @@ async function ensureSchema(): Promise<void> {
       storage_url TEXT NOT NULL,
       uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       status TEXT NOT NULL DEFAULT 'queued',
-      error_message TEXT
+      error_message TEXT,
+      producer_note TEXT,
+      producer_decision TEXT
     );
+    ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_note TEXT;
+    ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_decision TEXT;
     CREATE INDEX IF NOT EXISTS takes_user_uploaded_idx ON takes (user_id, uploaded_at DESC);
     CREATE INDEX IF NOT EXISTS takes_status_idx ON takes (status);
 
@@ -50,6 +54,8 @@ async function ensureSchema(): Promise<void> {
   ensured = true;
 }
 
+export type ProducerDecision = "keeper" | "redo" | null;
+
 export type TakeRow = {
   id: string;
   userId: string;
@@ -62,6 +68,8 @@ export type TakeRow = {
   uploadedAt: string;
   status: "queued" | "processing" | "done" | "error";
   errorMessage: string | null;
+  producerNote: string | null;
+  producerDecision: ProducerDecision;
 };
 
 export type TakeAnalysisRow = {
@@ -330,6 +338,8 @@ type TakeRowDb = {
   uploaded_at: string;
   status: TakeRow["status"];
   error_message: string | null;
+  producer_note: string | null;
+  producer_decision: string | null;
 };
 
 function mapTakeRow(row: TakeRowDb): TakeRow {
@@ -345,5 +355,39 @@ function mapTakeRow(row: TakeRowDb): TakeRow {
     uploadedAt: row.uploaded_at,
     status: row.status,
     errorMessage: row.error_message,
+    producerNote: row.producer_note,
+    producerDecision: normalizeDecision(row.producer_decision),
   };
+}
+
+function normalizeDecision(value: string | null): ProducerDecision {
+  if (value === "keeper" || value === "redo") return value;
+  return null;
+}
+
+export async function updateProducerFeedback(args: {
+  takeId: string;
+  userId: string;
+  producerNote?: string | null;
+  producerDecision?: ProducerDecision;
+}): Promise<TakeRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const sets: string[] = [];
+  const values: unknown[] = [args.takeId, args.userId];
+  if (args.producerNote !== undefined) {
+    values.push(args.producerNote);
+    sets.push(`producer_note = $${values.length}`);
+  }
+  if (args.producerDecision !== undefined) {
+    values.push(args.producerDecision);
+    sets.push(`producer_decision = $${values.length}`);
+  }
+  if (sets.length === 0) return null;
+  const { rows } = await p.query<TakeRowDb>(
+    `UPDATE takes SET ${sets.join(", ")} WHERE id = $1 AND user_id = $2 RETURNING *`,
+    values,
+  );
+  return rows[0] ? mapTakeRow(rows[0]) : null;
 }

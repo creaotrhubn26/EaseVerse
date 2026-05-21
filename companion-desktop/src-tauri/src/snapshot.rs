@@ -13,6 +13,22 @@ pub struct CompanionSnapshot {
     pub keepers: Vec<SnapshotKeeper>,
     pub markers: Vec<SnapshotMarker>,
     pub regions: Vec<SnapshotRegion>,
+    #[serde(rename = "pendingCompExports", default)]
+    pub pending_comp_exports: Vec<PendingCompExport>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PendingCompExport {
+    #[serde(rename = "compId")]
+    pub comp_id: String,
+    pub name: String,
+    #[serde(rename = "externalTrackId")]
+    pub external_track_id: Option<String>,
+    #[serde(rename = "wavUrl")]
+    pub wav_url: Option<String>,
+    pub filename: Option<String>,
+    #[serde(rename = "exportedAt")]
+    pub exported_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -186,6 +202,46 @@ pub async fn fetch_snapshot(config: &CompanionConfig) -> Result<CompanionSnapsho
     resp.json::<CompanionSnapshot>().await.map_err(|e| e.to_string())
 }
 
+pub async fn deliver_comp_export(
+    config: &CompanionConfig,
+    exp: &PendingCompExport,
+    target_dir: &Path,
+) -> Result<PathBuf, String> {
+    let wav_url = exp.wav_url.as_ref().ok_or("export missing wavUrl")?;
+    let filename = exp
+        .filename
+        .clone()
+        .unwrap_or_else(|| format!("{}-comp.wav", exp.comp_id));
+
+    tokio::fs::create_dir_all(target_dir).await.map_err(|e| e.to_string())?;
+    let target = target_dir.join(&filename);
+
+    let resp = reqwest::Client::new()
+        .get(wav_url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("download {}: {}", wav_url, resp.status()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    tokio::fs::write(&target, &bytes).await.map_err(|e| e.to_string())?;
+
+    // Ack so the server doesn't re-deliver
+    let base = config.api_base_url.trim_end_matches('/');
+    let ack_url = format!("{}/api/takes/comp-export?id={}", base, urlencoding(&exp.comp_id));
+    let ack = reqwest::Client::new()
+        .patch(&ack_url)
+        .bearer_auth(&config.pair_token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !ack.status().is_success() {
+        return Err(format!("ack {}: {}", exp.comp_id, ack.status()));
+    }
+    Ok(target)
+}
+
 pub async fn post_checkpoint(config: &CompanionConfig, source: &str, payload: serde_json::Value) -> Result<(), String> {
     let base = config.api_base_url.trim_end_matches('/');
     let url = format!("{}/api/companion/checkpoint", base);
@@ -285,6 +341,30 @@ pub async fn run_snapshot_loop(
                                 }
                                 Err(e) => {
                                     let _ = app.emit("companion-log", format!("export error: {}", e));
+                                }
+                            }
+                        }
+
+                        // Deliver any pending comp exports straight into the Pro Tools Audio Files folder
+                        if !snap.pending_comp_exports.is_empty() && !config.audio_watch.is_empty() {
+                            let audio_dir = PathBuf::from(&config.audio_watch);
+                            for exp in &snap.pending_comp_exports {
+                                if exp.wav_url.is_none() {
+                                    continue;
+                                }
+                                match deliver_comp_export(&config, exp, &audio_dir).await {
+                                    Ok(written) => {
+                                        let _ = app.emit(
+                                            "companion-log",
+                                            format!("delivered comp export → {}", written.display()),
+                                        );
+                                    }
+                                    Err(err) => {
+                                        let _ = app.emit(
+                                            "companion-log",
+                                            format!("comp export delivery failed ({}): {}", exp.comp_id, err),
+                                        );
+                                    }
                                 }
                             }
                         }

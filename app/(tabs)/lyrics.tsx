@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   Platform,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -281,6 +282,8 @@ export default function LyricsScreen() {
   const [editText, setEditText] = useState(activeSong?.lyrics || '');
   const [importText, setImportText] = useState('');
   const [songTitle, setSongTitle] = useState(activeSong?.title || '');
+  const [titlePromptVisible, setTitlePromptVisible] = useState(false);
+  const [pendingTitle, setPendingTitle] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<GenreId>(activeSong?.genre || 'pop');
   const [tempoBpmText, setTempoBpmText] = useState(activeSong?.bpm ? String(activeSong.bpm) : '');
   const [paperModeEnabled, setPaperModeEnabled] = useState(isNativeIpad);
@@ -698,6 +701,33 @@ export default function LyricsScreen() {
     },
     [activeSongRecordKey, captureInbox]
   );
+
+  const ensureTitleBeforeEdit = useCallback((): boolean => {
+    if (songTitle.trim() || activeSong?.title) return true;
+    setPendingTitle('');
+    setTitlePromptVisible(true);
+    return false;
+  }, [activeSong?.title, songTitle]);
+
+  const handleEditTextChange = useCallback(
+    (next: string) => {
+      if (!songTitle.trim() && !activeSong?.title && next.trim().length > 0) {
+        setPendingTitle('');
+        setTitlePromptVisible(true);
+        return;
+      }
+      setEditText(next);
+    },
+    [activeSong?.title, songTitle],
+  );
+
+  const confirmPendingTitle = useCallback(() => {
+    const trimmed = pendingTitle.trim();
+    if (!trimmed) return;
+    setSongTitle(trimmed);
+    setTitlePromptVisible(false);
+    setPendingTitle('');
+  }, [pendingTitle]);
 
   const performSave = useCallback((options?: { silent?: boolean }): boolean => {
     if (!editText.trim()) {
@@ -2013,8 +2043,8 @@ export default function LyricsScreen() {
                   <TextInput
                     ref={editorRef}
                     value={editText}
-                    onChangeText={setEditText}
-                    onFocus={() => setEditorFocused(true)}
+                    onChangeText={handleEditTextChange}
+                    onFocus={() => { if (!ensureTitleBeforeEdit()) { editorRef.current?.blur(); return; } setEditorFocused(true); }}
                     onBlur={() => setEditorFocused(false)}
                     onSelectionChange={(event) => {
                       const selection = event.nativeEvent.selection;
@@ -2241,8 +2271,8 @@ export default function LyricsScreen() {
                   <TextInput
                     ref={editorRef}
                     value={editText}
-                    onChangeText={setEditText}
-                    onFocus={() => setEditorFocused(true)}
+                    onChangeText={handleEditTextChange}
+                    onFocus={() => { if (!ensureTitleBeforeEdit()) { editorRef.current?.blur(); return; } setEditorFocused(true); }}
                     onBlur={() => setEditorFocused(false)}
                     onSelectionChange={(event) => {
                       const selection = event.nativeEvent.selection;
@@ -2734,6 +2764,54 @@ export default function LyricsScreen() {
           </View>
         )}
       </ScrollView>
+      <Modal
+        visible={titlePromptVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTitlePromptVisible(false)}
+      >
+        <View style={styles.titlePromptOverlay}>
+          <View style={styles.titlePromptCard}>
+            <Text style={styles.titlePromptTitle}>Name your song</Text>
+            <Text style={styles.titlePromptSubtitle}>
+              Give it a title so you can find it later — you can always rename.
+            </Text>
+            <TextInput
+              value={pendingTitle}
+              onChangeText={setPendingTitle}
+              placeholder="e.g. Midnight Drive"
+              placeholderTextColor={Colors.textTertiary}
+              style={styles.titlePromptInput}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={confirmPendingTitle}
+              accessibilityLabel="Song title"
+            />
+            <View style={styles.titlePromptActions}>
+              <Pressable
+                onPress={() => setTitlePromptVisible(false)}
+                style={styles.titlePromptCancel}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+              >
+                <Text style={styles.titlePromptCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={confirmPendingTitle}
+                disabled={!pendingTitle.trim()}
+                style={[
+                  styles.titlePromptConfirm,
+                  !pendingTitle.trim() && styles.titlePromptConfirmDisabled,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Continue to lyrics"
+              >
+                <Text style={styles.titlePromptConfirmText}>Continue</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -3680,5 +3758,74 @@ const styles = StyleSheet.create({
     color: Colors.gradientStart,
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
+  },
+  titlePromptOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  titlePromptCard: {
+    width: '100%',
+    maxWidth: 380,
+    padding: 22,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    gap: 12,
+  },
+  titlePromptTitle: {
+    color: Colors.textPrimary,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 18,
+  },
+  titlePromptSubtitle: {
+    color: Colors.textSecondary,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  titlePromptInput: {
+    backgroundColor: Colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    color: Colors.textPrimary,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 15,
+  },
+  titlePromptActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 4,
+  },
+  titlePromptCancel: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 9,
+  },
+  titlePromptCancelText: {
+    color: Colors.textSecondary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+  },
+  titlePromptConfirm: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 9,
+    backgroundColor: Colors.gradientStart,
+  },
+  titlePromptConfirmDisabled: {
+    opacity: 0.4,
+  },
+  titlePromptConfirmText: {
+    color: '#fff',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
   },
 });

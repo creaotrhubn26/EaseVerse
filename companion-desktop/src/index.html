@@ -7,139 +7,468 @@
     <style>
       :root {
         --bg: #0e0f14;
-        --surface: #161821;
-        --border: #262833;
+        --bg-elevated: #14161e;
+        --surface: #1a1c25;
+        --surface-soft: #21232d;
+        --border: #2a2d3a;
+        --border-strong: #3a3e4d;
         --text: #f3f4f8;
+        --text-soft: #c2c5d2;
         --muted: #8c8f9c;
+        --muted-dim: #5a5d6a;
         --accent: #ff914d;
+        --accent-soft: rgba(255, 145, 77, 0.15);
+        --accent-glow: rgba(255, 145, 77, 0.45);
+        --gradient-start: #ff7a18;
+        --gradient-end: #ffc371;
         --danger: #ff5a6e;
+        --danger-soft: rgba(255, 90, 110, 0.18);
         --success: #4ade80;
+        --success-soft: rgba(74, 222, 128, 0.15);
+        --info: #60a5fa;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+        -webkit-font-smoothing: antialiased;
+      }
       body {
         margin: 0;
-        background: var(--bg);
+        background:
+          radial-gradient(1200px 600px at 80% -10%, rgba(255, 145, 77, 0.08), transparent 60%),
+          radial-gradient(800px 400px at -10% 100%, rgba(96, 165, 250, 0.05), transparent 60%),
+          var(--bg);
         color: var(--text);
-        font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        padding: 18px;
-        min-width: 520px;
+        font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+        padding: 0;
+        min-height: 100vh;
+        min-width: 560px;
       }
-      h1 {
-        font-size: 16px;
-        margin: 0 0 14px;
-        font-weight: 700;
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 20px;
+        background: rgba(20, 22, 30, 0.85);
+        backdrop-filter: blur(16px);
+        border-bottom: 1px solid var(--border);
       }
-      label {
-        display: block;
-        color: var(--muted);
+      .logo-dot {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+        position: relative;
+        box-shadow: 0 4px 18px rgba(255, 145, 77, 0.4);
+      }
+      .logo-dot::after {
+        content: "EV";
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         font-size: 11px;
+        font-weight: 800;
+        color: #1a0f06;
+        letter-spacing: 0.3px;
+      }
+      .title { font-size: 15px; font-weight: 700; flex: 1; }
+      .subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .status-pill .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--muted-dim);
+      }
+      .status-pill.live {
+        color: var(--success);
+        border-color: rgba(74, 222, 128, 0.3);
+        background: var(--success-soft);
+      }
+      .status-pill.live .dot {
+        background: var(--success);
+        box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+        animation: pulse 2s ease-out infinite;
+      }
+      .status-pill.error {
+        color: var(--danger);
+        border-color: rgba(255, 90, 110, 0.4);
+        background: var(--danger-soft);
+      }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+        70% { box-shadow: 0 0 0 8px rgba(74, 222, 128, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+      }
+
+      .container {
+        padding: 18px 20px 32px;
+        display: grid;
+        gap: 14px;
+        max-width: 720px;
+      }
+      .card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .card-head .icon {
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        font-size: 14px;
+      }
+      .card-head .step-num {
+        background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+        color: #1a0f06;
+        font-weight: 800;
+        border: none;
+      }
+      .card-title {
+        font-size: 13px;
+        font-weight: 700;
+        flex: 1;
+      }
+      .card-hint {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 1px;
+      }
+      .card-body { padding: 12px 14px 14px; display: grid; gap: 10px; }
+
+      .field-label {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--muted);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 4px;
-        margin-top: 12px;
+        letter-spacing: 0.6px;
       }
       input[type="text"] {
         width: 100%;
-        padding: 8px 10px;
+        padding: 9px 11px;
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius: 8px;
         color: var(--text);
         font-family: ui-monospace, "SF Mono", Consolas, monospace;
         font-size: 12px;
+        transition: border-color 0.15s ease, background 0.15s ease;
       }
+      input[type="text"]:hover { background: var(--surface-soft); }
       input[type="text"]:focus {
         outline: none;
         border-color: var(--accent);
+        background: var(--surface-soft);
+        box-shadow: 0 0 0 3px rgba(255, 145, 77, 0.12);
       }
-      .row {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-      .row input { flex: 1; }
+      .row { display: flex; gap: 8px; align-items: center; }
+      .row > input[type="text"] { flex: 1; }
+
       button {
-        padding: 8px 14px;
+        padding: 8px 13px;
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius: 8px;
         color: var(--text);
         font-size: 12px;
         font-weight: 600;
         cursor: pointer;
+        transition: all 0.12s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
       }
-      button:hover { border-color: var(--accent); }
+      button:hover {
+        border-color: var(--border-strong);
+        background: var(--surface-soft);
+      }
       button.primary {
-        background: var(--accent);
-        color: #000;
-        border-color: var(--accent);
+        background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+        color: #1a0f06;
+        border: none;
+        font-weight: 700;
+        box-shadow: 0 4px 16px rgba(255, 145, 77, 0.25);
       }
-      button.primary:disabled, button:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
+      button.primary:hover {
+        box-shadow: 0 6px 20px rgba(255, 145, 77, 0.4);
+        transform: translateY(-1px);
       }
       button.danger {
-        border-color: var(--danger);
+        border-color: rgba(255, 90, 110, 0.35);
         color: var(--danger);
+        background: var(--danger-soft);
       }
-      .status {
-        margin: 14px 0;
-        padding: 10px 12px;
-        border-radius: 6px;
+      button:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      button .chev { margin-left: 2px; opacity: 0.7; }
+
+      .folder-drop {
+        position: relative;
+      }
+      .folder-drop.drag-over input { border-color: var(--accent); background: var(--accent-soft); }
+      .field-hint {
+        font-size: 10px;
+        color: var(--muted);
+        font-style: italic;
+      }
+
+      .token-row { align-items: stretch; }
+      .token-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 10px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .countdown-bar {
+        position: relative;
+        width: 100%;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--border);
+        overflow: hidden;
+        margin-top: 6px;
+      }
+      .countdown-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end));
+        transition: width 1s linear;
+      }
+      .countdown-fill.warn { background: var(--danger); }
+
+      .activity-card .card-body { padding: 0; }
+      .activity-toolbar {
+        display: flex;
+        gap: 10px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
         background: var(--surface);
-        border: 1px solid var(--border);
-        font-size: 12px;
       }
-      .status.ok { border-color: var(--success); color: var(--success); }
-      .status.err { border-color: var(--danger); color: var(--danger); }
+      .stat {
+        display: flex;
+        flex-direction: column;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .stat .value {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1;
+        margin-bottom: 2px;
+      }
+      .stat.accent .value { color: var(--accent); }
+      .stat.ok .value { color: var(--success); }
       .log {
-        background: #0a0b10;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        padding: 10px;
         font-family: ui-monospace, "SF Mono", Consolas, monospace;
         font-size: 11px;
-        line-height: 1.5;
+        line-height: 1.55;
         max-height: 240px;
         overflow-y: auto;
-        white-space: pre-wrap;
-        margin-top: 12px;
-        color: #c8cad4;
+        padding: 10px 14px 12px;
+        color: var(--text-soft);
+        scrollbar-color: var(--border-strong) transparent;
       }
-      .actions { margin-top: 14px; display: flex; gap: 8px; }
-      .hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
+      .log .line { display: flex; gap: 8px; padding: 2px 0; }
+      .log .ts { color: var(--muted-dim); flex-shrink: 0; }
+      .log .line.upload { color: var(--success); }
+      .log .line.snap { color: var(--info); }
+      .log .line.err { color: var(--danger); }
+      .log:empty::before {
+        content: "Nothing yet — start watching to see activity.";
+        color: var(--muted-dim);
+        font-style: italic;
+      }
+
+      .help-link {
+        font-size: 11px;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .help-link:hover { color: var(--accent); }
+      .footer {
+        padding: 8px 20px 20px;
+        text-align: center;
+        font-size: 10px;
+        color: var(--muted-dim);
+      }
+      .footer a { color: var(--muted); text-decoration: none; }
+      .footer a:hover { color: var(--accent); }
     </style>
   </head>
   <body>
-    <h1>EaseVerse Studio Companion</h1>
-
-    <label>API Base URL</label>
-    <input id="apiBaseUrl" type="text" value="https://easeverse.vercel.app" />
-
-    <label>Pairing Token</label>
-    <div class="row">
-      <input id="pairToken" type="text" placeholder="pair_… (generate in /admin)" />
-      <button id="testBtn">Test</button>
-    </div>
-    <div class="hint">Token expires after 15 minutes. Generate a fresh one in https://easeverse.vercel.app/admin.</div>
-
-    <label>Pro Tools Audio Files folder</label>
-    <div class="row">
-      <input id="audioWatch" type="text" placeholder="C:\\Users\\Michael\\ProTools\\Sessions\\MySong\\Audio Files" />
-      <button id="pickBtn">Pick folder</button>
+    <div class="topbar">
+      <div class="logo-dot"></div>
+      <div style="flex:1">
+        <div class="title">EaseVerse Studio Companion</div>
+        <div class="subtitle">Pro Tools ↔ EaseVerse bridge</div>
+      </div>
+      <span id="topStatus" class="status-pill"><span class="dot"></span> Idle</span>
     </div>
 
-    <label>External Track ID (optional — defaults to filename)</label>
-    <input id="trackId" type="text" placeholder="my-song-v1" />
+    <div class="container">
+      <!-- 1. Connection -->
+      <div class="card">
+        <div class="card-head">
+          <div class="icon step-num">1</div>
+          <div style="flex:1">
+            <div class="card-title">Connect to EaseVerse</div>
+            <div class="card-hint">Paste a 15-minute pairing token from your studio admin.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div>
+            <div class="field-label">API base URL</div>
+            <input id="apiBaseUrl" type="text" value="https://easeverse.vercel.app" />
+          </div>
+          <div>
+            <div class="field-label">Pairing token</div>
+            <div class="row token-row">
+              <input id="pairToken" type="text" placeholder="pair_…" autocomplete="off" />
+              <button id="testBtn" title="Test the token">Test</button>
+            </div>
+            <div class="countdown-bar" id="countdownBar" style="display:none">
+              <div class="countdown-fill" id="countdownFill" style="width:100%"></div>
+            </div>
+            <div class="token-meta" id="tokenMeta"></div>
+          </div>
+        </div>
+      </div>
 
-    <div id="status" class="status">Idle — fill in fields and press Start</div>
+      <!-- 2. Sources -->
+      <div class="card">
+        <div class="card-head">
+          <div class="icon step-num">2</div>
+          <div style="flex:1">
+            <div class="card-title">Sources from Pro Tools</div>
+            <div class="card-hint">Tell us where Pro Tools writes audio + session metadata.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div>
+            <div class="field-label">Audio Files folder (auto-upload takes)</div>
+            <div class="row folder-drop" id="audioDrop">
+              <input id="audioWatch" type="text" placeholder="~/ProTools/Sessions/MySong/Audio Files" />
+              <button id="pickAudioBtn" title="Pick folder">📁</button>
+            </div>
+            <div class="field-hint">Companion auto-uploads new WAV/AIFF as they appear.</div>
+          </div>
 
-    <div class="actions">
-      <button id="startBtn" class="primary">Start watching</button>
-      <button id="stopBtn" class="danger" disabled>Stop</button>
+          <div>
+            <div class="field-label">Session Info file (optional — sync BPM + markers)</div>
+            <div class="row folder-drop" id="sessionInfoDrop">
+              <input id="sessionInfoPath" type="text" placeholder="/tmp/pt-session.txt" />
+              <button id="pickSessionBtn" title="Pick file">📄</button>
+            </div>
+            <div class="field-hint">
+              In Pro Tools: <code>File → Export → Session Info as Text…</code>
+            </div>
+          </div>
+
+          <div>
+            <div class="field-label">External Track ID (optional — defaults to filename)</div>
+            <input id="trackId" type="text" placeholder="my-song-v1" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Destinations -->
+      <div class="card">
+        <div class="card-head">
+          <div class="icon step-num">3</div>
+          <div style="flex:1">
+            <div class="card-title">Sync back to Pro Tools</div>
+            <div class="card-hint">Companion writes markers + keeper-list you can re-import.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div>
+            <div class="field-label">Export folder for markers + keepers</div>
+            <div class="row folder-drop" id="exportDrop">
+              <input id="exportDir" type="text" placeholder="~/ProTools/Sessions/MySong/EaseVerse" />
+              <button id="pickExportBtn" title="Pick folder">📁</button>
+            </div>
+            <div class="field-hint">
+              Pro Tools: <code>File → Import → Session Data</code> → <code>easeverse-markers.txt</code>
+              (Memory Locations).
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Activity -->
+      <div class="card activity-card">
+        <div class="card-head">
+          <div class="icon">📡</div>
+          <div style="flex:1">
+            <div class="card-title">Live activity</div>
+            <div class="card-hint" id="liveHint">Press Start watching to begin.</div>
+          </div>
+          <button id="startBtn" class="primary">▶ Start watching</button>
+          <button id="stopBtn" class="danger" disabled>■ Stop</button>
+        </div>
+        <div class="card-body">
+          <div class="activity-toolbar">
+            <div class="stat ok">
+              <div class="value" id="statUploads">0</div>
+              <div>uploads this session</div>
+            </div>
+            <div class="stat accent">
+              <div class="value" id="statSnap">0</div>
+              <div>snapshot polls</div>
+            </div>
+            <div class="stat">
+              <div class="value" id="statErr">0</div>
+              <div>errors</div>
+            </div>
+            <div class="stat" style="margin-left:auto;text-align:right">
+              <div class="value" id="statLast">—</div>
+              <div>last event</div>
+            </div>
+          </div>
+          <div id="log" class="log"></div>
+        </div>
+      </div>
     </div>
 
-    <div id="log" class="log">[idle]</div>
+    <div class="footer">
+      <a href="https://easeverse.vercel.app/admin" target="_blank">Open admin</a> ·
+      <a href="https://easeverse.vercel.app/companion" target="_blank">Download page</a> ·
+      v0.1.0
+    </div>
 
     <script type="module">
       const { invoke } = window.__TAURI__.core;
@@ -147,18 +476,92 @@
       const { open } = window.__TAURI__.dialog;
 
       const $ = (id) => document.getElementById(id);
-      const logBox = $("log");
-      const statusBox = $("status");
+      const log = $("log");
+      const topStatus = $("topStatus");
+      const liveHint = $("liveHint");
+      const countdownBar = $("countdownBar");
+      const countdownFill = $("countdownFill");
+      const tokenMeta = $("tokenMeta");
 
-      function setStatus(msg, kind) {
-        statusBox.textContent = msg;
-        statusBox.className = "status" + (kind ? " " + kind : "");
+      let stats = { uploads: 0, snaps: 0, errors: 0 };
+      function bumpStat(key) {
+        stats[key] += 1;
+        if (key === "uploads") $("statUploads").textContent = stats.uploads;
+        if (key === "snaps") $("statSnap").textContent = stats.snaps;
+        if (key === "errors") $("statErr").textContent = stats.errors;
+      }
+      function setStatus(mode, label) {
+        topStatus.className = "status-pill " + mode;
+        topStatus.innerHTML = `<span class="dot"></span> ${label}`;
       }
 
-      function appendLog(line) {
-        const ts = new Date().toLocaleTimeString();
-        logBox.textContent += `\n[${ts}] ${line}`;
-        logBox.scrollTop = logBox.scrollHeight;
+      // Token countdown
+      let tokenStart = 0;
+      const TOKEN_TTL = 15 * 60 * 1000;
+      function startCountdown() {
+        tokenStart = Date.now();
+        countdownBar.style.display = "block";
+        updateCountdown();
+        const id = setInterval(() => {
+          if (!updateCountdown()) clearInterval(id);
+        }, 1000);
+      }
+      function updateCountdown() {
+        const elapsed = Date.now() - tokenStart;
+        const remaining = Math.max(0, TOKEN_TTL - elapsed);
+        const pct = (remaining / TOKEN_TTL) * 100;
+        countdownFill.style.width = pct + "%";
+        countdownFill.classList.toggle("warn", remaining < 3 * 60 * 1000);
+        const mins = Math.floor(remaining / 60000);
+        const secs = Math.floor((remaining % 60000) / 1000);
+        tokenMeta.textContent = remaining > 0
+          ? `Token expires in ${mins}:${secs.toString().padStart(2, "0")}`
+          : "Token expired — generate a new one in /admin";
+        return remaining > 0;
+      }
+
+      // Folder drop targets — drag a folder from Finder/Explorer onto the input
+      ["audioDrop", "sessionInfoDrop", "exportDrop"].forEach((id) => {
+        const el = $(id);
+        if (!el) return;
+        el.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          el.classList.add("drag-over");
+        });
+        el.addEventListener("dragleave", () => el.classList.remove("drag-over"));
+        el.addEventListener("drop", (e) => {
+          e.preventDefault();
+          el.classList.remove("drag-over");
+          const file = e.dataTransfer?.files?.[0];
+          if (!file) return;
+          const path = file.path || file.name;
+          const input = el.querySelector("input");
+          if (input) input.value = path;
+        });
+      });
+
+      $("pickAudioBtn").addEventListener("click", async () => {
+        const p = await open({ directory: true });
+        if (p) $("audioWatch").value = p;
+      });
+      $("pickExportBtn").addEventListener("click", async () => {
+        const p = await open({ directory: true });
+        if (p) $("exportDir").value = p;
+      });
+      $("pickSessionBtn").addEventListener("click", async () => {
+        const p = await open({ multiple: false, filters: [{ name: "Text", extensions: ["txt"] }] });
+        if (p) $("sessionInfoPath").value = p;
+      });
+
+      function gatherConfig() {
+        return {
+          apiBaseUrl: $("apiBaseUrl").value.trim(),
+          pairToken: $("pairToken").value.trim(),
+          audioWatch: $("audioWatch").value.trim(),
+          trackId: $("trackId").value.trim(),
+          exportDir: $("exportDir").value.trim(),
+          sessionInfoPath: $("sessionInfoPath").value.trim(),
+        };
       }
 
       async function loadConfig() {
@@ -168,79 +571,87 @@
           $("pairToken").value = cfg.pairToken || "";
           $("audioWatch").value = cfg.audioWatch || "";
           $("trackId").value = cfg.trackId || "";
+          $("exportDir").value = cfg.exportDir || "";
+          $("sessionInfoPath").value = cfg.sessionInfoPath || "";
+          if (cfg.pairToken) startCountdown();
         } catch (e) {
-          appendLog("load_config error: " + e);
+          appendLog("load_config error: " + e, "err");
         }
       }
-
-      function gatherConfig() {
-        return {
-          apiBaseUrl: $("apiBaseUrl").value.trim(),
-          pairToken: $("pairToken").value.trim(),
-          audioWatch: $("audioWatch").value.trim(),
-          trackId: $("trackId").value.trim(),
-        };
-      }
-
-      $("pickBtn").addEventListener("click", async () => {
-        const path = await open({ directory: true, multiple: false });
-        if (path) $("audioWatch").value = path;
-      });
 
       $("testBtn").addEventListener("click", async () => {
         const cfg = gatherConfig();
         if (!cfg.pairToken) {
-          setStatus("Pairing token missing", "err");
+          setStatus("error", "Token missing");
           return;
         }
-        setStatus("Testing token…");
-        try {
-          const result = await invoke("test_pairing", {
-            apiBaseUrl: cfg.apiBaseUrl,
-            pairToken: cfg.pairToken,
-          });
-          if (result.ok) {
-            setStatus("Token OK — ready to start watching", "ok");
-          } else {
-            setStatus("Token rejected: " + result.message, "err");
-          }
-        } catch (e) {
-          setStatus("Test failed: " + e, "err");
+        setStatus("", "Testing…");
+        const r = await invoke("test_pairing", { apiBaseUrl: cfg.apiBaseUrl, pairToken: cfg.pairToken });
+        if (r.ok) {
+          setStatus("live", "Token OK");
+          startCountdown();
+          appendLog("token verified: " + r.message);
+        } else {
+          setStatus("error", "Rejected");
+          appendLog("token rejected: " + r.message, "err");
         }
       });
 
       $("startBtn").addEventListener("click", async () => {
         const cfg = gatherConfig();
         if (!cfg.audioWatch || !cfg.pairToken) {
-          setStatus("Need pairing token + audio folder", "err");
+          setStatus("error", "Missing token or folder");
           return;
         }
         try {
           await invoke("save_config", { config: cfg });
           await invoke("start_watcher", { config: cfg });
-          setStatus("Watching " + cfg.audioWatch, "ok");
+          setStatus("live", "Watching");
+          liveHint.textContent = "Companion is running. Drop a take into Pro Tools to see it sync.";
           $("startBtn").disabled = true;
           $("stopBtn").disabled = false;
+          if (cfg.pairToken && !tokenStart) startCountdown();
         } catch (e) {
-          setStatus("Start failed: " + e, "err");
+          setStatus("error", "Start failed");
+          appendLog("start failed: " + e, "err");
         }
       });
 
       $("stopBtn").addEventListener("click", async () => {
         try {
           await invoke("stop_watcher");
-          setStatus("Stopped", "ok");
+          setStatus("", "Stopped");
+          liveHint.textContent = "Watcher stopped.";
           $("startBtn").disabled = false;
           $("stopBtn").disabled = true;
         } catch (e) {
-          setStatus("Stop failed: " + e, "err");
+          setStatus("error", "Stop failed");
+          appendLog("stop failed: " + e, "err");
         }
       });
 
-      await listen("companion-log", (event) => {
-        appendLog(event.payload);
-      });
+      function classify(line) {
+        if (/uploaded take/i.test(line)) return "upload";
+        if (/snapshot:|wrote Pro Tools|checkpoint posted/i.test(line)) return "snap";
+        if (/failed|error|rejected/i.test(line)) return "err";
+        return "";
+      }
+      function appendLog(text, hint) {
+        const kind = hint || classify(text);
+        const ts = new Date().toLocaleTimeString();
+        const node = document.createElement("div");
+        node.className = "line " + kind;
+        node.innerHTML = `<span class="ts">${ts}</span><span>${text}</span>`;
+        log.appendChild(node);
+        log.scrollTop = log.scrollHeight;
+        while (log.children.length > 200) log.removeChild(log.firstChild);
+        if (kind === "upload") bumpStat("uploads");
+        else if (kind === "snap") bumpStat("snaps");
+        else if (kind === "err") bumpStat("errors");
+        $("statLast").textContent = ts;
+      }
 
+      await listen("companion-log", (event) => appendLog(event.payload));
       await loadConfig();
     </script>
   </body>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, router } from "expo-router";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
+import { parseProducerNote } from "@/lib/parse-timestamps";
 
 type BoothTake = {
   id: string;
@@ -100,63 +101,90 @@ export default function BoothScreen() {
           {data?.takes.length === 0 ? (
             <Text style={styles.empty}>No takes uploaded yet. Producer will share as they go.</Text>
           ) : (
-            data?.takes.map((t) => (
-              <View key={t.id} style={styles.takeRow}>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text style={styles.takeName} numberOfLines={1}>
-                    {t.filename}
-                  </Text>
-                  <Text style={styles.takeMeta}>
-                    {t.durationSec ? `${t.durationSec.toFixed(1)}s · ` : ""}
-                    {t.pitchMeanHz ? `${t.pitchMeanHz.toFixed(0)} Hz · ` : ""}
-                    {t.energyAvgDb !== null ? `${t.energyAvgDb} dB · ` : ""}
-                    {new Date(t.uploadedAt).toLocaleTimeString()}
-                  </Text>
-                  {Platform.OS === "web" && t.audioUrl ? (
-                    <audio
-                      controls
-                      preload="none"
-                      src={t.audioUrl}
-                      style={{
-                        width: "100%",
-                        height: 32,
-                        marginTop: 2,
-                      }}
-                    />
-                  ) : null}
-                  {t.producerNote ? (
-                    <View style={styles.producerNoteBlock}>
-                      <Text style={styles.producerNoteLabel}>Producer note</Text>
-                      <Text style={styles.producerNoteText}>{t.producerNote}</Text>
-                    </View>
-                  ) : null}
-                  {t.aiNotes ? (
-                    <View style={styles.aiNotesBlock}>
-                      <Text style={styles.aiNotesLabel}>AI feedback</Text>
-                      <Text style={styles.takeNotes}>{t.aiNotes}</Text>
-                    </View>
-                  ) : null}
-                </View>
-                <View style={{ alignItems: "flex-end", gap: 6 }}>
-                  {t.producerDecision ? (
-                    <Text
-                      style={[
-                        styles.decisionBadge,
-                        t.producerDecision === "keeper"
-                          ? styles.decisionKeeper
-                          : styles.decisionRedo,
-                      ]}
-                    >
-                      {t.producerDecision === "keeper" ? "Keeper" : "Re-do"}
-                    </Text>
-                  ) : null}
-                  <Text style={[styles.statusBadge, { color: statusColor(t.status) }]}>{t.status}</Text>
-                </View>
-              </View>
-            ))
+            data?.takes.map((t) => <TakeCard key={t.id} take={t} />)
           )}
         </ScrollView>
       )}
+    </View>
+  );
+}
+
+function TakeCard({ take }: { take: BoothTake }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const noteSegments = parseProducerNote(take.producerNote);
+
+  function scrubTo(seconds: number) {
+    const el = audioRef.current;
+    if (!el) return;
+    el.currentTime = seconds;
+    void el.play().catch(() => undefined);
+  }
+
+  return (
+    <View style={styles.takeRow}>
+      <View style={{ flex: 1, gap: 6 }}>
+        <Text style={styles.takeName} numberOfLines={1}>
+          {take.filename}
+        </Text>
+        <Text style={styles.takeMeta}>
+          {take.durationSec ? `${take.durationSec.toFixed(1)}s · ` : ""}
+          {take.pitchMeanHz ? `${take.pitchMeanHz.toFixed(0)} Hz · ` : ""}
+          {take.energyAvgDb !== null ? `${take.energyAvgDb} dB · ` : ""}
+          {new Date(take.uploadedAt).toLocaleTimeString()}
+        </Text>
+        {Platform.OS === "web" && take.audioUrl ? (
+          <audio
+            ref={(node) => {
+              audioRef.current = node;
+            }}
+            controls
+            preload="none"
+            src={take.audioUrl}
+            style={{ width: "100%", height: 32, marginTop: 2 }}
+          />
+        ) : null}
+        {noteSegments.length > 0 ? (
+          <View style={styles.producerNoteBlock}>
+            <Text style={styles.producerNoteLabel}>Producer note</Text>
+            <Text style={styles.producerNoteText}>
+              {noteSegments.map((seg, i) =>
+                seg.kind === "text" ? (
+                  <Text key={i}>{seg.text}</Text>
+                ) : (
+                  <Text
+                    key={i}
+                    onPress={() => scrubTo(seg.seconds)}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Jump to ${seg.raw}`}
+                    style={styles.timestampLink}
+                  >
+                    {seg.raw}
+                  </Text>
+                ),
+              )}
+            </Text>
+          </View>
+        ) : null}
+        {take.aiNotes ? (
+          <View style={styles.aiNotesBlock}>
+            <Text style={styles.aiNotesLabel}>AI feedback</Text>
+            <Text style={styles.takeNotes}>{take.aiNotes}</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={{ alignItems: "flex-end", gap: 6 }}>
+        {take.producerDecision ? (
+          <Text
+            style={[
+              styles.decisionBadge,
+              take.producerDecision === "keeper" ? styles.decisionKeeper : styles.decisionRedo,
+            ]}
+          >
+            {take.producerDecision === "keeper" ? "Keeper" : "Re-do"}
+          </Text>
+        ) : null}
+        <Text style={[styles.statusBadge, { color: statusColor(take.status) }]}>{take.status}</Text>
+      </View>
     </View>
   );
 }
@@ -254,6 +282,11 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 13,
     lineHeight: 18,
+  },
+  timestampLink: {
+    color: Colors.gradientMid,
+    fontFamily: "Inter_700Bold",
+    textDecorationLine: "underline",
   },
   aiNotesBlock: { marginTop: 4 },
   aiNotesLabel: {

@@ -20,6 +20,7 @@ import {
   type TakeAnalysis,
   type TakeRecord,
 } from "@/lib/takes-client";
+import { formatTimestamp } from "@/lib/parse-timestamps";
 
 type Props = { horizontalMargin?: number };
 
@@ -207,6 +208,17 @@ function TakeRow({
   const [noteDirty, setNoteDirty] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [decisionUpdating, setDecisionUpdating] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const noteSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+
+  function insertTimestampAtCursor() {
+    const seconds = audioRef.current?.currentTime ?? 0;
+    const stamp = `@${formatTimestamp(seconds)} `;
+    const { start, end } = noteSelectionRef.current;
+    const next = noteDraft.slice(0, start) + stamp + noteDraft.slice(end);
+    setNoteDraft(next);
+    setNoteDirty(next !== (take.producerNote ?? ""));
+  }
 
   useEffect(() => {
     if (!noteDirty) setNoteDraft(take.producerNote ?? "");
@@ -361,15 +373,41 @@ function TakeRow({
             }
             disabled={decisionUpdating}
           />
+          {Platform.OS === "web" ? (
+            <Pressable
+              onPress={insertTimestampAtCursor}
+              style={styles.timestampBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Insert current audio time into note"
+            >
+              <Ionicons name="time-outline" size={12} color={Colors.gradientMid} />
+              <Text style={styles.timestampBtnText}>Insert time</Text>
+            </Pressable>
+          ) : null}
         </View>
+        {Platform.OS === "web" && take.storageUrl && take.status === "done" ? (
+          <audio
+            ref={(node) => {
+              audioRef.current = node;
+            }}
+            controls
+            preload="none"
+            src={take.storageUrl}
+            style={{ width: "100%", height: 28 }}
+          />
+        ) : null}
         <TextInput
           value={noteDraft}
           onChangeText={(t) => {
             setNoteDraft(t);
             setNoteDirty(t !== (take.producerNote ?? ""));
           }}
+          onSelectionChange={(e) => {
+            const sel = e.nativeEvent.selection;
+            if (sel) noteSelectionRef.current = { start: sel.start, end: sel.end };
+          }}
           onBlur={saveNote}
-          placeholder="Producer note — e.g. more breath on chorus 2"
+          placeholder='Producer note — e.g. "@1:23 mer pust her" (tap a timestamp to jump in playback)'
           placeholderTextColor={Colors.textTertiary}
           style={styles.producerNoteInput}
           multiline
@@ -554,6 +592,23 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 10,
     fontStyle: "italic",
+  },
+  timestampBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.gradientMid + "55",
+    backgroundColor: Colors.surface,
+    marginLeft: "auto",
+  },
+  timestampBtnText: {
+    color: Colors.gradientMid,
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
   },
   statusPill: {
     flexDirection: "row",

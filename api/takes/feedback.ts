@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
-import { updateProducerFeedback, type ProducerDecision } from "../_lib/takes-db.js";
+import { getTakeById, updateProducerFeedback, type ProducerDecision } from "../_lib/takes-db.js";
+import { getProjectMembership } from "../_lib/projects-db.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "PATCH" && req.method !== "POST") {
@@ -39,9 +40,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     note = body.producerNote === null ? null : String(body.producerNote).slice(0, 1000);
   }
 
+  const take = await getTakeById(takeId);
+  if (!take) return res.status(404).json({ error: "Take not found" });
+
+  let ownerUserIdForUpdate = take.userId;
+  if (take.projectId) {
+    const membership = await getProjectMembership(take.projectId, userId);
+    if (!membership || membership.role !== "producer") {
+      return res.status(403).json({ error: "Only the producer can edit decision/note" });
+    }
+    ownerUserIdForUpdate = take.userId;
+  } else if (take.userId !== userId) {
+    return res.status(403).json({ error: "Only the take owner can edit" });
+  }
+
   const updated = await updateProducerFeedback({
     takeId,
-    userId,
+    userId: ownerUserIdForUpdate,
     producerNote: note,
     producerDecision: decision,
   });

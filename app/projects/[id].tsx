@@ -73,7 +73,12 @@ function ProjectDetailInner() {
     setInviting(true);
     try {
       const token = await getToken();
-      await addMember(token, String(id), inviteEmail.trim(), inviteRole);
+      const result = await addMember(token, String(id), inviteEmail.trim(), inviteRole);
+      if (result.kind === "pending") {
+        setError(`Invitation email sent to ${result.email} — they'll be added when they sign up.`);
+      } else {
+        setError(null);
+      }
       setInviteEmail("");
       await reload();
     } catch (err) {

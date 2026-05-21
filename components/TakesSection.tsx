@@ -25,6 +25,7 @@ import {
   type TakeRecord,
 } from "@/lib/takes-client";
 import { formatTimestamp } from "@/lib/parse-timestamps";
+import { listProjects, type ProjectListItem } from "@/lib/projects-client";
 
 type Props = { horizontalMargin?: number };
 
@@ -42,6 +43,8 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [projects, setProjectsList] = useState<ProjectListItem[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const reload = useCallback(async () => {
@@ -65,7 +68,16 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
       return;
     }
     void reload();
-  }, [isLoaded, isSignedIn, reload]);
+    void (async () => {
+      try {
+        const token = await getToken();
+        const list = await listProjects(token);
+        setProjectsList(list);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [isLoaded, isSignedIn, reload, getToken]);
 
   async function handleFile(file: File, externalTrackId?: string) {
     if (!isSignedIn) return;
@@ -75,7 +87,12 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
       const token = await getToken();
       if (!token) throw new Error("Missing auth token");
       const inferredTrackId = externalTrackId || file.name.replace(/\.[^.]+$/, "").slice(0, 80);
-      await uploadTake({ file, externalTrackId: inferredTrackId, token });
+      await uploadTake({
+        file,
+        externalTrackId: inferredTrackId,
+        token,
+        projectId: selectedProjectId || undefined,
+      });
       // onUploadCompleted on the server creates the row + kicks off processTake.
       // Poll a bit so we surface the new row + analysis quickly.
       await reload();
@@ -115,6 +132,29 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
         </View>
       </View>
 
+      {Platform.OS === "web" && projects.length > 0 ? (
+        <View style={styles.projectPickerRow}>
+          <Text style={styles.projectPickerLabel}>Project:</Text>
+          <select
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "6px 8px",
+              borderRadius: 7,
+              border: "1px solid #262833",
+              background: "#1a1c25",
+              color: "#f3f4f8",
+              font: "12px Inter, sans-serif",
+            }}
+          >
+            <option value="">(All takes — no project)</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </View>
+      ) : null}
       {Platform.OS === "web" ? (
         <Pressable
           style={[styles.dropZone, dragOver && styles.dropZoneActive]}
@@ -177,12 +217,20 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <View style={styles.list}>
-        {loading ? (
-          <ActivityIndicator color={Colors.textTertiary} />
-        ) : takes.length === 0 ? (
-          <Text style={styles.empty}>No takes yet. Upload your first one above.</Text>
-        ) : (
-          takes.map((t) => (
+        {(() => {
+          const filtered = selectedProjectId
+            ? takes.filter((t) => t.projectId === selectedProjectId)
+            : takes;
+          if (loading) return <ActivityIndicator color={Colors.textTertiary} />;
+          if (filtered.length === 0)
+            return (
+              <Text style={styles.empty}>
+                {selectedProjectId
+                  ? "No takes in this project yet."
+                  : "No takes yet. Upload your first one above."}
+              </Text>
+            );
+          return filtered.map((t) => (
             <TakeRow
               key={t.id}
               take={t}
@@ -191,8 +239,8 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
                 setTakes((prev) => prev.map((tt) => (tt.id === updated.id ? { ...tt, ...updated } : tt)))
               }
             />
-          ))
-        )}
+          ));
+        })()}
       </View>
     </View>
   );
@@ -836,6 +884,16 @@ const styles = StyleSheet.create({
     color: Colors.dangerUnderline,
     fontFamily: "Inter_700Bold",
     fontSize: 11,
+  },
+  projectPickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  projectPickerLabel: {
+    color: Colors.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
   },
   consensusBox: {
     marginTop: 6,

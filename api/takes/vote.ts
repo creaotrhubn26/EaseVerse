@@ -4,7 +4,9 @@ import {
   castConsensusVote,
   clearConsensusVote,
   getConsensusTally,
+  getTakeById,
 } from "../_lib/takes-db.js";
+import { getProjectMembership } from "../_lib/projects-db.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isClerkConfigured()) {
@@ -15,6 +17,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const takeId = typeof req.query.id === "string" ? req.query.id : null;
   if (!takeId) return res.status(400).json({ error: "id query param required" });
+
+  const take = await getTakeById(takeId);
+  if (!take) return res.status(404).json({ error: "Take not found" });
+
+  if (take.projectId) {
+    const membership = await getProjectMembership(take.projectId, userId);
+    if (!membership) return res.status(403).json({ error: "Not a member of this project" });
+    if (req.method !== "GET" && membership.role === "observer") {
+      return res.status(403).json({ error: "Observers can't vote" });
+    }
+    if (req.method !== "GET" && membership.role === "producer") {
+      return res.status(400).json({ error: "Producer owns the decision and doesn't vote" });
+    }
+  } else if (take.userId !== userId && req.method !== "GET") {
+    return res.status(403).json({ error: "This take has no project — only the owner can interact" });
+  }
 
   if (req.method === "GET") {
     const tally = await getConsensusTally(takeId, userId);

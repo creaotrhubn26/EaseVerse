@@ -47,6 +47,18 @@ async function ensureSchema(): Promise<void> {
 
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS project_id TEXT;
     CREATE INDEX IF NOT EXISTS takes_project_idx ON takes (project_id);
+
+    CREATE TABLE IF NOT EXISTS pending_project_invites (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL,
+      invited_by_user_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '14 days',
+      UNIQUE (project_id, email)
+    );
+    CREATE INDEX IF NOT EXISTS pending_project_invites_email_idx ON pending_project_invites (email);
   `);
   ensured = true;
 }
@@ -238,6 +250,60 @@ export async function addProjectMember(args: {
     invitedByUserId: row.invited_by_user_id,
     joinedAt: row.joined_at,
   };
+}
+
+export async function upsertPendingInvite(args: {
+  projectId: string;
+  email: string;
+  role: ProjectRole;
+  invitedByUserId: string;
+}): Promise<{ id: string; createdAt: string }> {
+  const p = getPool();
+  if (!p) throw new Error("Database not available");
+  await ensureSchema();
+  const id = `inv_${crypto.randomBytes(12).toString("base64url")}`;
+  const role = ROLES.includes(args.role) ? args.role : "observer";
+  const { rows } = await p.query<{ id: string; created_at: string }>(
+    `INSERT INTO pending_project_invites (id, project_id, email, role, invited_by_user_id)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (project_id, email) DO UPDATE SET
+       role = EXCLUDED.role,
+       invited_by_user_id = EXCLUDED.invited_by_user_id,
+       created_at = NOW(),
+       expires_at = NOW() + INTERVAL '14 days'
+     RETURNING id, created_at`,
+    [id, args.projectId, args.email.toLowerCase(), role, args.invitedByUserId],
+  );
+  return { id: rows[0].id, createdAt: rows[0].created_at };
+}
+
+export async function applyPendingInvitesForEmail(args: {
+  userId: string;
+  email: string;
+}): Promise<number> {
+  const p = getPool();
+  if (!p) return 0;
+  await ensureSchema();
+  const email = args.email.toLowerCase();
+  const { rows } = await p.query<{ project_id: string; role: string; invited_by_user_id: string }>(
+    `SELECT project_id, role, invited_by_user_id
+     FROM pending_project_invites
+     WHERE email = $1 AND expires_at > NOW()`,
+    [email],
+  );
+  for (const row of rows) {
+    await addProjectMember({
+      projectId: row.project_id,
+      userId: args.userId,
+      email,
+      role: normalizeRole(row.role),
+      invitedByUserId: row.invited_by_user_id,
+    });
+  }
+  if (rows.length > 0) {
+    await p.query(`DELETE FROM pending_project_invites WHERE email = $1`, [email]);
+  }
+  return rows.length;
 }
 
 export async function removeProjectMember(args: {

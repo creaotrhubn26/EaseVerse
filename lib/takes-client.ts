@@ -21,6 +21,7 @@ export type TakeRecord = {
   producerMemoUrl: string | null;
   producerMemoDurationSec: number | null;
   decisionLockedAt: string | null;
+  projectId: string | null;
 };
 
 export type ConsensusVote = "agree" | "disagree";
@@ -53,6 +54,7 @@ export async function uploadTake(args: {
   externalTrackId?: string;
   sourcePath?: string;
   token: string;
+  projectId?: string;
 }): Promise<{ url: string; pathname: string }> {
   const result = await upload(args.file.name, args.file, {
     access: "public",
@@ -61,6 +63,7 @@ export async function uploadTake(args: {
       externalTrackId: args.externalTrackId,
       sourcePath: args.sourcePath,
       filename: args.file.name,
+      projectId: args.projectId,
     }),
     headers: { Authorization: `Bearer ${args.token}` },
   });

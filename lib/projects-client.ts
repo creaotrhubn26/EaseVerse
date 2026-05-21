@@ -50,12 +50,16 @@ export async function getProject(
   return (await res.json()) as { project: Project; members: ProjectMember[]; viewerRole: ProjectRole };
 }
 
+export type AddMemberResult =
+  | { kind: "member"; member: ProjectMember }
+  | { kind: "pending"; email: string; role: ProjectRole };
+
 export async function addMember(
   token: string | null,
   projectId: string,
   email: string,
   role: ProjectRole,
-): Promise<ProjectMember> {
+): Promise<AddMemberResult> {
   const res = await authedFetch(
     `/api/projects/detail?id=${encodeURIComponent(projectId)}`,
     token,
@@ -65,8 +69,11 @@ export async function addMember(
     const text = await res.text().catch(() => "");
     throw new Error(text || `Add member failed: ${res.status}`);
   }
-  const json = (await res.json()) as { member: ProjectMember };
-  return json.member;
+  const json = await res.json();
+  if (res.status === 202 && json.pending) {
+    return { kind: "pending", email: json.pending.email, role: json.pending.role };
+  }
+  return { kind: "member", member: (json as { member: ProjectMember }).member };
 }
 
 export async function removeMember(

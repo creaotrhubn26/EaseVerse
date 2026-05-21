@@ -86,6 +86,7 @@ export type TakeRow = {
   producerMemoUrl: string | null;
   producerMemoDurationSec: number | null;
   decisionLockedAt: string | null;
+  projectId: string | null;
 };
 
 export type ConsensusVote = "agree" | "disagree";
@@ -121,14 +122,15 @@ export async function createTake(args: {
   filename: string;
   byteSize?: number;
   storageUrl: string;
+  projectId?: string | null;
 }): Promise<TakeRow | null> {
   const p = getPool();
   if (!p) return null;
   await ensureSchema();
   const { rows } = await p.query<TakeRowDb>(
     `INSERT INTO takes
-      (id, user_id, external_track_id, source_path, filename, byte_size, storage_url)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+      (id, user_id, external_track_id, source_path, filename, byte_size, storage_url, project_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
       args.id,
@@ -138,8 +140,17 @@ export async function createTake(args: {
       args.filename,
       args.byteSize ?? null,
       args.storageUrl,
+      args.projectId ?? null,
     ],
   );
+  return rows[0] ? mapTakeRow(rows[0]) : null;
+}
+
+export async function getTakeById(takeId: string): Promise<TakeRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const { rows } = await p.query<TakeRowDb>(`SELECT * FROM takes WHERE id = $1`, [takeId]);
   return rows[0] ? mapTakeRow(rows[0]) : null;
 }
 
@@ -382,6 +393,7 @@ type TakeRowDb = {
   producer_memo_url: string | null;
   producer_memo_duration_sec: number | null;
   decision_locked_at: string | null;
+  project_id: string | null;
 };
 
 function mapTakeRow(row: TakeRowDb): TakeRow {
@@ -402,6 +414,7 @@ function mapTakeRow(row: TakeRowDb): TakeRow {
     producerMemoUrl: row.producer_memo_url,
     producerMemoDurationSec: row.producer_memo_duration_sec,
     decisionLockedAt: row.decision_locked_at,
+    projectId: row.project_id,
   };
 }
 

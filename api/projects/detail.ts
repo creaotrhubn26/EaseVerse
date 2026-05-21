@@ -6,6 +6,7 @@ import {
   getProjectMembership,
   getProjectWithMembers,
   removeProjectMember,
+  upsertPendingInvite,
   type ProjectRole,
 } from "../_lib/projects-db.js";
 
@@ -22,6 +23,12 @@ const clerk =
           "",
       })
     : null;
+
+function getOrigin(req: VercelRequest): string {
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "easeverse.vercel.app";
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  return `${proto}://${host}`;
+}
 
 async function resolveUserIdByEmail(email: string): Promise<{ userId: string | null; email: string }> {
   const normalized = email.trim().toLowerCase();
@@ -68,9 +75,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const resolved = await resolveUserIdByEmail(email);
     if (!resolved.userId) {
-      return res
-        .status(404)
-        .json({ error: "No EaseVerse account with that email yet — ask them to sign up first" });
+      const pending = await upsertPendingInvite({
+        projectId,
+        email: resolved.email,
+        role,
+        invitedByUserId: userId,
+      });
+      if (clerk) {
+        try {
+          await clerk.invitations.createInvitation({
+            emailAddress: resolved.email,
+            publicMetadata: { projectId, role, pendingInviteId: pending.id },
+            redirectUrl: `${getOrigin(req)}/projects/${projectId}`,
+          });
+        } catch (err) {
+          console.warn("Clerk invitation send failed:", err);
+        }
+      }
+      return res.status(202).json({ pending: { id: pending.id, email: resolved.email, role } });
     }
     const member = await addProjectMember({
       projectId,

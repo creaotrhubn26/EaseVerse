@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { isClerkConfigured, requireAuthOrPairing } from "../_lib/auth.js";
 import { createTake, getTakeWithAnalysis } from "../_lib/takes-db.js";
 import { processTake } from "../_lib/take-processor.js";
+import { getProjectMembership } from "../_lib/projects-db.js";
 
 const ALLOWED_CONTENT_TYPES = [
   "audio/wav",
@@ -52,6 +53,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       request: req as unknown as Request,
       onBeforeGenerateToken: async (_pathname, clientPayload) => {
         const payload = clientPayload ? JSON.parse(clientPayload) : null;
+        const projectId = payload?.projectId ?? null;
+        if (projectId && userIdForClientToken) {
+          const membership = await getProjectMembership(projectId, userIdForClientToken);
+          if (!membership || membership.role === "observer") {
+            throw new Error("You can't upload takes to this project");
+          }
+        }
         return {
           allowedContentTypes: ALLOWED_CONTENT_TYPES,
           maximumSizeInBytes: 200 * 1024 * 1024,
@@ -60,6 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             externalTrackId: payload?.externalTrackId ?? null,
             sourcePath: payload?.sourcePath ?? null,
             filename: payload?.filename ?? null,
+            projectId,
           }),
         };
       },
@@ -84,6 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             sourcePath: meta.sourcePath,
             filename: meta.filename || blob.pathname,
             storageUrl: blob.url,
+            projectId: meta.projectId ?? null,
           });
           console.log("[takes/upload] createTake OK", { takeId, externalTrackId: meta.externalTrackId });
           const take = await getTakeWithAnalysis(takeId);

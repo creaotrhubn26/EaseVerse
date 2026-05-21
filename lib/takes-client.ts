@@ -305,6 +305,21 @@ export async function fetchTakeRanking(
   return (await res.json()) as TakeRanking;
 }
 
+export async function uploadCompExport(args: {
+  compId: string;
+  filename: string;
+  blob: Blob;
+  token: string;
+}): Promise<{ url: string; pathname: string }> {
+  const result = await upload(args.filename, args.blob, {
+    access: "public",
+    handleUploadUrl: `${getApiUrl()}/api/takes/comp-export`,
+    clientPayload: JSON.stringify({ compId: args.compId, filename: args.filename }),
+    headers: { Authorization: `Bearer ${args.token}` },
+  });
+  return { url: result.url, pathname: result.pathname };
+}
+
 export async function deleteComp(token: string | null, compId: string): Promise<void> {
   const res = await authedFetch(
     `/api/takes/comps?id=${encodeURIComponent(compId)}`,

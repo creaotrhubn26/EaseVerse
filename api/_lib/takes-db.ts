@@ -105,6 +105,10 @@ async function ensureSchema(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS comp_segments_comp_idx ON comp_segments (comp_id, ordinal);
     CREATE INDEX IF NOT EXISTS comp_segments_take_idx ON comp_segments (take_id);
+    ALTER TABLE comps ADD COLUMN IF NOT EXISTS exported_wav_url TEXT;
+    ALTER TABLE comps ADD COLUMN IF NOT EXISTS exported_at TIMESTAMPTZ;
+    ALTER TABLE comps ADD COLUMN IF NOT EXISTS exported_filename TEXT;
+    ALTER TABLE comps ADD COLUMN IF NOT EXISTS exported_delivered_at TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS takes_user_uploaded_idx ON takes (user_id, uploaded_at DESC);
     CREATE INDEX IF NOT EXISTS takes_status_idx ON takes (status);
 
@@ -719,6 +723,10 @@ export type CompRow = {
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
+  exportedWavUrl: string | null;
+  exportedAt: string | null;
+  exportedFilename: string | null;
+  exportedDeliveredAt: string | null;
 };
 
 export type CompSegmentRow = {
@@ -750,6 +758,10 @@ export async function createComp(args: {
     created_by_user_id: string;
     created_at: string;
     updated_at: string;
+    exported_wav_url: string | null;
+    exported_at: string | null;
+    exported_filename: string | null;
+    exported_delivered_at: string | null;
   }>(
     `INSERT INTO comps (id, project_id, external_track_id, name, created_by_user_id)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -764,6 +776,10 @@ export async function createComp(args: {
     createdByUserId: rows[0].created_by_user_id,
     createdAt: rows[0].created_at,
     updatedAt: rows[0].updated_at,
+    exportedWavUrl: rows[0].exported_wav_url,
+    exportedAt: rows[0].exported_at,
+    exportedFilename: rows[0].exported_filename,
+    exportedDeliveredAt: rows[0].exported_delivered_at,
   };
 }
 
@@ -779,6 +795,10 @@ export async function listCompsForTrack(externalTrackId: string): Promise<CompRo
     created_by_user_id: string;
     created_at: string;
     updated_at: string;
+    exported_wav_url: string | null;
+    exported_at: string | null;
+    exported_filename: string | null;
+    exported_delivered_at: string | null;
   }>(
     `SELECT * FROM comps WHERE external_track_id = $1 ORDER BY created_at DESC`,
     [externalTrackId],
@@ -791,6 +811,10 @@ export async function listCompsForTrack(externalTrackId: string): Promise<CompRo
     createdByUserId: r.created_by_user_id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    exportedWavUrl: r.exported_wav_url,
+    exportedAt: r.exported_at,
+    exportedFilename: r.exported_filename,
+    exportedDeliveredAt: r.exported_delivered_at,
   }));
 }
 
@@ -806,6 +830,10 @@ export async function getComp(compId: string): Promise<CompRow | null> {
     created_by_user_id: string;
     created_at: string;
     updated_at: string;
+    exported_wav_url: string | null;
+    exported_at: string | null;
+    exported_filename: string | null;
+    exported_delivered_at: string | null;
   }>(`SELECT * FROM comps WHERE id = $1`, [compId]);
   if (!rows[0]) return null;
   return {
@@ -816,6 +844,10 @@ export async function getComp(compId: string): Promise<CompRow | null> {
     createdByUserId: rows[0].created_by_user_id,
     createdAt: rows[0].created_at,
     updatedAt: rows[0].updated_at,
+    exportedWavUrl: rows[0].exported_wav_url,
+    exportedAt: rows[0].exported_at,
+    exportedFilename: rows[0].exported_filename,
+    exportedDeliveredAt: rows[0].exported_delivered_at,
   };
 }
 
@@ -891,6 +923,76 @@ export async function replaceCompSegments(args: {
   }
   await p.query(`UPDATE comps SET updated_at = NOW() WHERE id = $1`, [args.compId]);
   return out;
+}
+
+export async function markCompExported(args: {
+  compId: string;
+  url: string;
+  filename: string;
+}): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await ensureSchema();
+  await p.query(
+    `UPDATE comps SET exported_wav_url = $2, exported_filename = $3, exported_at = NOW(), exported_delivered_at = NULL WHERE id = $1`,
+    [args.compId, args.url, args.filename],
+  );
+}
+
+export async function markCompDelivered(compId: string): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await ensureSchema();
+  await p.query(`UPDATE comps SET exported_delivered_at = NOW() WHERE id = $1`, [compId]);
+}
+
+export async function listPendingCompExports(args: {
+  userId: string;
+  projectId?: string | null;
+  externalTrackId?: string | null;
+}): Promise<CompRow[]> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  const filters: string[] = ["exported_wav_url IS NOT NULL", "exported_delivered_at IS NULL"];
+  const values: unknown[] = [args.userId];
+  filters.push("created_by_user_id = $1");
+  if (args.projectId) {
+    values.push(args.projectId);
+    filters.push(`project_id = $${values.length}`);
+  } else if (args.externalTrackId) {
+    values.push(args.externalTrackId);
+    filters.push(`external_track_id = $${values.length}`);
+  }
+  const { rows } = await p.query<{
+    id: string;
+    project_id: string | null;
+    external_track_id: string | null;
+    name: string;
+    created_by_user_id: string;
+    created_at: string;
+    updated_at: string;
+    exported_wav_url: string | null;
+    exported_at: string | null;
+    exported_filename: string | null;
+    exported_delivered_at: string | null;
+  }>(
+    `SELECT * FROM comps WHERE ${filters.join(" AND ")} ORDER BY exported_at DESC`,
+    values,
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    projectId: r.project_id,
+    externalTrackId: r.external_track_id,
+    name: r.name,
+    createdByUserId: r.created_by_user_id,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    exportedWavUrl: r.exported_wav_url,
+    exportedAt: r.exported_at,
+    exportedFilename: r.exported_filename,
+    exportedDeliveredAt: r.exported_delivered_at,
+  }));
 }
 
 export async function deleteComp(args: { compId: string; userId: string }): Promise<boolean> {

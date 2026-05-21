@@ -286,6 +286,14 @@ export type CompanionSnapshot = {
     label: string | null;
   }>;
   checkpoints: Array<{ id: string; source: string; payload: unknown; capturedAt: string }>;
+  pendingCompExports?: Array<{
+    compId: string;
+    name: string;
+    externalTrackId: string | null;
+    wavUrl: string | null;
+    filename: string | null;
+    exportedAt: string | null;
+  }>;
 };
 
 export async function fetchCompanionSnapshot(
@@ -335,4 +343,37 @@ export async function postSessionCheckpoint(
     throw new Error(`Checkpoint POST failed: ${response.status} ${body.slice(0, 200)}`);
   }
   return (await response.json()) as { id: string; capturedAt: string };
+}
+
+export async function downloadCompExport(
+  config: CompanionConfig,
+  args: { wavUrl: string; targetPath: string }
+): Promise<void> {
+  const { writeFile, mkdir } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const response = await fetch(args.wavUrl);
+  if (!response.ok) {
+    throw new Error(`download wav failed ${response.status}`);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await mkdir(path.dirname(args.targetPath), { recursive: true });
+  await writeFile(args.targetPath, buffer);
+}
+
+export async function ackCompExport(
+  config: CompanionConfig,
+  compId: string
+): Promise<void> {
+  if (!config.pairingToken) throw new Error('ackCompExport: missing pairingToken');
+  const base = preferredApiBaseUrl || normalizeBaseUrl(config.apiBaseUrl);
+  const response = await fetch(
+    `${base}/api/takes/comp-export?id=${encodeURIComponent(compId)}`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${config.pairingToken}` },
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`ack comp export failed ${response.status}`);
+  }
 }

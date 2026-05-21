@@ -28,6 +28,7 @@ import {
   fetchTakes,
   getComp,
   saveCompSegments,
+  uploadCompExport,
   type CompRecord,
   type CompSegment,
   type DetectedSection,
@@ -106,6 +107,42 @@ function CompInner() {
   const [previewDuration, setPreviewDuration] = useState<number | null>(null);
 
   const [exporting, setExporting] = useState(false);
+  const [sendingToCompanion, setSendingToCompanion] = useState(false);
+  const [companionStatus, setCompanionStatus] = useState<string | null>(null);
+
+  async function handleSendToCompanion() {
+    if (segments.length === 0 || !comp) return;
+    setSendingToCompanion(true);
+    setCompanionStatus(null);
+    try {
+      const stitchSegments = segments
+        .map((s) => {
+          const take = takes.find((t) => t.id === s.takeId);
+          return {
+            takeId: s.takeId,
+            audioUrl: take?.storageUrl || "",
+            startSec: s.startSec,
+            endSec: s.endSec,
+          };
+        })
+        .filter((s) => s.audioUrl);
+      const buffer = await buildCompBuffer(stitchSegments);
+      if (!buffer) return;
+      const wav = bufferToWavBlob(buffer);
+      const safeName = (comp.name || "comp").replace(/[^a-zA-Z0-9-_]+/g, "_").slice(0, 60);
+      const filename = `${safeName}-comp.wav`;
+      const token = await getToken();
+      if (!token) throw new Error("missing auth token");
+      await uploadCompExport({ compId: comp.id, filename, blob: wav, token });
+      setCompanionStatus(
+        "Sent — the companion will drop it into your Pro Tools Audio Files folder within a few seconds.",
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSendingToCompanion(false);
+    }
+  }
 
   async function handleExportWav() {
     if (segments.length === 0 || !comp) return;
@@ -330,6 +367,18 @@ function CompInner() {
               <Ionicons name="cloud-download" size={12} color={Colors.gradientStart} />
               <Text style={styles.previewBtnText}>{exporting ? "Exporting…" : "Export WAV"}</Text>
             </Pressable>
+            <Pressable
+              onPress={handleSendToCompanion}
+              disabled={sendingToCompanion}
+              style={[styles.previewBtn, sendingToCompanion && { opacity: 0.5 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Send comp to Pro Tools companion"
+            >
+              <Ionicons name="send" size={12} color={Colors.gradientStart} />
+              <Text style={styles.previewBtnText}>
+                {sendingToCompanion ? "Sending…" : "Send to Pro Tools"}
+              </Text>
+            </Pressable>
           </>
         ) : null}
         <Pressable
@@ -344,6 +393,7 @@ function CompInner() {
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {companionStatus ? <Text style={styles.companionStatus}>{companionStatus}</Text> : null}
 
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Text style={styles.sectionLabel}>Comp plan ({segments.length} segment{segments.length === 1 ? "" : "s"})</Text>
@@ -612,5 +662,15 @@ const styles = StyleSheet.create({
     color: Colors.gradientMid,
     fontFamily: "Inter_700Bold",
     fontSize: 10,
+  },
+  companionStatus: {
+    color: Colors.successUnderline,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    backgroundColor: Colors.successUnderline + "10",
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: Colors.successUnderline + "44",
   },
 });

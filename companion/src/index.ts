@@ -1,6 +1,8 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { loadCompanionConfig } from './config';
 import {
+  ackCompExport,
+  downloadCompExport,
   fetchCollabLyricsList,
   fetchCompanionSnapshot,
   fetchProToolsSyncList,
@@ -8,6 +10,7 @@ import {
   upsertProToolsSync,
   uploadTake,
 } from './api';
+import path from 'node:path';
 import { FileProToolsAdapter } from './adapters/file-adapter';
 import { ProToolsSessionInfoAdapter } from './adapters/protools-session-info-adapter';
 import { PullSnapshotWriter } from './adapters/pull-writer';
@@ -155,6 +158,27 @@ async function run(): Promise<void> {
             }
           } catch (err) {
             console.warn('[companion] export writer failed', (err as Error).message);
+          }
+        }
+
+        if (snapshot?.pendingCompExports && snapshot.pendingCompExports.length > 0 && config.audioWatchPath) {
+          for (const exp of snapshot.pendingCompExports) {
+            if (!exp.wavUrl || !exp.filename) continue;
+            try {
+              const target = path.join(config.audioWatchPath, exp.filename);
+              await downloadCompExport(config, { wavUrl: exp.wavUrl, targetPath: target });
+              await ackCompExport(config, exp.compId);
+              console.log('[companion] delivered comp export', {
+                compId: exp.compId,
+                name: exp.name,
+                target,
+              });
+            } catch (err) {
+              console.warn('[companion] comp export delivery failed', {
+                compId: exp.compId,
+                error: (err as Error).message,
+              });
+            }
           }
         }
       }

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isClerkConfigured, requireAuthOrPairing } from "../_lib/auth.js";
 import {
   listKeeperTakes,
+  listPendingCompExports,
   listRecentCheckpoints,
   listRegionsForTakes,
   listTakesForUser,
@@ -74,6 +75,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? await listRecentCheckpoints({ externalTrackId, limit: 10 })
       : [];
 
+  const pendingExports = await listPendingCompExports({
+    userId,
+    projectId: projectId ?? undefined,
+    externalTrackId: externalTrackId ?? undefined,
+  });
+
   return res.status(200).json({
     generatedAt: new Date().toISOString(),
     keepers: keeperTakes.map((t) => ({
@@ -109,5 +116,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })),
     ),
     checkpoints,
+    pendingCompExports: pendingExports.map((c) => ({
+      compId: c.id,
+      name: c.name,
+      externalTrackId: c.externalTrackId,
+      wavUrl: c.exportedWavUrl,
+      filename: c.exportedFilename,
+      exportedAt: c.exportedAt,
+    })),
   });
 }

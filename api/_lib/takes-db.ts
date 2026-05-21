@@ -62,6 +62,18 @@ async function ensureSchema(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS take_regions_take_idx ON take_regions (take_id);
+
+    CREATE TABLE IF NOT EXISTS session_checkpoints (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      external_track_id TEXT,
+      user_id TEXT NOT NULL,
+      source TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS session_checkpoints_project_idx ON session_checkpoints (project_id, captured_at DESC);
+    CREATE INDEX IF NOT EXISTS session_checkpoints_track_idx ON session_checkpoints (external_track_id, captured_at DESC);
     CREATE INDEX IF NOT EXISTS takes_user_uploaded_idx ON takes (user_id, uploaded_at DESC);
     CREATE INDEX IF NOT EXISTS takes_status_idx ON takes (status);
 
@@ -659,6 +671,66 @@ export async function updateTakeRegionLoop(args: {
     [args.regionId, args.userId, args.autoLoop],
   );
   return rows[0] ? mapRegion(rows[0]) : null;
+}
+
+export async function recordSessionCheckpoint(args: {
+  userId: string;
+  projectId?: string | null;
+  externalTrackId?: string | null;
+  source: string;
+  payload: unknown;
+}): Promise<{ id: string; capturedAt: string } | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const id = `chk_${crypto.randomBytes(9).toString("base64url")}`;
+  const { rows } = await p.query<{ id: string; captured_at: string }>(
+    `INSERT INTO session_checkpoints (id, project_id, external_track_id, user_id, source, payload)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, captured_at`,
+    [
+      id,
+      args.projectId ?? null,
+      args.externalTrackId ?? null,
+      args.userId,
+      args.source.slice(0, 80),
+      JSON.stringify(args.payload),
+    ],
+  );
+  return rows[0] ? { id: rows[0].id, capturedAt: rows[0].captured_at } : null;
+}
+
+export async function listRecentCheckpoints(args: {
+  projectId?: string;
+  externalTrackId?: string;
+  limit?: number;
+}): Promise<Array<{ id: string; source: string; payload: unknown; capturedAt: string }>> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  const limit = args.limit ?? 20;
+  let result: { rows: Array<{ id: string; source: string; payload: unknown; captured_at: string }> };
+  if (args.projectId) {
+    result = await p.query(
+      `SELECT id, source, payload, captured_at FROM session_checkpoints
+       WHERE project_id = $1 ORDER BY captured_at DESC LIMIT $2`,
+      [args.projectId, limit],
+    );
+  } else if (args.externalTrackId) {
+    result = await p.query(
+      `SELECT id, source, payload, captured_at FROM session_checkpoints
+       WHERE external_track_id = $1 ORDER BY captured_at DESC LIMIT $2`,
+      [args.externalTrackId, limit],
+    );
+  } else {
+    return [];
+  }
+  return result.rows.map((r) => ({
+    id: r.id,
+    source: r.source,
+    payload: r.payload,
+    capturedAt: r.captured_at,
+  }));
 }
 
 export async function unlockTakeDecision(args: {

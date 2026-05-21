@@ -1,12 +1,15 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { CollabLyricsItem } from '../api';
+import type { CollabLyricsItem, CompanionSnapshot } from '../api';
 import type { ProToolsSyncRecord } from '../types';
 
 export interface PullSnapshot {
   pulledAt: string;
   protools: ProToolsSyncRecord[];
   lyrics: CollabLyricsItem[];
+  keepers?: CompanionSnapshot['keepers'];
+  markers?: CompanionSnapshot['markers'];
+  regions?: CompanionSnapshot['regions'];
 }
 
 export class PullSnapshotWriter {

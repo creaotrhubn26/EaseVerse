@@ -255,3 +255,84 @@ export async function uploadTake(
   });
   return { url: result.url, pathname: result.pathname };
 }
+
+export type CompanionSnapshot = {
+  generatedAt: string;
+  keepers: Array<{
+    id: string;
+    filename: string;
+    sourcePath: string | null;
+    externalTrackId: string | null;
+    durationSec: number | null;
+    uploadedAt: string;
+    decisionLockedAt: string | null;
+  }>;
+  markers: Array<{
+    takeId: string;
+    externalTrackId: string | null;
+    sourcePath: string | null;
+    filename: string;
+    seconds: number;
+    label: string | null;
+  }>;
+  regions: Array<{
+    regionId: string;
+    takeId: string;
+    externalTrackId: string | null;
+    sourcePath: string | null;
+    filename: string;
+    startSec: number;
+    endSec: number;
+    label: string | null;
+  }>;
+  checkpoints: Array<{ id: string; source: string; payload: unknown; capturedAt: string }>;
+};
+
+export async function fetchCompanionSnapshot(
+  config: CompanionConfig
+): Promise<CompanionSnapshot> {
+  if (!config.pairingToken) {
+    throw new Error('fetchCompanionSnapshot: missing pairingToken');
+  }
+  const base = preferredApiBaseUrl || normalizeBaseUrl(config.apiBaseUrl);
+  const url = new URL(`${base}/api/companion/snapshot`);
+  if (config.projectId) url.searchParams.set('projectId', config.projectId);
+  if (config.trackId) url.searchParams.set('trackId', config.trackId);
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${config.pairingToken}` },
+  });
+  if (!response.ok) {
+    const body = await safeReadText(response);
+    throw new Error(`Snapshot fetch failed: ${response.status} ${body.slice(0, 200)}`);
+  }
+  return (await response.json()) as CompanionSnapshot;
+}
+
+export async function postSessionCheckpoint(
+  config: CompanionConfig,
+  args: { source: string; payload: unknown }
+): Promise<{ id: string; capturedAt: string }> {
+  if (!config.pairingToken) {
+    throw new Error('postSessionCheckpoint: missing pairingToken');
+  }
+  const base = preferredApiBaseUrl || normalizeBaseUrl(config.apiBaseUrl);
+  const response = await fetch(`${base}/api/companion/checkpoint`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${config.pairingToken}`,
+    },
+    body: JSON.stringify({
+      projectId: config.projectId ?? undefined,
+      externalTrackId: config.trackId ?? undefined,
+      source: args.source,
+      payload: args.payload,
+    }),
+  });
+  if (!response.ok) {
+    const body = await safeReadText(response);
+    throw new Error(`Checkpoint POST failed: ${response.status} ${body.slice(0, 200)}`);
+  }
+  return (await response.json()) as { id: string; capturedAt: string };
+}

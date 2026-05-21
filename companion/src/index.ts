@@ -1,6 +1,13 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { loadCompanionConfig } from './config';
-import { fetchCollabLyricsList, fetchProToolsSyncList, upsertProToolsSync, uploadTake } from './api';
+import {
+  fetchCollabLyricsList,
+  fetchCompanionSnapshot,
+  fetchProToolsSyncList,
+  postSessionCheckpoint,
+  upsertProToolsSync,
+  uploadTake,
+} from './api';
 import { FileProToolsAdapter } from './adapters/file-adapter';
 import { ProToolsSessionInfoAdapter } from './adapters/protools-session-info-adapter';
 import { PullSnapshotWriter } from './adapters/pull-writer';
@@ -49,6 +56,28 @@ async function run(): Promise<void> {
           takeScores: result.takeScores.length,
           pronunciationFeedback: result.pronunciationFeedback.length,
         });
+
+        if (config.pairingToken) {
+          try {
+            const checkpoint = await postSessionCheckpoint(config, {
+              source: 'protools-session-info',
+              payload: {
+                externalTrackId: payload.externalTrackId,
+                bpm: payload.bpm,
+                markers: payload.markers,
+                takeScores: payload.takeScores,
+                pronunciationFeedback: payload.pronunciationFeedback,
+              },
+            });
+            if (config.logVerbose) {
+              console.log('[companion] checkpoint stored', checkpoint);
+            }
+          } catch (err) {
+            if (config.logVerbose) {
+              console.warn('[companion] checkpoint failed', (err as Error).message);
+            }
+          }
+        }
       }
 
       if (config.audioWatchPath && config.pairingToken) {
@@ -78,15 +107,26 @@ async function run(): Promise<void> {
       }
 
       if (config.pullEnabled && pullWriter) {
-        const [protools, lyrics] = await Promise.all([
+        const [protools, lyrics, snapshot] = await Promise.all([
           fetchProToolsSyncList(config, { externalTrackId: config.pullTrackId }),
           fetchCollabLyricsList(config, { externalTrackId: config.pullTrackId }),
+          config.pairingToken
+            ? fetchCompanionSnapshot(config).catch((err) => {
+                if (config.logVerbose) {
+                  console.warn('[companion] snapshot fetch failed', (err as Error).message);
+                }
+                return null;
+              })
+            : Promise.resolve(null),
         ]);
 
         const didWrite = await pullWriter.writeIfChanged({
           pulledAt: new Date().toISOString(),
           protools,
           lyrics,
+          keepers: snapshot?.keepers ?? [],
+          markers: snapshot?.markers ?? [],
+          regions: snapshot?.regions ?? [],
         });
 
         if (didWrite || config.logVerbose) {
@@ -94,6 +134,9 @@ async function run(): Promise<void> {
             wrote: didWrite,
             protools: protools.length,
             lyrics: lyrics.length,
+            keepers: snapshot?.keepers.length ?? 0,
+            markers: snapshot?.markers.length ?? 0,
+            regions: snapshot?.regions.length ?? 0,
             outputPath: config.importFilePath,
           });
         }

@@ -50,6 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       producer_decision: string | null;
       producer_memo_url: string | null;
       producer_memo_duration_sec: number | null;
+      decision_locked_at: string | null;
+      agree_count: string | number | null;
+      disagree_count: string | number | null;
       transcript: string | null;
       ai_notes: string | null;
       pitch_mean_hz: number | null;
@@ -57,7 +60,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }>(
       `SELECT t.id, t.filename, t.uploaded_at, t.duration_sec, t.status, t.storage_url,
               t.producer_note, t.producer_decision,
-              t.producer_memo_url, t.producer_memo_duration_sec,
+              t.producer_memo_url, t.producer_memo_duration_sec, t.decision_locked_at,
+              (SELECT COUNT(*) FROM take_consensus_votes v WHERE v.take_id = t.id AND v.vote = 'agree') AS agree_count,
+              (SELECT COUNT(*) FROM take_consensus_votes v WHERE v.take_id = t.id AND v.vote = 'disagree') AS disagree_count,
               a.transcript, a.ai_notes, a.pitch_mean_hz, a.energy_avg_db
        FROM takes t
        LEFT JOIN take_analyses a ON a.take_id = t.id
@@ -93,6 +98,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             : null,
         producerMemoUrl: t.producer_memo_url,
         producerMemoDurationSec: t.producer_memo_duration_sec,
+        decisionLockedAt: t.decision_locked_at,
+        consensus: {
+          agree: Number(t.agree_count ?? 0),
+          disagree: Number(t.disagree_count ?? 0),
+        },
         transcript: t.transcript,
         aiNotes: t.ai_notes,
         pitchMeanHz: t.pitch_mean_hz,

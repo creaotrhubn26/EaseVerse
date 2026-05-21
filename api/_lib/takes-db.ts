@@ -35,6 +35,17 @@ async function ensureSchema(): Promise<void> {
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_decision TEXT;
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_memo_url TEXT;
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_memo_duration_sec REAL;
+    ALTER TABLE takes ADD COLUMN IF NOT EXISTS decision_locked_at TIMESTAMPTZ;
+
+    CREATE TABLE IF NOT EXISTS take_consensus_votes (
+      take_id TEXT NOT NULL REFERENCES takes(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      vote TEXT NOT NULL CHECK (vote IN ('agree','disagree')),
+      comment TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (take_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS take_consensus_votes_take_idx ON take_consensus_votes (take_id);
     CREATE INDEX IF NOT EXISTS takes_user_uploaded_idx ON takes (user_id, uploaded_at DESC);
     CREATE INDEX IF NOT EXISTS takes_status_idx ON takes (status);
 
@@ -74,6 +85,17 @@ export type TakeRow = {
   producerDecision: ProducerDecision;
   producerMemoUrl: string | null;
   producerMemoDurationSec: number | null;
+  decisionLockedAt: string | null;
+};
+
+export type ConsensusVote = "agree" | "disagree";
+
+export type ConsensusTally = {
+  takeId: string;
+  agree: number;
+  disagree: number;
+  votes: Array<{ userId: string; vote: ConsensusVote; comment: string | null; createdAt: string }>;
+  myVote: ConsensusVote | null;
 };
 
 export type TakeAnalysisRow = {
@@ -359,6 +381,7 @@ type TakeRowDb = {
   producer_decision: string | null;
   producer_memo_url: string | null;
   producer_memo_duration_sec: number | null;
+  decision_locked_at: string | null;
 };
 
 function mapTakeRow(row: TakeRowDb): TakeRow {
@@ -378,7 +401,107 @@ function mapTakeRow(row: TakeRowDb): TakeRow {
     producerDecision: normalizeDecision(row.producer_decision),
     producerMemoUrl: row.producer_memo_url,
     producerMemoDurationSec: row.producer_memo_duration_sec,
+    decisionLockedAt: row.decision_locked_at,
   };
+}
+
+export async function castConsensusVote(args: {
+  takeId: string;
+  userId: string;
+  vote: ConsensusVote;
+  comment?: string | null;
+}): Promise<ConsensusTally | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  await p.query(
+    `INSERT INTO take_consensus_votes (take_id, user_id, vote, comment)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (take_id, user_id) DO UPDATE SET
+       vote = EXCLUDED.vote,
+       comment = EXCLUDED.comment,
+       created_at = NOW()`,
+    [args.takeId, args.userId, args.vote, args.comment ?? null],
+  );
+  return getConsensusTally(args.takeId, args.userId);
+}
+
+export async function clearConsensusVote(args: {
+  takeId: string;
+  userId: string;
+}): Promise<ConsensusTally | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  await p.query(`DELETE FROM take_consensus_votes WHERE take_id = $1 AND user_id = $2`, [
+    args.takeId,
+    args.userId,
+  ]);
+  return getConsensusTally(args.takeId, args.userId);
+}
+
+export async function getConsensusTally(
+  takeId: string,
+  viewerUserId: string | null,
+): Promise<ConsensusTally> {
+  const p = getPool();
+  if (!p) return { takeId, agree: 0, disagree: 0, votes: [], myVote: null };
+  await ensureSchema();
+  const { rows } = await p.query<{
+    user_id: string;
+    vote: string;
+    comment: string | null;
+    created_at: string;
+  }>(
+    `SELECT user_id, vote, comment, created_at
+     FROM take_consensus_votes
+     WHERE take_id = $1
+     ORDER BY created_at ASC`,
+    [takeId],
+  );
+  let agree = 0;
+  let disagree = 0;
+  let myVote: ConsensusVote | null = null;
+  const votes = rows.map((r) => {
+    const v = r.vote === "agree" || r.vote === "disagree" ? (r.vote as ConsensusVote) : "agree";
+    if (v === "agree") agree++;
+    else disagree++;
+    if (viewerUserId && r.user_id === viewerUserId) myVote = v;
+    return { userId: r.user_id, vote: v, comment: r.comment, createdAt: r.created_at };
+  });
+  return { takeId, agree, disagree, votes, myVote };
+}
+
+export async function lockTakeDecision(args: {
+  takeId: string;
+  userId: string;
+}): Promise<TakeRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const { rows } = await p.query<TakeRowDb>(
+    `UPDATE takes SET decision_locked_at = NOW()
+     WHERE id = $1 AND user_id = $2
+     RETURNING *`,
+    [args.takeId, args.userId],
+  );
+  return rows[0] ? mapTakeRow(rows[0]) : null;
+}
+
+export async function unlockTakeDecision(args: {
+  takeId: string;
+  userId: string;
+}): Promise<TakeRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const { rows } = await p.query<TakeRowDb>(
+    `UPDATE takes SET decision_locked_at = NULL
+     WHERE id = $1 AND user_id = $2
+     RETURNING *`,
+    [args.takeId, args.userId],
+  );
+  return rows[0] ? mapTakeRow(rows[0]) : null;
 }
 
 export async function updateProducerMemo(args: {

@@ -14,6 +14,8 @@ import { useLocalSearchParams, router } from "expo-router";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
 import { parseProducerNote } from "@/lib/parse-timestamps";
+import { castVote, clearVote, fetchVoteTally, type ConsensusVote } from "@/lib/takes-client";
+import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 
 type BoothTake = {
   id: string;
@@ -26,6 +28,8 @@ type BoothTake = {
   producerDecision: "keeper" | "redo" | null;
   producerMemoUrl: string | null;
   producerMemoDurationSec: number | null;
+  decisionLockedAt: string | null;
+  consensus: { agree: number; disagree: number };
   transcript: string | null;
   aiNotes: string | null;
   pitchMeanHz: number | null;
@@ -111,9 +115,71 @@ export default function BoothScreen() {
   );
 }
 
+function useBoothAuth(): { getToken: () => Promise<string | null> } {
+  if (CLERK_CONFIGURED) {
+    const mod = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+    const ctx = mod.useAuth();
+    return { getToken: () => ctx.getToken() };
+  }
+  return { getToken: async () => null };
+}
+
 function TakeCard({ take }: { take: BoothTake }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const noteSegments = parseProducerNote(take.producerNote);
+  const [myVote, setMyVote] = useState<ConsensusVote | null>(null);
+  const [tally, setTally] = useState(take.consensus);
+  const [voting, setVoting] = useState(false);
+  const [disagreeDraft, setDisagreeDraft] = useState("");
+  const [disagreePromptOpen, setDisagreePromptOpen] = useState(false);
+  const auth = useBoothAuth();
+  const [authedToken, setAuthedToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void auth.getToken().then((t) => {
+      if (cancelled) return;
+      setAuthedToken(t);
+      if (t) {
+        void fetchVoteTally(t, take.id)
+          .then((res) => {
+            if (cancelled) return;
+            setTally({ agree: res.agree, disagree: res.disagree });
+            setMyVote(res.myVote);
+          })
+          .catch(() => undefined);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [take.id]);
+
+  useEffect(() => {
+    setTally(take.consensus);
+  }, [take.consensus.agree, take.consensus.disagree, take.consensus]);
+
+  async function vote(next: ConsensusVote, comment?: string) {
+    if (!authedToken) return;
+    setVoting(true);
+    try {
+      if (myVote === next) {
+        const t = await clearVote(authedToken, take.id);
+        setMyVote(t.myVote);
+        setTally({ agree: t.agree, disagree: t.disagree });
+      } else {
+        const t = await castVote(authedToken, take.id, next, comment);
+        setMyVote(t.myVote);
+        setTally({ agree: t.agree, disagree: t.disagree });
+      }
+      setDisagreePromptOpen(false);
+      setDisagreeDraft("");
+    } catch (err) {
+      console.warn("vote failed:", err);
+    } finally {
+      setVoting(false);
+    }
+  }
 
   function scrubTo(seconds: number) {
     const el = audioRef.current;
@@ -123,7 +189,8 @@ function TakeCard({ take }: { take: BoothTake }) {
   }
 
   return (
-    <View style={styles.takeRow}>
+    <View style={[styles.takeRow, { flexDirection: "column", alignItems: "stretch" }]}>
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
       <View style={{ flex: 1, gap: 6 }}>
         <Text style={styles.takeName} numberOfLines={1}>
           {take.filename}
@@ -191,17 +258,95 @@ function TakeCard({ take }: { take: BoothTake }) {
       </View>
       <View style={{ alignItems: "flex-end", gap: 6 }}>
         {take.producerDecision ? (
-          <Text
-            style={[
-              styles.decisionBadge,
-              take.producerDecision === "keeper" ? styles.decisionKeeper : styles.decisionRedo,
-            ]}
-          >
-            {take.producerDecision === "keeper" ? "Keeper" : "Re-do"}
-          </Text>
+          <View style={{ alignItems: "flex-end", gap: 4 }}>
+            <Text
+              style={[
+                styles.decisionBadge,
+                take.producerDecision === "keeper" ? styles.decisionKeeper : styles.decisionRedo,
+              ]}
+            >
+              {take.producerDecision === "keeper" ? "Keeper" : "Re-do"}
+              {take.decisionLockedAt ? " · 🔒" : ""}
+            </Text>
+            <Text style={styles.tallyText}>
+              👍 {tally.agree} · 👎 {tally.disagree}
+            </Text>
+          </View>
         ) : null}
         <Text style={[styles.statusBadge, { color: statusColor(take.status) }]}>{take.status}</Text>
       </View>
+    </View>
+    {take.producerDecision && authedToken ? (
+      <View style={styles.voteRow}>
+        <Text style={styles.voteRowLabel}>Your vote:</Text>
+        <Pressable
+          onPress={() => vote("agree")}
+          disabled={voting}
+          style={[styles.voteBtn, myVote === "agree" && styles.voteBtnActive]}
+          accessibilityRole="button"
+          accessibilityLabel="Agree with producer"
+        >
+          <Text style={[styles.voteBtnText, myVote === "agree" && { color: Colors.successUnderline }]}>
+            👍 Agree
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            if (myVote === "disagree") void vote("disagree");
+            else setDisagreePromptOpen(true);
+          }}
+          disabled={voting}
+          style={[styles.voteBtn, myVote === "disagree" && styles.voteBtnActive]}
+          accessibilityRole="button"
+          accessibilityLabel="Disagree with producer"
+        >
+          <Text style={[styles.voteBtnText, myVote === "disagree" && { color: Colors.dangerUnderline }]}>
+            👎 Disagree
+          </Text>
+        </Pressable>
+      </View>
+    ) : null}
+    {disagreePromptOpen && Platform.OS === "web" ? (
+      <View style={styles.disagreePrompt}>
+        <Text style={styles.disagreePromptLabel}>Why? (required)</Text>
+        <textarea
+          value={disagreeDraft}
+          onChange={(e: { target: { value: string } }) => setDisagreeDraft(e.target.value)}
+          placeholder="Take #4 had a stronger verse 2"
+          rows={2}
+          style={{
+            width: "100%",
+            padding: 8,
+            borderRadius: 8,
+            border: "1px solid #262833",
+            background: "#1a1c25",
+            color: "#f3f4f8",
+            font: "13px Inter, sans-serif",
+            resize: "vertical",
+          }}
+        />
+        <View style={{ flexDirection: "row", gap: 6, justifyContent: "flex-end" }}>
+          <Pressable
+            onPress={() => {
+              setDisagreePromptOpen(false);
+              setDisagreeDraft("");
+            }}
+            style={styles.voteBtn}
+          >
+            <Text style={styles.voteBtnText}>Cancel</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void vote("disagree", disagreeDraft)}
+            disabled={!disagreeDraft.trim()}
+            style={[styles.voteBtn, disagreeDraft.trim() && styles.voteBtnActive]}
+          >
+            <Text style={[styles.voteBtnText, disagreeDraft.trim() && { color: Colors.dangerUnderline }]}>
+              Send
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    ) : null}
     </View>
   );
 }
@@ -320,6 +465,58 @@ const styles = StyleSheet.create({
     color: Colors.gradientMid,
     fontFamily: "Inter_700Bold",
     fontSize: 11,
+  },
+  tallyText: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+  },
+  voteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderGlass,
+  },
+  voteRowLabel: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+  },
+  voteBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surface,
+  },
+  voteBtnActive: {
+    borderColor: Colors.gradientMid,
+    backgroundColor: Colors.gradientMid + "1c",
+  },
+  voteBtnText: {
+    color: Colors.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+  },
+  disagreePrompt: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    gap: 6,
+  },
+  disagreePromptLabel: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   aiNotesBlock: { marginTop: 4 },
   aiNotesLabel: {

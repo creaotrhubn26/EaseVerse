@@ -20,6 +20,17 @@ export type TakeRecord = {
   producerDecision: ProducerDecision;
   producerMemoUrl: string | null;
   producerMemoDurationSec: number | null;
+  decisionLockedAt: string | null;
+};
+
+export type ConsensusVote = "agree" | "disagree";
+
+export type ConsensusTally = {
+  takeId: string;
+  agree: number;
+  disagree: number;
+  votes: Array<{ userId: string; vote: ConsensusVote; comment: string | null; createdAt: string }>;
+  myVote: ConsensusVote | null;
 };
 
 export type TakeAnalysis = {
@@ -86,6 +97,67 @@ export async function uploadProducerMemo(args: {
     headers: { Authorization: `Bearer ${args.token}` },
   });
   return { url: result.url, pathname: result.pathname };
+}
+
+export async function castVote(
+  token: string | null,
+  takeId: string,
+  vote: ConsensusVote,
+  comment?: string,
+): Promise<ConsensusTally> {
+  const response = await authedFetch(
+    `/api/takes/vote?id=${encodeURIComponent(takeId)}`,
+    token,
+    { method: "POST", body: JSON.stringify({ vote, comment }) },
+  );
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `Vote failed: ${response.status}`);
+  }
+  return (await response.json()) as ConsensusTally;
+}
+
+export async function clearVote(token: string | null, takeId: string): Promise<ConsensusTally> {
+  const response = await authedFetch(
+    `/api/takes/vote?id=${encodeURIComponent(takeId)}`,
+    token,
+    { method: "DELETE" },
+  );
+  if (!response.ok) throw new Error(`Clear vote failed: ${response.status}`);
+  return (await response.json()) as ConsensusTally;
+}
+
+export async function fetchVoteTally(
+  token: string | null,
+  takeId: string,
+): Promise<ConsensusTally> {
+  const response = await authedFetch(
+    `/api/takes/vote?id=${encodeURIComponent(takeId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!response.ok) throw new Error(`Tally fetch failed: ${response.status}`);
+  return (await response.json()) as ConsensusTally;
+}
+
+export async function lockDecision(token: string | null, takeId: string): Promise<TakeRecord> {
+  const response = await authedFetch(
+    `/api/takes/lock?id=${encodeURIComponent(takeId)}`,
+    token,
+    { method: "POST" },
+  );
+  if (!response.ok) throw new Error(`Lock failed: ${response.status}`);
+  return (await response.json()) as TakeRecord;
+}
+
+export async function unlockDecision(token: string | null, takeId: string): Promise<TakeRecord> {
+  const response = await authedFetch(
+    `/api/takes/lock?id=${encodeURIComponent(takeId)}`,
+    token,
+    { method: "DELETE" },
+  );
+  if (!response.ok) throw new Error(`Unlock failed: ${response.status}`);
+  return (await response.json()) as TakeRecord;
 }
 
 export async function updateTakeFeedback(

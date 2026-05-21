@@ -14,6 +14,9 @@ import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import {
   fetchTakeDetail,
   fetchTakes,
+  fetchVoteTally,
+  lockDecision,
+  unlockDecision,
   updateTakeFeedback,
   uploadProducerMemo,
   uploadTake,
@@ -219,6 +222,68 @@ function TakeRow({
   const [memoElapsedMs, setMemoElapsedMs] = useState(0);
   const [memoUploading, setMemoUploading] = useState(false);
   const memoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [tally, setTally] = useState<{ agree: number; disagree: number; disagreeComments: string[] }>({
+    agree: 0,
+    disagree: 0,
+    disagreeComments: [],
+  });
+  const [lockBusy, setLockBusy] = useState(false);
+
+  useEffect(() => {
+    if (!take.producerDecision) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await getToken();
+        const t = await fetchVoteTally(token, take.id);
+        if (cancelled) return;
+        setTally({
+          agree: t.agree,
+          disagree: t.disagree,
+          disagreeComments: t.votes.filter((v) => v.vote === "disagree" && v.comment).map((v) => v.comment!),
+        });
+      } catch {
+        // Ignore tally errors.
+      }
+    })();
+    const interval = setInterval(() => {
+      void (async () => {
+        try {
+          const token = await getToken();
+          const t = await fetchVoteTally(token, take.id);
+          if (cancelled) return;
+          setTally({
+            agree: t.agree,
+            disagree: t.disagree,
+            disagreeComments: t.votes.filter((v) => v.vote === "disagree" && v.comment).map((v) => v.comment!),
+          });
+        } catch {
+          /* ignore */
+        }
+      })();
+    }, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [take.producerDecision, take.id, getToken]);
+
+  async function toggleLock() {
+    setLockBusy(true);
+    try {
+      const token = await getToken();
+      const fn = take.decisionLockedAt ? unlockDecision : lockDecision;
+      const updated = await fn(token, take.id);
+      onTakeUpdated(updated);
+    } catch (err) {
+      console.warn("lock toggle failed:", err);
+    } finally {
+      setLockBusy(false);
+    }
+  }
+
+  const totalVotes = tally.agree + tally.disagree;
+  const disagreePct = totalVotes > 0 ? (tally.disagree / totalVotes) * 100 : 0;
 
   useEffect(() => () => {
     if (memoTimerRef.current) clearInterval(memoTimerRef.current);
@@ -524,6 +589,41 @@ function TakeRow({
         {noteDirty || savingNote ? (
           <Text style={styles.noteHint}>{savingNote ? "Saving…" : "Edited — tap away to save"}</Text>
         ) : null}
+        {take.producerDecision ? (
+          <View style={styles.consensusBox}>
+            <View style={styles.consensusHeader}>
+              <Text style={styles.consensusText}>
+                Band: 👍 {tally.agree} · 👎 {tally.disagree}
+                {take.decisionLockedAt ? "  ·  🔒 Locked" : ""}
+              </Text>
+              <Pressable
+                onPress={toggleLock}
+                disabled={lockBusy}
+                style={[styles.lockBtn, take.decisionLockedAt && styles.lockBtnUnlock]}
+                accessibilityRole="button"
+                accessibilityLabel={take.decisionLockedAt ? "Unlock decision" : "Lock decision"}
+              >
+                <Text style={styles.lockBtnText}>
+                  {lockBusy ? "…" : take.decisionLockedAt ? "Unlock" : "Lock"}
+                </Text>
+              </Pressable>
+            </View>
+            {totalVotes > 0 && disagreePct >= 30 && !take.decisionLockedAt ? (
+              <Text style={styles.consensusWarning}>
+                ⚠ {Math.round(disagreePct)}% disagree — review before locking
+              </Text>
+            ) : null}
+            {tally.disagreeComments.length > 0 ? (
+              <View style={{ gap: 2 }}>
+                {tally.disagreeComments.slice(0, 3).map((c, i) => (
+                  <Text key={i} style={styles.disagreeComment} numberOfLines={2}>
+                    “{c}”
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -736,6 +836,54 @@ const styles = StyleSheet.create({
     color: Colors.dangerUnderline,
     fontFamily: "Inter_700Bold",
     fontSize: 11,
+  },
+  consensusBox: {
+    marginTop: 6,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    gap: 4,
+  },
+  consensusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  consensusText: {
+    color: Colors.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    flex: 1,
+  },
+  lockBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Colors.gradientStart,
+  },
+  lockBtnUnlock: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+  },
+  lockBtnText: {
+    color: "#fff",
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
+  },
+  consensusWarning: {
+    color: Colors.gradientMid,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+  },
+  disagreeComment: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 10,
+    fontStyle: "italic",
   },
   statusPill: {
     flexDirection: "row",

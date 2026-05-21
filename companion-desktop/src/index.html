@@ -344,7 +344,7 @@
       <div class="logo-dot"></div>
       <div style="flex:1">
         <div class="title">EaseVerse Studio Companion</div>
-        <div class="subtitle">Pro Tools ↔ EaseVerse bridge</div>
+        <div class="subtitle">Works with Pro Tools, Logic, Ableton, Cubase, Studio One, Reaper — any DAW</div>
       </div>
       <span id="topStatus" class="status-pill"><span class="dot"></span> Idle</span>
     </div>
@@ -383,28 +383,30 @@
         <div class="card-head">
           <div class="icon step-num">2</div>
           <div style="flex:1">
-            <div class="card-title">Sources from Pro Tools</div>
-            <div class="card-hint">Tell us where Pro Tools writes audio + session metadata.</div>
+            <div class="card-title">Sources from your DAW</div>
+            <div class="card-hint">Point us at the folder your DAW writes vocal takes to.</div>
           </div>
         </div>
         <div class="card-body">
           <div>
-            <div class="field-label">Audio Files folder (auto-upload takes)</div>
+            <div class="field-label">Audio folder to watch (auto-upload new takes)</div>
             <div class="row folder-drop" id="audioDrop">
-              <input id="audioWatch" type="text" placeholder="~/ProTools/Sessions/MySong/Audio Files" />
+              <input id="audioWatch" type="text" placeholder="Pro Tools: ~/ProTools/.../Audio Files · Logic: ~/Music/Logic/Project · Ableton: project Samples/" />
               <button id="pickAudioBtn" title="Pick folder">📁</button>
             </div>
-            <div class="field-hint">Companion auto-uploads new WAV/AIFF as they appear.</div>
+            <div class="field-hint">
+              Any DAW works — point at whatever folder it writes vocal WAV/AIFF to.
+            </div>
           </div>
 
           <div>
-            <div class="field-label">Session Info file (optional — sync BPM + markers)</div>
+            <div class="field-label">Session info file (optional — Pro Tools only, sync BPM + markers)</div>
             <div class="row folder-drop" id="sessionInfoDrop">
               <input id="sessionInfoPath" type="text" placeholder="/tmp/pt-session.txt" />
               <button id="pickSessionBtn" title="Pick file">📄</button>
             </div>
             <div class="field-hint">
-              In Pro Tools: <code>File → Export → Session Info as Text…</code>
+              Pro Tools: <code>File → Export → Session Info as Text…</code>. Skip for Logic / Ableton / others.
             </div>
           </div>
 
@@ -428,12 +430,12 @@
           <div>
             <div class="field-label">Export folder for markers + keepers</div>
             <div class="row folder-drop" id="exportDrop">
-              <input id="exportDir" type="text" placeholder="~/ProTools/Sessions/MySong/EaseVerse" />
+              <input id="exportDir" type="text" placeholder="~/Music/MySong/EaseVerse" />
               <button id="pickExportBtn" title="Pick folder">📁</button>
             </div>
             <div class="field-hint">
-              Pro Tools: <code>File → Import → Session Data</code> → <code>easeverse-markers.txt</code>
-              (Memory Locations).
+              Pro Tools: <code>File → Import → Session Data</code> → <code>easeverse-markers.txt</code> (Memory Locations).
+              Other DAWs: keep the .txt files as reference next to your project.
             </div>
           </div>
           <div>

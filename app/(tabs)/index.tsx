@@ -43,7 +43,7 @@ import { useRecording } from '@/lib/useRecording';
 import { analyzeSessionRecording, fetchWhisperStatus } from '@/lib/session-scoring-client';
 import { ingestSessionLearningEvent } from '@/lib/learning-client';
 import { buildSessionScoring } from '@shared/session-scoring';
-import type { LyricLine, SignalQuality, Session } from '@/lib/types';
+import type { LyricLine, SignalQuality, Session, Song } from '@/lib/types';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 
 const warmupIconSource =
@@ -161,7 +161,7 @@ function AnimatedTransportIcon({
 export default function SingScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
-  const { activeSong, songs, sessions, setActiveSong, addSession, settings, updateSettings, updateSong } =
+  const { activeSong, songs, sessions, setActiveSong, addSession, addSong, settings, updateSettings, updateSong } =
     useApp();
   const recording = useRecording();
   const metronomePlayer = useAudioPlayer(require('@/assets/sounds/metronome-click.wav'));
@@ -1373,8 +1373,31 @@ export default function SingScreen() {
             </Pressable>
             <Text style={styles.emptyTitle}>No lyrics loaded</Text>
             <Text style={styles.emptySubtitle}>
-              Choose an existing song or add new lyrics before you start.
+              Choose an existing song, add lyrics, or just capture a quick vocal idea below.
             </Text>
+            <Pressable
+              style={({ pressed }) => [styles.quickMemoBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                const memo: Song = {
+                  id: Storage.generateId(),
+                  title: `Voice memo · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+                  lyrics: '',
+                  genre: 'pop',
+                  sections: [],
+                  createdAt: Date.now(),
+                  updatedAt: Date.now(),
+                };
+                addSong(memo);
+                setActiveSong(memo);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Capture a quick vocal idea"
+              accessibilityHint="Skips lyrics setup so you can record a memo right now"
+            >
+              <Ionicons name="mic" size={16} color="#fff" />
+              <Text style={styles.quickMemoText}>Capture a vocal idea</Text>
+            </Pressable>
             <View style={styles.emptyQuickRow}>
               <Pressable
                 style={({ pressed }) => [styles.emptyQuickBtn, pressed && styles.emptyQuickBtnPressed]}
@@ -1765,6 +1788,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     zIndex: 1,
     elevation: 1,
+  },
+  quickMemoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.gradientStart,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 10,
+    marginBottom: 14,
+    shadowColor: Colors.gradientStart,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  quickMemoText: {
+    color: '#fff',
+    fontFamily: 'Inter_700Bold',
+    fontSize: 14,
   },
   emptyCard: {
     alignItems: 'center',

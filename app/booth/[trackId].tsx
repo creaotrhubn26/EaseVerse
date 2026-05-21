@@ -62,7 +62,7 @@ export default function BoothScreen() {
 
   useEffect(() => {
     void load();
-    const interval = setInterval(() => void load(), 7000);
+    const interval = setInterval(() => void load(), 2000);
     return () => clearInterval(interval);
   }, [load]);
 

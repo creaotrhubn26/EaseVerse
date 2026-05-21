@@ -121,6 +121,19 @@ export async function createTake(args: {
   return rows[0] ? mapTakeRow(rows[0]) : null;
 }
 
+export async function listKeeperTakes(userId: string, limit = 200): Promise<TakeRow[]> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  const { rows } = await p.query<TakeRowDb>(
+    `SELECT * FROM takes
+     WHERE user_id = $1 AND producer_decision = 'keeper'
+     ORDER BY uploaded_at DESC LIMIT $2`,
+    [userId, limit],
+  );
+  return rows.map(mapTakeRow);
+}
+
 export async function listTakesForGroup(
   userId: string,
   externalTrackId: string,

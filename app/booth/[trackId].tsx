@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
 import { parseProducerNote, formatTimestamp } from "@/lib/parse-timestamps";
+import { startClick, type ClickHandle } from "@/lib/click-track";
 import { castVote, clearVote, fetchVoteTally, type ConsensusVote } from "@/lib/takes-client";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
@@ -78,6 +79,28 @@ export default function BoothScreen() {
     void AsyncStorage.setItem(BOOTH_TIP_KEY, "1");
   }
 
+  const clickRef = useRef<ClickHandle | null>(null);
+  const [clickOn, setClickOn] = useState(false);
+  const [bpmOverride, setBpmOverride] = useState<number | null>(null);
+  const effectiveBpm = bpmOverride ?? data?.lyrics?.bpm ?? 100;
+
+  function toggleClick() {
+    if (clickRef.current && clickRef.current.isRunning()) {
+      clickRef.current.stop();
+      clickRef.current = null;
+      setClickOn(false);
+      return;
+    }
+    clickRef.current = startClick({ bpm: effectiveBpm, beatsPerBar: 4, accentDownbeat: true });
+    setClickOn(true);
+  }
+
+  useEffect(() => {
+    return () => {
+      clickRef.current?.stop();
+    };
+  }, []);
+
   const load = useCallback(async () => {
     if (!trackId) return;
     try {
@@ -116,7 +139,26 @@ export default function BoothScreen() {
             {data?.lyrics?.title || trackId}
           </Text>
         </View>
-        {data?.lyrics?.bpm ? <Text style={styles.bpm}>{data.lyrics.bpm} BPM</Text> : null}
+        {Platform.OS === "web" ? (
+          <Pressable
+            onPress={toggleClick}
+            style={[styles.clickBtn, clickOn && styles.clickBtnActive]}
+            accessibilityRole="button"
+            accessibilityLabel={clickOn ? "Stop click track" : "Start click track"}
+          >
+            <Ionicons
+              name={clickOn ? "stop" : "musical-notes"}
+              size={13}
+              color={clickOn ? "#fff" : Colors.gradientStart}
+            />
+            <Text style={[styles.clickBtnText, clickOn && { color: "#fff" }]}>
+              {clickOn ? `${effectiveBpm} BPM` : "Click"}
+            </Text>
+          </Pressable>
+        ) : null}
+        {data?.lyrics?.bpm && !clickOn ? (
+          <Text style={styles.bpm}>{data.lyrics.bpm} BPM</Text>
+        ) : null}
       </View>
 
       {introVisible ? (
@@ -722,6 +764,26 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     paddingHorizontal: 4,
     borderRadius: 4,
+  },
+  clickBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.gradientStart + "55",
+    backgroundColor: Colors.surface,
+  },
+  clickBtnActive: {
+    backgroundColor: Colors.gradientStart,
+    borderColor: Colors.gradientStart,
+  },
+  clickBtnText: {
+    color: Colors.gradientStart,
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
   },
   aiNotesBlock: { marginTop: 4 },
   aiNotesLabel: {

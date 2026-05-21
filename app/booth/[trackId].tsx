@@ -16,6 +16,7 @@ import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
 import { parseProducerNote, formatTimestamp } from "@/lib/parse-timestamps";
 import { startClick, type ClickHandle } from "@/lib/click-track";
+import { currentPushEndpoint, subscribeToPush, unsubscribeFromPush } from "@/lib/push-client";
 import { castVote, clearVote, fetchVoteTally, type ConsensusVote } from "@/lib/takes-client";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
@@ -101,6 +102,30 @@ export default function BoothScreen() {
     };
   }, []);
 
+  const auth = useBoothAuth();
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    void currentPushEndpoint().then((e) => setPushOn(!!e));
+  }, []);
+
+  async function togglePush() {
+    setPushBusy(true);
+    try {
+      const token = await auth.getToken();
+      if (pushOn) {
+        await unsubscribeFromPush(token);
+        setPushOn(false);
+      } else {
+        const sub = await subscribeToPush(token);
+        setPushOn(!!sub);
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
   const load = useCallback(async () => {
     if (!trackId) return;
     try {
@@ -158,6 +183,21 @@ export default function BoothScreen() {
         ) : null}
         {data?.lyrics?.bpm && !clickOn ? (
           <Text style={styles.bpm}>{data.lyrics.bpm} BPM</Text>
+        ) : null}
+        {Platform.OS === "web" && typeof Notification !== "undefined" ? (
+          <Pressable
+            onPress={togglePush}
+            disabled={pushBusy}
+            style={[styles.clickBtn, pushOn && styles.clickBtnActive]}
+            accessibilityRole="button"
+            accessibilityLabel={pushOn ? "Disable push notifications" : "Enable push notifications"}
+          >
+            <Ionicons
+              name={pushOn ? "notifications" : "notifications-outline"}
+              size={13}
+              color={pushOn ? "#fff" : Colors.gradientStart}
+            />
+          </Pressable>
         ) : null}
       </View>
 

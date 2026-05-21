@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
 import { getTakeById, updateProducerFeedback, type ProducerDecision } from "../_lib/takes-db.js";
-import { getProjectMembership } from "../_lib/projects-db.js";
+import { getProjectMembership, getProjectWithMembers } from "../_lib/projects-db.js";
+import { pushToUsers } from "../_lib/push-send.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "PATCH" && req.method !== "POST") {
@@ -54,6 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(403).json({ error: "Only the take owner can edit" });
   }
 
+  const previousDecision = take.producerDecision;
   const updated = await updateProducerFeedback({
     takeId,
     userId: ownerUserIdForUpdate,
@@ -61,5 +63,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     producerDecision: decision,
   });
   if (!updated) return res.status(404).json({ error: "Take not found" });
+
+  // Push to other project members when the decision changes (fire-and-forget).
+  if (decision !== undefined && decision !== previousDecision && take.projectId) {
+    void (async () => {
+      try {
+        const data = await getProjectWithMembers(take.projectId!, userId);
+        const targetUserIds = (data?.members ?? [])
+          .filter((m) => m.userId !== userId && m.role !== "observer")
+          .map((m) => m.userId);
+        if (targetUserIds.length > 0) {
+          await pushToUsers({
+            userIds: targetUserIds,
+            payload: {
+              title: decision === "keeper" ? "✅ Keeper marked" : decision === "redo" ? "🔁 Re-do requested" : "Decision cleared",
+              body: `${take.filename} on ${take.externalTrackId ?? "unknown track"}`,
+              tag: `take-${take.id}`,
+              url: take.externalTrackId ? `/booth/${encodeURIComponent(take.externalTrackId)}` : "/",
+            },
+          });
+        }
+      } catch (err) {
+        console.warn("[feedback] push failed:", (err as Error).message);
+      }
+    })();
+  }
+
   return res.status(200).json(updated);
 }

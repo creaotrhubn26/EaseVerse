@@ -33,6 +33,9 @@ async function ensureSchema(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS projects_owner_idx ON projects (owner_user_id);
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_track_url TEXT;
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_track_name TEXT;
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_track_duration_sec REAL;
 
     CREATE TABLE IF NOT EXISTS project_members (
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -68,6 +71,9 @@ export type ProjectRow = {
   name: string;
   ownerUserId: string;
   createdAt: string;
+  referenceTrackUrl: string | null;
+  referenceTrackName: string | null;
+  referenceTrackDurationSec: number | null;
 };
 
 export type ProjectMemberRow = {
@@ -92,7 +98,15 @@ export async function createProject(args: {
   if (!p) return null;
   await ensureSchema();
   const id = generateId();
-  const { rows } = await p.query<{ id: string; name: string; owner_user_id: string; created_at: string }>(
+  const { rows } = await p.query<{
+    id: string;
+    name: string;
+    owner_user_id: string;
+    created_at: string;
+    reference_track_url: string | null;
+    reference_track_name: string | null;
+    reference_track_duration_sec: number | null;
+  }>(
     `INSERT INTO projects (id, name, owner_user_id) VALUES ($1, $2, $3) RETURNING *`,
     [id, args.name.slice(0, 200), args.ownerUserId],
   );
@@ -108,6 +122,50 @@ export async function createProject(args: {
     name: rows[0].name,
     ownerUserId: rows[0].owner_user_id,
     createdAt: rows[0].created_at,
+    referenceTrackUrl: rows[0].reference_track_url,
+    referenceTrackName: rows[0].reference_track_name,
+    referenceTrackDurationSec: rows[0].reference_track_duration_sec,
+  };
+}
+
+export async function updateProjectReferenceTrack(args: {
+  projectId: string;
+  ownerUserId: string;
+  url: string | null;
+  name: string | null;
+  durationSec: number | null;
+}): Promise<boolean> {
+  const p = getPool();
+  if (!p) return false;
+  await ensureSchema();
+  const { rowCount } = await p.query(
+    `UPDATE projects
+     SET reference_track_url = $3, reference_track_name = $4, reference_track_duration_sec = $5
+     WHERE id = $1 AND owner_user_id = $2`,
+    [args.projectId, args.ownerUserId, args.url, args.name, args.durationSec],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+export async function getProjectReferenceTrack(projectId: string): Promise<{
+  url: string | null;
+  name: string | null;
+  durationSec: number | null;
+} | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const { rows } = await p.query<{
+    reference_track_url: string | null;
+    reference_track_name: string | null;
+    reference_track_duration_sec: number | null;
+  }>(`SELECT reference_track_url, reference_track_name, reference_track_duration_sec FROM projects WHERE id = $1`, [projectId]);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    url: row.reference_track_url,
+    name: row.reference_track_name,
+    durationSec: row.reference_track_duration_sec,
   };
 }
 
@@ -124,8 +182,12 @@ export async function listProjectsForUser(userId: string): Promise<
     created_at: string;
     role: string;
     member_count: string | number;
+    reference_track_url: string | null;
+    reference_track_name: string | null;
+    reference_track_duration_sec: number | null;
   }>(
     `SELECT p.id, p.name, p.owner_user_id, p.created_at, m.role,
+            p.reference_track_url, p.reference_track_name, p.reference_track_duration_sec,
             (SELECT COUNT(*) FROM project_members WHERE project_id = p.id) AS member_count
      FROM projects p
      INNER JOIN project_members m ON m.project_id = p.id AND m.user_id = $1
@@ -137,6 +199,9 @@ export async function listProjectsForUser(userId: string): Promise<
     name: r.name,
     ownerUserId: r.owner_user_id,
     createdAt: r.created_at,
+    referenceTrackUrl: r.reference_track_url,
+    referenceTrackName: r.reference_track_name,
+    referenceTrackDurationSec: r.reference_track_duration_sec,
     role: normalizeRole(r.role),
     memberCount: Number(r.member_count),
   }));
@@ -186,6 +251,9 @@ export async function getProjectWithMembers(
     name: string;
     owner_user_id: string;
     created_at: string;
+    reference_track_url: string | null;
+    reference_track_name: string | null;
+    reference_track_duration_sec: number | null;
   }>(`SELECT * FROM projects WHERE id = $1`, [projectId]);
   if (!projectRows[0]) return null;
   const { rows: memberRows } = await p.query<{
@@ -202,6 +270,9 @@ export async function getProjectWithMembers(
       name: projectRows[0].name,
       ownerUserId: projectRows[0].owner_user_id,
       createdAt: projectRows[0].created_at,
+      referenceTrackUrl: projectRows[0].reference_track_url,
+      referenceTrackName: projectRows[0].reference_track_name,
+      referenceTrackDurationSec: projectRows[0].reference_track_duration_sec,
     },
     members: memberRows.map((r) => ({
       projectId: r.project_id,

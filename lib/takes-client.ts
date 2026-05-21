@@ -55,6 +55,7 @@ export async function uploadTake(args: {
   sourcePath?: string;
   token: string;
   projectId?: string;
+  lyricsSnapshot?: string;
 }): Promise<{ url: string; pathname: string }> {
   const result = await upload(args.file.name, args.file, {
     access: "public",
@@ -64,6 +65,7 @@ export async function uploadTake(args: {
       sourcePath: args.sourcePath,
       filename: args.file.name,
       projectId: args.projectId,
+      lyricsSnapshot: args.lyricsSnapshot,
     }),
     headers: { Authorization: `Bearer ${args.token}` },
   });

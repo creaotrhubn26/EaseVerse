@@ -41,6 +41,8 @@ type BoothTake = {
   decisionLockedAt: string | null;
   consensus: { agree: number; disagree: number };
   regions: BoothRegion[];
+  lyricsSnapshot: string | null;
+  lyricsSnapshotAt: string | null;
   transcript: string | null;
   aiNotes: string | null;
   pitchMeanHz: number | null;
@@ -50,6 +52,7 @@ type BoothTake = {
 type BoothPayload = {
   trackId: string;
   lyrics: { title: string | null; lyrics: string | null; bpm: number | null; updatedAt: string } | null;
+  referenceTrack: { url: string; name: string | null; durationSec: number | null } | null;
   takes: BoothTake[];
 };
 
@@ -113,6 +116,21 @@ export default function BoothScreen() {
               {data?.lyrics?.lyrics || "No lyrics published yet for this track."}
             </Text>
           </View>
+
+          {data?.referenceTrack && Platform.OS === "web" ? (
+            <View style={styles.refCard}>
+              <Text style={styles.sectionLabel}>Reference</Text>
+              <Text style={styles.refName} numberOfLines={1}>
+                {data.referenceTrack.name || "Reference track"}
+              </Text>
+              <audio
+                controls
+                preload="none"
+                src={data.referenceTrack.url}
+                style={{ width: "100%", height: 32, marginTop: 4 }}
+              />
+            </View>
+          ) : null}
 
           <Text style={[styles.sectionLabel, { marginTop: 18 }]}>Takes ({data?.takes.length ?? 0})</Text>
           {data?.takes.length === 0 ? (
@@ -298,6 +316,11 @@ function TakeCard({ take }: { take: BoothTake }) {
               )}
             </Text>
           </View>
+        ) : null}
+        {take.lyricsSnapshotAt ? (
+          <Text style={styles.lyricsVersionHint} numberOfLines={1}>
+            Sung against lyrics from {new Date(take.lyricsSnapshotAt).toLocaleString()}
+          </Text>
         ) : null}
         {take.aiNotes ? (
           <View style={styles.aiNotesBlock}>
@@ -611,6 +634,26 @@ const styles = StyleSheet.create({
     color: Colors.gradientStart,
     fontFamily: "Inter_700Bold",
     fontSize: 10,
+  },
+  refCard: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    gap: 4,
+  },
+  refName: {
+    color: Colors.textPrimary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+  },
+  lyricsVersionHint: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 10,
+    fontStyle: "italic",
+    marginTop: 4,
   },
   aiNotesBlock: { marginTop: 4 },
   aiNotesLabel: {

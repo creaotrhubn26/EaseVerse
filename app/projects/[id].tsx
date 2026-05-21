@@ -13,10 +13,12 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { Platform } from "react-native";
 import {
   addMember,
   getProject,
   removeMember,
+  uploadReferenceTrack,
   type Project,
   type ProjectMember,
   type ProjectRole,
@@ -47,6 +49,7 @@ function ProjectDetailInner() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<ProjectRole>("band_member");
   const [inviting, setInviting] = useState(false);
+  const [refUploading, setRefUploading] = useState(false);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -85,6 +88,33 @@ function ProjectDetailInner() {
       setError((err as Error).message);
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function handleReferenceFile(file: File) {
+    setRefUploading(true);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Missing auth token");
+      let durationSec: number | undefined;
+      try {
+        const url = URL.createObjectURL(file);
+        const audio = new Audio(url);
+        await new Promise<void>((resolve, reject) => {
+          audio.addEventListener("loadedmetadata", () => resolve(), { once: true });
+          audio.addEventListener("error", () => reject(new Error("audio metadata")), { once: true });
+        });
+        durationSec = audio.duration;
+        URL.revokeObjectURL(url);
+      } catch {
+        // Duration is optional.
+      }
+      await uploadReferenceTrack({ projectId: String(id), file, durationSec, token });
+      setTimeout(() => void reload(), 1500);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setRefUploading(false);
     }
   }
 
@@ -133,6 +163,48 @@ function ProjectDetailInner() {
           <Text style={styles.eyebrow}>Project</Text>
           <Text style={styles.title} numberOfLines={1}>{project.name}</Text>
         </View>
+      </View>
+
+      <View style={styles.refCard}>
+        <Text style={styles.cardLabel}>Reference track</Text>
+        {project.referenceTrackUrl ? (
+          <View style={{ gap: 6 }}>
+            <Text style={styles.refName} numberOfLines={1}>
+              {project.referenceTrackName || "Reference track"}
+              {project.referenceTrackDurationSec
+                ? ` · ${project.referenceTrackDurationSec.toFixed(1)}s`
+                : ""}
+            </Text>
+            {Platform.OS === "web" ? (
+              <audio
+                controls
+                preload="none"
+                src={project.referenceTrackUrl}
+                style={{ width: "100%", height: 32 }}
+              />
+            ) : null}
+          </View>
+        ) : (
+          <Text style={styles.cardHint}>
+            No reference yet. The producer can upload a demo or final mix so the band hears the target.
+          </Text>
+        )}
+        {isProducer && Platform.OS === "web" ? (
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center", marginTop: 6 }}>
+            <input
+              type="file"
+              accept="audio/*"
+              disabled={refUploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleReferenceFile(f);
+                e.target.value = "";
+              }}
+              style={{ color: Colors.textSecondary }}
+            />
+            {refUploading ? <ActivityIndicator color={Colors.textTertiary} /> : null}
+          </View>
+        ) : null}
       </View>
 
       <Text style={styles.sectionLabel}>Members ({members.length})</Text>
@@ -319,4 +391,14 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 13 },
   error: { color: Colors.dangerUnderline, fontFamily: "Inter_500Medium", fontSize: 12 },
+  refCard: {
+    marginTop: 6,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    gap: 8,
+  },
+  refName: { color: Colors.textPrimary, fontFamily: "Inter_600SemiBold", fontSize: 13 },
 });

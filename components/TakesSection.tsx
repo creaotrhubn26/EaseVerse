@@ -33,6 +33,7 @@ import {
   listRegions,
   type TakeRegion,
 } from "@/lib/takes-client";
+import { useApp } from "@/lib/AppContext";
 
 type Props = { horizontalMargin?: number };
 
@@ -53,6 +54,7 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
   const [projects, setProjectsList] = useState<ProjectListItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { activeSong } = useApp();
 
   const reload = useCallback(async () => {
     if (!isSignedIn) return;
@@ -99,6 +101,7 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
         externalTrackId: inferredTrackId,
         token,
         projectId: selectedProjectId || undefined,
+        lyricsSnapshot: activeSong?.lyrics || undefined,
       });
       // onUploadCompleted on the server creates the row + kicks off processTake.
       // Poll a bit so we surface the new row + analysis quickly.

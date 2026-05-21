@@ -37,6 +37,8 @@ async function ensureSchema(): Promise<void> {
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_memo_url TEXT;
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_memo_duration_sec REAL;
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS decision_locked_at TIMESTAMPTZ;
+    ALTER TABLE takes ADD COLUMN IF NOT EXISTS lyrics_snapshot TEXT;
+    ALTER TABLE takes ADD COLUMN IF NOT EXISTS lyrics_snapshot_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS take_consensus_votes (
       take_id TEXT NOT NULL REFERENCES takes(id) ON DELETE CASCADE,
@@ -101,6 +103,8 @@ export type TakeRow = {
   producerMemoDurationSec: number | null;
   decisionLockedAt: string | null;
   projectId: string | null;
+  lyricsSnapshot: string | null;
+  lyricsSnapshotAt: string | null;
 };
 
 export type ConsensusVote = "agree" | "disagree";
@@ -137,14 +141,15 @@ export async function createTake(args: {
   byteSize?: number;
   storageUrl: string;
   projectId?: string | null;
+  lyricsSnapshot?: string | null;
 }): Promise<TakeRow | null> {
   const p = getPool();
   if (!p) return null;
   await ensureSchema();
   const { rows } = await p.query<TakeRowDb>(
     `INSERT INTO takes
-      (id, user_id, external_track_id, source_path, filename, byte_size, storage_url, project_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      (id, user_id, external_track_id, source_path, filename, byte_size, storage_url, project_id, lyrics_snapshot, lyrics_snapshot_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $9 IS NULL THEN NULL ELSE NOW() END)
      RETURNING *`,
     [
       args.id,
@@ -155,6 +160,7 @@ export async function createTake(args: {
       args.byteSize ?? null,
       args.storageUrl,
       args.projectId ?? null,
+      args.lyricsSnapshot ?? null,
     ],
   );
   return rows[0] ? mapTakeRow(rows[0]) : null;
@@ -408,6 +414,8 @@ type TakeRowDb = {
   producer_memo_duration_sec: number | null;
   decision_locked_at: string | null;
   project_id: string | null;
+  lyrics_snapshot: string | null;
+  lyrics_snapshot_at: string | null;
 };
 
 function mapTakeRow(row: TakeRowDb): TakeRow {
@@ -429,6 +437,8 @@ function mapTakeRow(row: TakeRowDb): TakeRow {
     producerMemoDurationSec: row.producer_memo_duration_sec,
     decisionLockedAt: row.decision_locked_at,
     projectId: row.project_id,
+    lyricsSnapshot: row.lyrics_snapshot,
+    lyricsSnapshotAt: row.lyrics_snapshot_at,
   };
 }
 

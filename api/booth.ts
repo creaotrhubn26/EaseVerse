@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Pool } from "pg";
 import { listRegionsForTakes } from "./_lib/takes-db.js";
+import { getProjectReferenceTrack } from "./_lib/projects-db.js";
 
 let pool: Pool | null = null;
 function getPool(): Pool | null {
@@ -52,6 +53,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       producer_memo_url: string | null;
       producer_memo_duration_sec: number | null;
       decision_locked_at: string | null;
+      lyrics_snapshot: string | null;
+      lyrics_snapshot_at: string | null;
+      project_id: string | null;
       agree_count: string | number | null;
       disagree_count: string | number | null;
       transcript: string | null;
@@ -62,6 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `SELECT t.id, t.filename, t.uploaded_at, t.duration_sec, t.status, t.storage_url,
               t.producer_note, t.producer_decision,
               t.producer_memo_url, t.producer_memo_duration_sec, t.decision_locked_at,
+              t.lyrics_snapshot, t.lyrics_snapshot_at, t.project_id,
               (SELECT COUNT(*) FROM take_consensus_votes v WHERE v.take_id = t.id AND v.vote = 'agree') AS agree_count,
               (SELECT COUNT(*) FROM take_consensus_votes v WHERE v.take_id = t.id AND v.vote = 'disagree') AS disagree_count,
               a.transcript, a.ai_notes, a.pitch_mean_hz, a.energy_avg_db
@@ -84,9 +89,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const regionMap = await listRegionsForTakes(takeRows.map((t) => t.id));
 
+    // Reference track from the first take that has a project_id.
+    let referenceTrack: { url: string; name: string | null; durationSec: number | null } | null = null;
+    const firstProjectTake = takeRows.find((t) => t.project_id);
+    if (firstProjectTake?.project_id) {
+      const ref = await getProjectReferenceTrack(firstProjectTake.project_id);
+      if (ref?.url) {
+        referenceTrack = { url: ref.url, name: ref.name, durationSec: ref.durationSec };
+      }
+    }
+
     return res.status(200).json({
       trackId: trackIdQuery,
       lyrics,
+      referenceTrack,
       takes: takeRows.map((t) => ({
         id: t.id,
         filename: t.filename,
@@ -114,6 +130,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           color: r.color,
           autoLoop: r.autoLoop,
         })),
+        lyricsSnapshot: t.lyrics_snapshot,
+        lyricsSnapshotAt: t.lyrics_snapshot_at,
         transcript: t.transcript,
         aiNotes: t.ai_notes,
         pitchMeanHz: t.pitch_mean_hz,

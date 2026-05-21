@@ -1,4 +1,6 @@
+import { upload } from "@vercel/blob/client";
 import { authedFetch } from "./authed-fetch";
+import { getApiUrl } from "./query-client";
 
 export type ProjectRole = "producer" | "vocalist" | "band_member" | "mix_engineer" | "observer";
 
@@ -7,7 +9,29 @@ export type Project = {
   name: string;
   ownerUserId: string;
   createdAt: string;
+  referenceTrackUrl: string | null;
+  referenceTrackName: string | null;
+  referenceTrackDurationSec: number | null;
 };
+
+export async function uploadReferenceTrack(args: {
+  projectId: string;
+  file: File;
+  durationSec?: number;
+  token: string;
+}): Promise<{ url: string; pathname: string }> {
+  const result = await upload(args.file.name, args.file, {
+    access: "public",
+    handleUploadUrl: `${getApiUrl()}/api/projects/reference-upload`,
+    clientPayload: JSON.stringify({
+      projectId: args.projectId,
+      name: args.file.name,
+      durationSec: args.durationSec,
+    }),
+    headers: { Authorization: `Bearer ${args.token}` },
+  });
+  return { url: result.url, pathname: result.pathname };
+}
 
 export type ProjectListItem = Project & { role: ProjectRole; memberCount: number };
 

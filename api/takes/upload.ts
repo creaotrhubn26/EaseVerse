@@ -69,6 +69,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             sourcePath: payload?.sourcePath ?? null,
             filename: payload?.filename ?? null,
             projectId,
+            lyricsSnapshot:
+              typeof payload?.lyricsSnapshot === "string"
+                ? payload.lyricsSnapshot.slice(0, 10000)
+                : null,
           }),
         };
       },
@@ -94,6 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             filename: meta.filename || blob.pathname,
             storageUrl: blob.url,
             projectId: meta.projectId ?? null,
+            lyricsSnapshot: meta.lyricsSnapshot ?? null,
           });
           console.log("[takes/upload] createTake OK", { takeId, externalTrackId: meta.externalTrackId });
           const take = await getTakeWithAnalysis(takeId);

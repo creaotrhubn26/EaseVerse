@@ -372,6 +372,42 @@ function SegmentedControl<T extends string>({
   );
 }
 
+function ProjectsLinkRow({ sectionPadding }: { sectionPadding: number }) {
+  return (
+    <Pressable
+      onPress={() => router.push('/projects')}
+      style={({ pressed }) => [
+        {
+          marginHorizontal: sectionPadding,
+          marginTop: 12,
+          padding: 14,
+          borderRadius: 14,
+          backgroundColor: Colors.surface,
+          borderWidth: 1,
+          borderColor: Colors.borderGlass,
+          flexDirection: 'row' as const,
+          alignItems: 'center' as const,
+          gap: 10,
+        },
+        pressed && { opacity: 0.7 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Open projects"
+    >
+      <Ionicons name="people" size={18} color={Colors.gradientMid} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: Colors.textPrimary, fontFamily: 'Inter_700Bold', fontSize: 14 }}>
+          Studio projects
+        </Text>
+        <Text style={{ color: Colors.textTertiary, fontFamily: 'Inter_500Medium', fontSize: 12, marginTop: 2 }}>
+          Invite your band, share takes, vote on keepers.
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+    </Pressable>
+  );
+}
+
 function AdminLinkRow({ sectionPadding }: { sectionPadding: number }) {
   const { user } = useAppUser();
   if (!user || user.status !== 'admin') return null;
@@ -872,6 +908,7 @@ export default function ProfileScreen() {
         <View style={{ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }}>
         <AccountSection horizontalMargin={sectionPadding} />
         {CLERK_CONFIGURED ? <AdminLinkRow sectionPadding={sectionPadding} /> : null}
+        {CLERK_CONFIGURED ? <ProjectsLinkRow sectionPadding={sectionPadding} /> : null}
         {CLERK_CONFIGURED ? <CostDashboardCard horizontalMargin={sectionPadding} /> : null}
         <ProToolsEasyImport horizontalMargin={sectionPadding} />
         <ProToolsPairingCard horizontalMargin={sectionPadding} />

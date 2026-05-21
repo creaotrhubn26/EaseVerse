@@ -101,6 +101,22 @@ function RootLayoutNav() {
           animation: "fade",
         }}
       />
+      <Stack.Screen
+        name="projects/index"
+        options={{
+          headerShown: false,
+          presentation: "card",
+          animation: "slide_from_right",
+        }}
+      />
+      <Stack.Screen
+        name="projects/[id]"
+        options={{
+          headerShown: false,
+          presentation: "card",
+          animation: "slide_from_right",
+        }}
+      />
     </Stack>
   );
 }

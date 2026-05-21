@@ -705,13 +705,6 @@ export default function LyricsScreen() {
       return true;
     }
 
-    const duplicate = songs.find(s => s.title.toLowerCase() === (songTitle || 'Untitled').toLowerCase() && s.id !== activeSong?.id);
-    if (duplicate) {
-      setSaveIndicatorState('error');
-      setToast({ visible: true, message: 'Duplicate title – choose a different name', variant: 'error' });
-      return false;
-    }
-
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const sections = parseSongSections(editText);
     const parsedBpm = tempoBpmText.trim()

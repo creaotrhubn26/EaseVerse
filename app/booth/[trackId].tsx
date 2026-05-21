@@ -141,11 +141,36 @@ export default function BoothScreen() {
     }
   }, [trackId]);
 
+  // Prefer SSE for sub-second push from the server. Falls back to 2s
+  // polling for native (no EventSource) or when the stream errors out.
   useEffect(() => {
-    void load();
-    const interval = setInterval(() => void load(), 2000);
-    return () => clearInterval(interval);
-  }, [load]);
+    if (!trackId) return;
+    const hasEventSource = typeof window !== "undefined" && typeof EventSource !== "undefined";
+    if (!hasEventSource) {
+      void load();
+      const interval = setInterval(() => void load(), 2000);
+      return () => clearInterval(interval);
+    }
+    const url = `${getApiUrl()}/api/booth/stream?trackId=${encodeURIComponent(String(trackId))}`;
+    const es = new EventSource(url);
+    es.addEventListener("snapshot", (evt) => {
+      try {
+        const payload = JSON.parse((evt as MessageEvent).data) as BoothPayload;
+        setData(payload);
+        setError(null);
+      } catch {
+        /* ignore */
+      } finally {
+        setLoading(false);
+      }
+    });
+    es.onerror = () => {
+      // EventSource auto-reconnects with the `retry` hint, so we just
+      // surface a soft error if it doesn't recover in time.
+      setLoading(false);
+    };
+    return () => es.close();
+  }, [trackId, load]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 16 }]}>

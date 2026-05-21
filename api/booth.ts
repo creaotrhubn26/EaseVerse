@@ -48,6 +48,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       storage_url: string;
       producer_note: string | null;
       producer_decision: string | null;
+      producer_memo_url: string | null;
+      producer_memo_duration_sec: number | null;
       transcript: string | null;
       ai_notes: string | null;
       pitch_mean_hz: number | null;
@@ -55,6 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }>(
       `SELECT t.id, t.filename, t.uploaded_at, t.duration_sec, t.status, t.storage_url,
               t.producer_note, t.producer_decision,
+              t.producer_memo_url, t.producer_memo_duration_sec,
               a.transcript, a.ai_notes, a.pitch_mean_hz, a.energy_avg_db
        FROM takes t
        LEFT JOIN take_analyses a ON a.take_id = t.id
@@ -88,6 +91,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           t.producer_decision === "keeper" || t.producer_decision === "redo"
             ? t.producer_decision
             : null,
+        producerMemoUrl: t.producer_memo_url,
+        producerMemoDurationSec: t.producer_memo_duration_sec,
         transcript: t.transcript,
         aiNotes: t.ai_notes,
         pitchMeanHz: t.pitch_mean_hz,

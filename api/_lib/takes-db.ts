@@ -33,6 +33,8 @@ async function ensureSchema(): Promise<void> {
     );
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_note TEXT;
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_decision TEXT;
+    ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_memo_url TEXT;
+    ALTER TABLE takes ADD COLUMN IF NOT EXISTS producer_memo_duration_sec REAL;
     CREATE INDEX IF NOT EXISTS takes_user_uploaded_idx ON takes (user_id, uploaded_at DESC);
     CREATE INDEX IF NOT EXISTS takes_status_idx ON takes (status);
 
@@ -70,6 +72,8 @@ export type TakeRow = {
   errorMessage: string | null;
   producerNote: string | null;
   producerDecision: ProducerDecision;
+  producerMemoUrl: string | null;
+  producerMemoDurationSec: number | null;
 };
 
 export type TakeAnalysisRow = {
@@ -340,6 +344,8 @@ type TakeRowDb = {
   error_message: string | null;
   producer_note: string | null;
   producer_decision: string | null;
+  producer_memo_url: string | null;
+  producer_memo_duration_sec: number | null;
 };
 
 function mapTakeRow(row: TakeRowDb): TakeRow {
@@ -357,7 +363,28 @@ function mapTakeRow(row: TakeRowDb): TakeRow {
     errorMessage: row.error_message,
     producerNote: row.producer_note,
     producerDecision: normalizeDecision(row.producer_decision),
+    producerMemoUrl: row.producer_memo_url,
+    producerMemoDurationSec: row.producer_memo_duration_sec,
   };
+}
+
+export async function updateProducerMemo(args: {
+  takeId: string;
+  userId: string;
+  memoUrl: string | null;
+  durationSec: number | null;
+}): Promise<TakeRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const { rows } = await p.query<TakeRowDb>(
+    `UPDATE takes
+     SET producer_memo_url = $3, producer_memo_duration_sec = $4
+     WHERE id = $1 AND user_id = $2
+     RETURNING *`,
+    [args.takeId, args.userId, args.memoUrl, args.durationSec],
+  );
+  return rows[0] ? mapTakeRow(rows[0]) : null;
 }
 
 function normalizeDecision(value: string | null): ProducerDecision {

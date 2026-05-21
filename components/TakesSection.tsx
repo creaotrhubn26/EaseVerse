@@ -15,6 +15,7 @@ import {
   fetchTakeDetail,
   fetchTakes,
   updateTakeFeedback,
+  uploadProducerMemo,
   uploadTake,
   type ProducerDecision,
   type TakeAnalysis,
@@ -210,6 +211,75 @@ function TakeRow({
   const [decisionUpdating, setDecisionUpdating] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const noteSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  const memoRecorderRef = useRef<MediaRecorder | null>(null);
+  const memoChunksRef = useRef<BlobPart[]>([]);
+  const memoStartRef = useRef<number>(0);
+  const memoStreamRef = useRef<MediaStream | null>(null);
+  const [memoRecording, setMemoRecording] = useState(false);
+  const [memoElapsedMs, setMemoElapsedMs] = useState(0);
+  const [memoUploading, setMemoUploading] = useState(false);
+  const memoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => {
+    if (memoTimerRef.current) clearInterval(memoTimerRef.current);
+    memoStreamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
+
+  async function startMemoRecording() {
+    if (memoRecording || memoUploading) return;
+    if (Platform.OS !== "web" || typeof navigator === "undefined" || !navigator.mediaDevices) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      memoStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
+      memoChunksRef.current = [];
+      memoStartRef.current = Date.now();
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) memoChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        const elapsedMs = Date.now() - memoStartRef.current;
+        const durationSec = elapsedMs / 1000;
+        const blob = new Blob(memoChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        memoStreamRef.current?.getTracks().forEach((t) => t.stop());
+        memoStreamRef.current = null;
+        if (blob.size < 1000) return;
+        setMemoUploading(true);
+        try {
+          const token = await getToken();
+          if (!token) throw new Error("missing auth token");
+          await uploadProducerMemo({ takeId: take.id, blob, durationSec, token });
+          setTimeout(async () => {
+            const token2 = await getToken();
+            const fresh = await fetchTakeDetail(token2, take.id);
+            if (fresh) onTakeUpdated(fresh);
+          }, 1500);
+        } catch (err) {
+          console.warn("memo upload failed:", err);
+        } finally {
+          setMemoUploading(false);
+        }
+      };
+      recorder.start();
+      memoRecorderRef.current = recorder;
+      setMemoRecording(true);
+      setMemoElapsedMs(0);
+      memoTimerRef.current = setInterval(() => setMemoElapsedMs(Date.now() - memoStartRef.current), 100);
+    } catch (err) {
+      console.warn("getUserMedia failed:", err);
+    }
+  }
+
+  function stopMemoRecording() {
+    if (!memoRecording) return;
+    setMemoRecording(false);
+    if (memoTimerRef.current) {
+      clearInterval(memoTimerRef.current);
+      memoTimerRef.current = null;
+    }
+    memoRecorderRef.current?.stop();
+    memoRecorderRef.current = null;
+  }
 
   function insertTimestampAtCursor() {
     const seconds = audioRef.current?.currentTime ?? 0;
@@ -384,7 +454,44 @@ function TakeRow({
               <Text style={styles.timestampBtnText}>Insert time</Text>
             </Pressable>
           ) : null}
+          {Platform.OS === "web" && typeof navigator !== "undefined" && navigator.mediaDevices ? (
+            <Pressable
+              onPress={memoRecording ? stopMemoRecording : startMemoRecording}
+              disabled={memoUploading}
+              style={[styles.memoBtn, memoRecording && styles.memoBtnRecording]}
+              accessibilityRole="button"
+              accessibilityLabel={memoRecording ? "Stop voice memo" : "Record voice memo"}
+            >
+              <Ionicons
+                name={memoRecording ? "stop-circle" : "mic"}
+                size={12}
+                color={memoRecording ? "#fff" : Colors.dangerUnderline}
+              />
+              <Text
+                style={[
+                  styles.memoBtnText,
+                  memoRecording && { color: "#fff" },
+                ]}
+              >
+                {memoUploading
+                  ? "Sending…"
+                  : memoRecording
+                    ? `Rec ${(memoElapsedMs / 1000).toFixed(1)}s`
+                    : take.producerMemoUrl
+                      ? "Re-record"
+                      : "Memo"}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
+        {take.producerMemoUrl && !memoRecording && Platform.OS === "web" ? (
+          <audio
+            controls
+            preload="none"
+            src={take.producerMemoUrl}
+            style={{ width: "100%", height: 28, marginTop: 2 }}
+          />
+        ) : null}
         {Platform.OS === "web" && take.storageUrl && take.status === "done" ? (
           <audio
             ref={(node) => {
@@ -607,6 +714,26 @@ const styles = StyleSheet.create({
   },
   timestampBtnText: {
     color: Colors.gradientMid,
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
+  },
+  memoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.dangerUnderline + "55",
+    backgroundColor: Colors.surface,
+  },
+  memoBtnRecording: {
+    backgroundColor: Colors.dangerUnderline,
+    borderColor: Colors.dangerUnderline,
+  },
+  memoBtnText: {
+    color: Colors.dangerUnderline,
     fontFamily: "Inter_700Bold",
     fontSize: 11,
   },

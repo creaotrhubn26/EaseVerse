@@ -24,6 +24,8 @@ type BoothTake = {
   audioUrl: string;
   producerNote: string | null;
   producerDecision: "keeper" | "redo" | null;
+  producerMemoUrl: string | null;
+  producerMemoDurationSec: number | null;
   transcript: string | null;
   aiNotes: string | null;
   pitchMeanHz: number | null;
@@ -142,6 +144,21 @@ function TakeCard({ take }: { take: BoothTake }) {
             src={take.audioUrl}
             style={{ width: "100%", height: 32, marginTop: 2 }}
           />
+        ) : null}
+        {take.producerMemoUrl && Platform.OS === "web" ? (
+          <View style={styles.memoBlock}>
+            <Ionicons name="mic" size={14} color={Colors.gradientMid} />
+            <audio
+              controls
+              src={take.producerMemoUrl}
+              style={{ flex: 1, height: 32 }}
+            />
+            {take.producerMemoDurationSec ? (
+              <Text style={styles.memoDuration}>
+                {Math.round(take.producerMemoDurationSec)}s
+              </Text>
+            ) : null}
+          </View>
         ) : null}
         {noteSegments.length > 0 ? (
           <View style={styles.producerNoteBlock}>
@@ -287,6 +304,22 @@ const styles = StyleSheet.create({
     color: Colors.gradientMid,
     fontFamily: "Inter_700Bold",
     textDecorationLine: "underline",
+  },
+  memoBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 8,
+    marginTop: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.gradientMid + "10",
+    borderWidth: 1,
+    borderColor: Colors.gradientMid + "33",
+  },
+  memoDuration: {
+    color: Colors.gradientMid,
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
   },
   aiNotesBlock: { marginTop: 4 },
   aiNotesLabel: {

@@ -18,6 +18,8 @@ export type TakeRecord = {
   errorMessage: string | null;
   producerNote: string | null;
   producerDecision: ProducerDecision;
+  producerMemoUrl: string | null;
+  producerMemoDurationSec: number | null;
 };
 
 export type TakeAnalysis = {
@@ -65,6 +67,25 @@ export async function triggerProcessTake(token: string | null, takeId: string): 
   await authedFetch(`/api/takes/process?id=${encodeURIComponent(takeId)}`, token, {
     method: "POST",
   });
+}
+
+export async function uploadProducerMemo(args: {
+  takeId: string;
+  blob: Blob;
+  durationSec: number;
+  token: string;
+}): Promise<{ url: string; pathname: string }> {
+  const filename = `memo-${args.takeId}-${Date.now()}.webm`;
+  const result = await upload(filename, args.blob, {
+    access: "public",
+    handleUploadUrl: `${getApiUrl()}/api/takes/memo-upload`,
+    clientPayload: JSON.stringify({
+      takeId: args.takeId,
+      durationSec: args.durationSec,
+    }),
+    headers: { Authorization: `Bearer ${args.token}` },
+  });
+  return { url: result.url, pathname: result.pathname };
 }
 
 export async function updateTakeFeedback(

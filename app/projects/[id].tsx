@@ -23,6 +23,7 @@ import {
   type ProjectMember,
   type ProjectRole,
 } from "@/lib/projects-client";
+import { getActiveSession, startSession } from "@/lib/sessions-client";
 
 const ROLE_OPTIONS: { value: ProjectRole; label: string }[] = [
   { value: "vocalist", label: "Vocalist" },
@@ -50,6 +51,41 @@ function ProjectDetailInner() {
   const [inviteRole, setInviteRole] = useState<ProjectRole>("band_member");
   const [inviting, setInviting] = useState(false);
   const [refUploading, setRefUploading] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [startingSession, setStartingSession] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    void (async () => {
+      const token = await getToken();
+      const sess = await getActiveSession(token, String(id));
+      if (!cancelled) setActiveSessionId(sess?.id ?? null);
+    })();
+    const interval = setInterval(async () => {
+      const token = await getToken();
+      const sess = await getActiveSession(token, String(id));
+      if (!cancelled) setActiveSessionId(sess?.id ?? null);
+    }, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [id, getToken]);
+
+  async function handleStartSession() {
+    setStartingSession(true);
+    try {
+      const token = await getToken();
+      const sess = await startSession(token, { projectId: String(id) });
+      setActiveSessionId(sess.id);
+      router.push({ pathname: "/session/live/[id]", params: { id: sess.id } });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setStartingSession(false);
+    }
+  }
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -164,6 +200,32 @@ function ProjectDetailInner() {
           <Text style={styles.title} numberOfLines={1}>{project.name}</Text>
         </View>
       </View>
+
+      {isProducer || activeSessionId ? (
+        <Pressable
+          onPress={() => {
+            if (activeSessionId) {
+              router.push({ pathname: "/session/live/[id]", params: { id: activeSessionId } });
+            } else {
+              void handleStartSession();
+            }
+          }}
+          disabled={startingSession}
+          style={[
+            styles.liveBtn,
+            activeSessionId && styles.liveBtnActive,
+            startingSession && { opacity: 0.5 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={activeSessionId ? "Join live session" : "Start live session"}
+        >
+          <View style={[styles.liveDot, activeSessionId && styles.liveDotActive]} />
+          <Text style={[styles.liveBtnText, activeSessionId && { color: "#fff" }]}>
+            {activeSessionId ? "Join LIVE session" : startingSession ? "Starting…" : "Start LIVE session"}
+          </Text>
+          <Ionicons name="chevron-forward" size={14} color={activeSessionId ? "#fff" : Colors.gradientStart} />
+        </Pressable>
+      ) : null}
 
       <View style={styles.refCard}>
         <Text style={styles.cardLabel}>Reference track</Text>
@@ -391,6 +453,35 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 13 },
   error: { color: Colors.dangerUnderline, fontFamily: "Inter_500Medium", fontSize: 12 },
+  liveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.gradientStart + "66",
+    backgroundColor: Colors.surface,
+  },
+  liveBtnActive: {
+    backgroundColor: Colors.dangerUnderline,
+    borderColor: Colors.dangerUnderline,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.gradientStart,
+  },
+  liveDotActive: {
+    backgroundColor: "#fff",
+  },
+  liveBtnText: {
+    flex: 1,
+    color: Colors.gradientStart,
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+  },
   refCard: {
     marginTop: 6,
     padding: 14,

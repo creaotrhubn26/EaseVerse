@@ -133,6 +133,14 @@ function RootLayoutNav() {
           animation: "slide_from_right",
         }}
       />
+      <Stack.Screen
+        name="session/live/[id]"
+        options={{
+          headerShown: false,
+          presentation: "card",
+          animation: "slide_from_bottom",
+        }}
+      />
     </Stack>
   );
 }

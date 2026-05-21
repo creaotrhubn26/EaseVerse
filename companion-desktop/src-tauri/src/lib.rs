@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::process::Command;
 use tokio::sync::oneshot;
 
 mod watcher;
@@ -148,6 +150,79 @@ async fn start_watcher(
     Ok(())
 }
 
+#[derive(Serialize)]
+struct ImportResult {
+    ok: bool,
+    message: String,
+}
+
+#[tauri::command]
+async fn trigger_protools_import(app: AppHandle, markers_path: String) -> Result<ImportResult, String> {
+    if markers_path.is_empty() {
+        return Ok(ImportResult { ok: false, message: "markers_path is empty — set Export folder first".into() });
+    }
+    let resource_path = if cfg!(target_os = "macos") {
+        app.path()
+            .resolve("scripts/easeverse-import.applescript", tauri::path::BaseDirectory::Resource)
+            .map_err(|e| e.to_string())?
+    } else if cfg!(target_os = "windows") {
+        app.path()
+            .resolve("scripts/easeverse-import.ahk", tauri::path::BaseDirectory::Resource)
+            .map_err(|e| e.to_string())?
+    } else {
+        return Ok(ImportResult { ok: false, message: "Pro Tools import is only supported on Mac and Windows".into() });
+    };
+
+    let _ = app.emit("companion-log", format!("triggering Pro Tools import via {}", resource_path.display()));
+
+    let output = if cfg!(target_os = "macos") {
+        Command::new("osascript")
+            .arg(&resource_path)
+            .arg(&markers_path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+    } else {
+        // AutoHotkey is auto-detected from PATH on Windows.
+        Command::new("AutoHotkey.exe")
+            .arg(&resource_path)
+            .arg(&markers_path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+    };
+
+    match output {
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            if out.status.success() {
+                let _ = app.emit("companion-log", "Pro Tools import triggered");
+                Ok(ImportResult { ok: true, message: "Sent import command to Pro Tools".into() })
+            } else {
+                let msg = if stderr.is_empty() {
+                    format!("import script exited with {}", out.status)
+                } else {
+                    stderr
+                };
+                let _ = app.emit("companion-log", format!("Pro Tools import failed: {}", msg));
+                Ok(ImportResult { ok: false, message: msg })
+            }
+        }
+        Err(e) => {
+            let hint = if cfg!(target_os = "windows") {
+                " (install AutoHotkey from https://www.autohotkey.com if missing)"
+            } else {
+                " (grant Accessibility permission to this app in System Settings)"
+            };
+            let msg = format!("could not run import script: {}{}", e, hint);
+            let _ = app.emit("companion-log", format!("Pro Tools import failed: {}", msg));
+            Ok(ImportResult { ok: false, message: msg })
+        }
+    }
+}
+
 #[tauri::command]
 async fn stop_watcher(state: State<'_, AppState>) -> Result<(), String> {
     {
@@ -187,7 +262,8 @@ pub fn run() {
             save_config,
             test_pairing,
             start_watcher,
-            stop_watcher
+            stop_watcher,
+            trigger_protools_import
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

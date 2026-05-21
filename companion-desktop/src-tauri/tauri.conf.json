@@ -27,6 +27,10 @@
     "icon": [
       "icons/icon.png"
     ],
-    "category": "Music"
+    "category": "Music",
+    "resources": [
+      "../scripts/easeverse-import.ahk",
+      "../scripts/easeverse-import.applescript"
+    ]
   }
 }

@@ -426,6 +426,14 @@
               (Memory Locations).
             </div>
           </div>
+          <div class="row" style="justify-content:flex-end">
+            <button id="importBtn" class="primary" disabled title="Sends a UI-automation script to Pro Tools to import the latest markers.txt">
+              ⇪ Import to Pro Tools
+            </button>
+          </div>
+          <div class="field-hint" style="text-align:right">
+            Requires Pro Tools open + AutoHotkey (Windows) or Accessibility permission (Mac).
+          </div>
         </div>
       </div>
 
@@ -617,6 +625,36 @@
         }
       });
 
+      function refreshImportBtn() {
+        $("importBtn").disabled = !$("exportDir").value.trim();
+      }
+      $("exportDir").addEventListener("input", refreshImportBtn);
+
+      $("importBtn").addEventListener("click", async () => {
+        const dir = $("exportDir").value.trim();
+        if (!dir) return;
+        // Tauri-friendly path join: always forward-slash; native APIs accept it.
+        const sep = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
+        const markers = `${dir.replace(/[\\/]+$/, "")}${sep}easeverse-markers.txt`;
+        $("importBtn").disabled = true;
+        setStatus("", "Importing…");
+        try {
+          const r = await invoke("trigger_protools_import", { markersPath: markers });
+          if (r.ok) {
+            setStatus("live", "Import sent");
+            appendLog(`Pro Tools import triggered (${markers})`);
+          } else {
+            setStatus("error", "Import failed");
+            appendLog(`import failed: ${r.message}`, "err");
+          }
+        } catch (e) {
+          setStatus("error", "Import failed");
+          appendLog(`import failed: ${e}`, "err");
+        } finally {
+          refreshImportBtn();
+        }
+      });
+
       $("stopBtn").addEventListener("click", async () => {
         try {
           await invoke("stop_watcher");
@@ -653,6 +691,7 @@
 
       await listen("companion-log", (event) => appendLog(event.payload));
       await loadConfig();
+      refreshImportBtn();
     </script>
   </body>
 </html>

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Pool } from "pg";
-import { listRegionsForTakes } from "./_lib/takes-db.js";
+import { listRegionsForTakes, ensureTakesSchema } from "./_lib/takes-db.js";
 import { getProjectReferenceTrack } from "./_lib/projects-db.js";
 
 let pool: Pool | null = null;
@@ -26,6 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    await ensureTakesSchema();
     const { rows: lyricsRows } = await p.query<{
       external_track_id: string;
       title: string | null;

@@ -12,6 +12,10 @@ function getPool(): Pool | null {
   return pool;
 }
 
+export async function ensureTakesSchema(): Promise<void> {
+  return ensureSchema();
+}
+
 async function ensureSchema(): Promise<void> {
   if (ensured) return;
   const p = getPool();
@@ -39,6 +43,8 @@ async function ensureSchema(): Promise<void> {
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS decision_locked_at TIMESTAMPTZ;
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS lyrics_snapshot TEXT;
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS lyrics_snapshot_at TIMESTAMPTZ;
+    ALTER TABLE takes ADD COLUMN IF NOT EXISTS project_id TEXT;
+    CREATE INDEX IF NOT EXISTS takes_project_idx ON takes (project_id);
 
     CREATE TABLE IF NOT EXISTS take_consensus_votes (
       take_id TEXT NOT NULL REFERENCES takes(id) ON DELETE CASCADE,

@@ -74,6 +74,31 @@ async function ensureSchema(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS session_checkpoints_project_idx ON session_checkpoints (project_id, captured_at DESC);
     CREATE INDEX IF NOT EXISTS session_checkpoints_track_idx ON session_checkpoints (external_track_id, captured_at DESC);
+
+    CREATE TABLE IF NOT EXISTS comps (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      external_track_id TEXT,
+      name TEXT NOT NULL,
+      created_by_user_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS comps_track_idx ON comps (external_track_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS comps_project_idx ON comps (project_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS comp_segments (
+      id TEXT PRIMARY KEY,
+      comp_id TEXT NOT NULL REFERENCES comps(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      take_id TEXT NOT NULL REFERENCES takes(id) ON DELETE CASCADE,
+      start_sec REAL NOT NULL,
+      end_sec REAL NOT NULL,
+      section_label TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS comp_segments_comp_idx ON comp_segments (comp_id, ordinal);
+    CREATE INDEX IF NOT EXISTS comp_segments_take_idx ON comp_segments (take_id);
     CREATE INDEX IF NOT EXISTS takes_user_uploaded_idx ON takes (user_id, uploaded_at DESC);
     CREATE INDEX IF NOT EXISTS takes_status_idx ON takes (status);
 
@@ -671,6 +696,199 @@ export async function updateTakeRegionLoop(args: {
     [args.regionId, args.userId, args.autoLoop],
   );
   return rows[0] ? mapRegion(rows[0]) : null;
+}
+
+export type CompRow = {
+  id: string;
+  projectId: string | null;
+  externalTrackId: string | null;
+  name: string;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompSegmentRow = {
+  id: string;
+  compId: string;
+  ordinal: number;
+  takeId: string;
+  startSec: number;
+  endSec: number;
+  sectionLabel: string | null;
+  createdAt: string;
+};
+
+export async function createComp(args: {
+  projectId?: string | null;
+  externalTrackId?: string | null;
+  name: string;
+  createdByUserId: string;
+}): Promise<CompRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const id = `cmp_${crypto.randomBytes(9).toString("base64url")}`;
+  const { rows } = await p.query<{
+    id: string;
+    project_id: string | null;
+    external_track_id: string | null;
+    name: string;
+    created_by_user_id: string;
+    created_at: string;
+    updated_at: string;
+  }>(
+    `INSERT INTO comps (id, project_id, external_track_id, name, created_by_user_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [id, args.projectId ?? null, args.externalTrackId ?? null, args.name.slice(0, 200), args.createdByUserId],
+  );
+  if (!rows[0]) return null;
+  return {
+    id: rows[0].id,
+    projectId: rows[0].project_id,
+    externalTrackId: rows[0].external_track_id,
+    name: rows[0].name,
+    createdByUserId: rows[0].created_by_user_id,
+    createdAt: rows[0].created_at,
+    updatedAt: rows[0].updated_at,
+  };
+}
+
+export async function listCompsForTrack(externalTrackId: string): Promise<CompRow[]> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  const { rows } = await p.query<{
+    id: string;
+    project_id: string | null;
+    external_track_id: string | null;
+    name: string;
+    created_by_user_id: string;
+    created_at: string;
+    updated_at: string;
+  }>(
+    `SELECT * FROM comps WHERE external_track_id = $1 ORDER BY created_at DESC`,
+    [externalTrackId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    projectId: r.project_id,
+    externalTrackId: r.external_track_id,
+    name: r.name,
+    createdByUserId: r.created_by_user_id,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+export async function getComp(compId: string): Promise<CompRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const { rows } = await p.query<{
+    id: string;
+    project_id: string | null;
+    external_track_id: string | null;
+    name: string;
+    created_by_user_id: string;
+    created_at: string;
+    updated_at: string;
+  }>(`SELECT * FROM comps WHERE id = $1`, [compId]);
+  if (!rows[0]) return null;
+  return {
+    id: rows[0].id,
+    projectId: rows[0].project_id,
+    externalTrackId: rows[0].external_track_id,
+    name: rows[0].name,
+    createdByUserId: rows[0].created_by_user_id,
+    createdAt: rows[0].created_at,
+    updatedAt: rows[0].updated_at,
+  };
+}
+
+export async function listCompSegments(compId: string): Promise<CompSegmentRow[]> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  const { rows } = await p.query<{
+    id: string;
+    comp_id: string;
+    ordinal: number;
+    take_id: string;
+    start_sec: number;
+    end_sec: number;
+    section_label: string | null;
+    created_at: string;
+  }>(`SELECT * FROM comp_segments WHERE comp_id = $1 ORDER BY ordinal ASC`, [compId]);
+  return rows.map((r) => ({
+    id: r.id,
+    compId: r.comp_id,
+    ordinal: r.ordinal,
+    takeId: r.take_id,
+    startSec: r.start_sec,
+    endSec: r.end_sec,
+    sectionLabel: r.section_label,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function replaceCompSegments(args: {
+  compId: string;
+  segments: Array<{
+    takeId: string;
+    startSec: number;
+    endSec: number;
+    sectionLabel?: string | null;
+  }>;
+}): Promise<CompSegmentRow[]> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  await p.query(`DELETE FROM comp_segments WHERE comp_id = $1`, [args.compId]);
+  const out: CompSegmentRow[] = [];
+  for (let i = 0; i < args.segments.length; i++) {
+    const seg = args.segments[i];
+    const id = `seg_${crypto.randomBytes(9).toString("base64url")}`;
+    const { rows } = await p.query<{
+      id: string;
+      comp_id: string;
+      ordinal: number;
+      take_id: string;
+      start_sec: number;
+      end_sec: number;
+      section_label: string | null;
+      created_at: string;
+    }>(
+      `INSERT INTO comp_segments (id, comp_id, ordinal, take_id, start_sec, end_sec, section_label)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [id, args.compId, i, seg.takeId, seg.startSec, seg.endSec, seg.sectionLabel ?? null],
+    );
+    if (rows[0]) {
+      out.push({
+        id: rows[0].id,
+        compId: rows[0].comp_id,
+        ordinal: rows[0].ordinal,
+        takeId: rows[0].take_id,
+        startSec: rows[0].start_sec,
+        endSec: rows[0].end_sec,
+        sectionLabel: rows[0].section_label,
+        createdAt: rows[0].created_at,
+      });
+    }
+  }
+  await p.query(`UPDATE comps SET updated_at = NOW() WHERE id = $1`, [args.compId]);
+  return out;
+}
+
+export async function deleteComp(args: { compId: string; userId: string }): Promise<boolean> {
+  const p = getPool();
+  if (!p) return false;
+  await ensureSchema();
+  const { rowCount } = await p.query(
+    `DELETE FROM comps WHERE id = $1 AND created_by_user_id = $2`,
+    [args.compId, args.userId],
+  );
+  return (rowCount ?? 0) > 0;
 }
 
 export async function recordSessionCheckpoint(args: {

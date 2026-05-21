@@ -183,6 +183,88 @@ export async function createRegion(
   return json.region;
 }
 
+export type CompRecord = {
+  id: string;
+  projectId: string | null;
+  externalTrackId: string | null;
+  name: string;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompSegment = {
+  id: string;
+  compId: string;
+  ordinal: number;
+  takeId: string;
+  startSec: number;
+  endSec: number;
+  sectionLabel: string | null;
+  createdAt: string;
+};
+
+export async function listComps(token: string | null, externalTrackId: string): Promise<CompRecord[]> {
+  const res = await authedFetch(
+    `/api/takes/comps?trackId=${encodeURIComponent(externalTrackId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(`List comps failed: ${res.status}`);
+  const json = (await res.json()) as { comps: CompRecord[] };
+  return json.comps;
+}
+
+export async function createComp(
+  token: string | null,
+  args: { name: string; externalTrackId: string; projectId?: string },
+): Promise<CompRecord> {
+  const res = await authedFetch(`/api/takes/comps`, token, {
+    method: "POST",
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) throw new Error(`Create comp failed: ${res.status}`);
+  const json = (await res.json()) as { comp: CompRecord };
+  return json.comp;
+}
+
+export async function getComp(
+  token: string | null,
+  compId: string,
+): Promise<{ comp: CompRecord; segments: CompSegment[] }> {
+  const res = await authedFetch(
+    `/api/takes/comps?id=${encodeURIComponent(compId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(`Get comp failed: ${res.status}`);
+  return (await res.json()) as { comp: CompRecord; segments: CompSegment[] };
+}
+
+export async function saveCompSegments(
+  token: string | null,
+  compId: string,
+  segments: Array<{ takeId: string; startSec: number; endSec: number; sectionLabel?: string }>,
+): Promise<CompSegment[]> {
+  const res = await authedFetch(
+    `/api/takes/comps?id=${encodeURIComponent(compId)}`,
+    token,
+    { method: "PUT", body: JSON.stringify({ segments }) },
+  );
+  if (!res.ok) throw new Error(`Save segments failed: ${res.status}`);
+  const json = (await res.json()) as { segments: CompSegment[] };
+  return json.segments;
+}
+
+export async function deleteComp(token: string | null, compId: string): Promise<void> {
+  const res = await authedFetch(
+    `/api/takes/comps?id=${encodeURIComponent(compId)}`,
+    token,
+    { method: "DELETE" },
+  );
+  if (!res.ok) throw new Error(`Delete comp failed: ${res.status}`);
+}
+
 export async function deleteRegion(token: string | null, regionId: string): Promise<void> {
   const res = await authedFetch(
     `/api/takes/regions?id=${encodeURIComponent(regionId)}`,

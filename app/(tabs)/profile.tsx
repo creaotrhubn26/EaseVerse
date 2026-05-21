@@ -372,6 +372,42 @@ function SegmentedControl<T extends string>({
   );
 }
 
+function CompanionLinkRow({ sectionPadding }: { sectionPadding: number }) {
+  return (
+    <Pressable
+      onPress={() => router.push('/companion')}
+      style={({ pressed }) => [
+        {
+          marginHorizontal: sectionPadding,
+          marginTop: 12,
+          padding: 14,
+          borderRadius: 14,
+          backgroundColor: Colors.surface,
+          borderWidth: 1,
+          borderColor: Colors.borderGlass,
+          flexDirection: 'row' as const,
+          alignItems: 'center' as const,
+          gap: 10,
+        },
+        pressed && { opacity: 0.7 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Download Pro Tools companion"
+    >
+      <Ionicons name="cloud-download" size={18} color={Colors.gradientMid} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: Colors.textPrimary, fontFamily: 'Inter_700Bold', fontSize: 14 }}>
+          Get the Companion App
+        </Text>
+        <Text style={{ color: Colors.textTertiary, fontFamily: 'Inter_500Medium', fontSize: 12, marginTop: 2 }}>
+          Mac DMG ready · Windows / Linux coming via CI build.
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+    </Pressable>
+  );
+}
+
 function ProjectsLinkRow({ sectionPadding }: { sectionPadding: number }) {
   return (
     <Pressable
@@ -909,6 +945,7 @@ export default function ProfileScreen() {
         <AccountSection horizontalMargin={sectionPadding} />
         {CLERK_CONFIGURED ? <AdminLinkRow sectionPadding={sectionPadding} /> : null}
         {CLERK_CONFIGURED ? <ProjectsLinkRow sectionPadding={sectionPadding} /> : null}
+        <CompanionLinkRow sectionPadding={sectionPadding} />
         {CLERK_CONFIGURED ? <CostDashboardCard horizontalMargin={sectionPadding} /> : null}
         <ProToolsEasyImport horizontalMargin={sectionPadding} />
         <ProToolsPairingCard horizontalMargin={sectionPadding} />

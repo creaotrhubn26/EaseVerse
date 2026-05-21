@@ -34,6 +34,8 @@ import {
   type TakeRegion,
 } from "@/lib/takes-client";
 import { useApp } from "@/lib/AppContext";
+import { createComp, listComps } from "@/lib/takes-client";
+import { router } from "expo-router";
 
 type Props = { horizontalMargin?: number };
 
@@ -552,19 +554,46 @@ function TakeRow({
           </Text>
         </View>
         {take.externalTrackId && Platform.OS === "web" ? (
-          <Pressable
-            onPress={copyBoothUrl}
-            style={styles.boothBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Copy vocalist booth URL"
-          >
-            <Ionicons
-              name={boothCopied ? "checkmark" : "link"}
-              size={13}
-              color={Colors.textPrimary}
-            />
-            <Text style={styles.boothBtnText}>{boothCopied ? "Copied" : "Booth URL"}</Text>
-          </Pressable>
+          <>
+            <Pressable
+              onPress={copyBoothUrl}
+              style={styles.boothBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Copy vocalist booth URL"
+            >
+              <Ionicons
+                name={boothCopied ? "checkmark" : "link"}
+                size={13}
+                color={Colors.textPrimary}
+              />
+              <Text style={styles.boothBtnText}>{boothCopied ? "Copied" : "Booth URL"}</Text>
+            </Pressable>
+            <Pressable
+              onPress={async () => {
+                if (!take.externalTrackId) return;
+                try {
+                  const token = await getToken();
+                  const existing = await listComps(token, take.externalTrackId);
+                  const comp = existing[0]
+                    ? existing[0]
+                    : await createComp(token, {
+                        name: `${take.externalTrackId} comp`,
+                        externalTrackId: take.externalTrackId,
+                        projectId: take.projectId || undefined,
+                      });
+                  router.push({ pathname: "/comp/[id]", params: { id: comp.id } });
+                } catch (err) {
+                  console.warn("open comp failed:", err);
+                }
+              }}
+              style={styles.boothBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Open comp editor"
+            >
+              <Ionicons name="cut" size={13} color={Colors.textPrimary} />
+              <Text style={styles.boothBtnText}>Comp</Text>
+            </Pressable>
+          </>
         ) : null}
         <View style={[styles.statusPill, { borderColor: statusColor + "55" }]}>
           <View style={[styles.statusDot, { backgroundColor: statusColor }]} />

@@ -167,41 +167,33 @@ function PairingCardInner({ horizontalMargin = 16, getToken }: Props & { getToke
 
       {showGuide ? (
         <View style={styles.guideBody}>
-          <GuideStep n={1} title="Generate a token above">
-            The token expires after 15 minutes. Generate a new one any time.
+          <GuideStep n={1} title="Download the Companion app">
+            Mac DMG is live; Windows/Linux installers come from CI. Visit{` `}
+            <Text style={styles.code}>Profile → Get the Companion App</Text>.
           </GuideStep>
-          <GuideStep n={2} title="Install companion on your Mac">
-            Clone the EaseVerse repo and run{` `}
-            <Text style={styles.code}>npm install</Text>. The companion lives in the
-            <Text style={styles.code}> companion/</Text> folder.
+          <GuideStep n={2} title="Generate a token above">
+            Paste it into the Companion's "Pairing token" field. Token expires after 15 min.
           </GuideStep>
-          <GuideStep n={3} title="Run companion with the token">
-            <Text style={styles.code}>
-              export EASEVERSE_API_BASE_URL=https://easeverse.vercel.app{`\n`}
-              export EASEVERSE_PAIR_TOKEN=&lt;your token&gt;{`\n`}
-              export PROTOOLS_AUDIO_WATCH=~/ProTools/Sessions/MyProj/Audio\ Files{`\n`}
-              npm run companion:dev
-            </Text>
+          <GuideStep n={3} title="Pick your Pro Tools Audio Files folder">
+            Companion polls it for new vocal takes and uploads each one to EaseVerse automatically.
           </GuideStep>
-          <GuideStep n={4} title="Audio takes upload automatically">
-            Every stable .wav/.aif inside{` `}
-            <Text style={styles.code}>PROTOOLS_AUDIO_WATCH</Text>{` `}
-            is pushed to{` `}
-            <Text style={styles.code}>/api/takes/upload</Text>{` `}
-            and shows up in the vocalist booth view in real time.
+          <GuideStep n={4} title="Producer + band collaborate in EaseVerse">
+            Open the take, leave notes (with{` `}
+            <Text style={styles.code}>@1:23</Text>{` `}timestamps), record a voice memo, draw loop-punch
+            regions, set Keeper/Re-do, and let the band vote — everything streams to the
+            vocalist's booth view in seconds.
           </GuideStep>
-          <GuideStep n={5} title="Optional: sync session metadata">
-            For BPM + markers + take names, also set{` `}
-            <Text style={styles.code}>PROTOOLS_SESSION_INFO_FILE</Text>{` `}
-            and run{` `}
-            <Text style={styles.code}>File → Export → Session Info as Text…</Text>{` `}
-            in Pro Tools.
-          </GuideStep>
-          <GuideStep n={6} title="Two-way sync (optional)">
+          <GuideStep n={5} title="Optional: import markers + keepers back into Pro Tools">
             Set{` `}
-            <Text style={styles.code}>PROTOOLS_IMPORT_FILE=/tmp/pt-ingest.json</Text>
-            {` `}to pull lyrics + marker updates from EaseVerse back into a JSON
-            snapshot for Pro Tools-side ingestion.
+            <Text style={styles.code}>PROTOOLS_EXPORT_DIR</Text>{` `}in the Companion
+            and it writes{` `}
+            <Text style={styles.code}>easeverse-markers.txt</Text>{` `}+{` `}
+            <Text style={styles.code}>easeverse-keepers.txt</Text>. Import via{` `}
+            <Text style={styles.code}>File → Import → Session Data</Text>.
+          </GuideStep>
+          <GuideStep n={6} title="Optional: comp takes inside EaseVerse">
+            Open a take in Studio takes and click "Open in comping" to pick best
+            sections across multiple takes. The plan exports back to Pro Tools as markers.
           </GuideStep>
           <Text style={styles.guideNote}>
             Pairing tokens are scoped to your user and accepted by{` `}

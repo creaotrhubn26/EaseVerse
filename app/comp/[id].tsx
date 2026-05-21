@@ -15,7 +15,13 @@ import Colors from "@/constants/colors";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
 import { formatTimestamp } from "@/lib/parse-timestamps";
-import { buildCompBuffer, bufferDurationSec, playBuffer } from "@/lib/stitch-comp";
+import {
+  bufferDurationSec,
+  bufferToWavBlob,
+  buildCompBuffer,
+  downloadWavBlob,
+  playBuffer,
+} from "@/lib/stitch-comp";
 import {
   fetchTakeRanking,
   fetchTakeSections,
@@ -98,6 +104,35 @@ function CompInner() {
   const [previewBusy, setPreviewBusy] = useState(false);
   const previewHandleRef = useRef<{ stop: () => void } | null>(null);
   const [previewDuration, setPreviewDuration] = useState<number | null>(null);
+
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExportWav() {
+    if (segments.length === 0 || !comp) return;
+    setExporting(true);
+    try {
+      const stitchSegments = segments
+        .map((s) => {
+          const take = takes.find((t) => t.id === s.takeId);
+          return {
+            takeId: s.takeId,
+            audioUrl: take?.storageUrl || "",
+            startSec: s.startSec,
+            endSec: s.endSec,
+          };
+        })
+        .filter((s) => s.audioUrl);
+      const buffer = await buildCompBuffer(stitchSegments);
+      if (!buffer) return;
+      const wav = bufferToWavBlob(buffer);
+      const safeName = (comp.name || "comp").replace(/[^a-zA-Z0-9-_]+/g, "_").slice(0, 60);
+      downloadWavBlob(wav, `${safeName}-comp.wav`);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handlePreview() {
     if (previewing) {
@@ -267,23 +302,35 @@ function CompInner() {
           </Text>
         </View>
         {Platform.OS === "web" && segments.length > 0 ? (
-          <Pressable
-            onPress={handlePreview}
-            disabled={previewBusy}
-            style={[styles.previewBtn, previewBusy && { opacity: 0.5 }]}
-            accessibilityRole="button"
-            accessibilityLabel={previewing ? "Stop preview" : "Play comp preview"}
-          >
-            <Ionicons
-              name={previewing ? "stop" : "play"}
-              size={12}
-              color={Colors.gradientStart}
-            />
-            <Text style={styles.previewBtnText}>
-              {previewBusy ? "Building…" : previewing ? "Stop" : "Preview"}
-              {previewDuration ? ` (${formatTimestamp(previewDuration)})` : ""}
-            </Text>
-          </Pressable>
+          <>
+            <Pressable
+              onPress={handlePreview}
+              disabled={previewBusy}
+              style={[styles.previewBtn, previewBusy && { opacity: 0.5 }]}
+              accessibilityRole="button"
+              accessibilityLabel={previewing ? "Stop preview" : "Play comp preview"}
+            >
+              <Ionicons
+                name={previewing ? "stop" : "play"}
+                size={12}
+                color={Colors.gradientStart}
+              />
+              <Text style={styles.previewBtnText}>
+                {previewBusy ? "Building…" : previewing ? "Stop" : "Preview"}
+                {previewDuration ? ` (${formatTimestamp(previewDuration)})` : ""}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={handleExportWav}
+              disabled={exporting}
+              style={[styles.previewBtn, exporting && { opacity: 0.5 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Export comp as WAV"
+            >
+              <Ionicons name="cloud-download" size={12} color={Colors.gradientStart} />
+              <Text style={styles.previewBtnText}>{exporting ? "Exporting…" : "Export WAV"}</Text>
+            </Pressable>
+          </>
         ) : null}
         <Pressable
           onPress={handleSave}

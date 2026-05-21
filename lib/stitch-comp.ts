@@ -87,3 +87,61 @@ export function playBuffer(buffer: AudioBuffer): { stop: () => void; node: Audio
 export function bufferDurationSec(buffer: AudioBuffer): number {
   return buffer.length / buffer.sampleRate;
 }
+
+// 16-bit PCM WAV encoder. Mono / stereo only — Pro Tools handles both.
+export function bufferToWavBlob(buffer: AudioBuffer): Blob {
+  const channels = Math.min(2, buffer.numberOfChannels);
+  const sampleRate = buffer.sampleRate;
+  const samples = buffer.length;
+  const bytesPerSample = 2;
+  const dataLength = samples * channels * bytesPerSample;
+  const totalLength = 44 + dataLength;
+  const ab = new ArrayBuffer(totalLength);
+  const view = new DataView(ab);
+
+  // RIFF / WAVE header
+  let offset = 0;
+  const writeStr = (s: string) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+    offset += s.length;
+  };
+  writeStr("RIFF");
+  view.setUint32(offset, totalLength - 8, true); offset += 4;
+  writeStr("WAVE");
+  writeStr("fmt ");
+  view.setUint32(offset, 16, true); offset += 4;            // chunk size
+  view.setUint16(offset, 1, true); offset += 2;             // PCM
+  view.setUint16(offset, channels, true); offset += 2;
+  view.setUint32(offset, sampleRate, true); offset += 4;
+  view.setUint32(offset, sampleRate * channels * bytesPerSample, true); offset += 4;
+  view.setUint16(offset, channels * bytesPerSample, true); offset += 2;
+  view.setUint16(offset, 16, true); offset += 2;            // bits per sample
+  writeStr("data");
+  view.setUint32(offset, dataLength, true); offset += 4;
+
+  // Interleave channels and convert float [-1..1] -> int16
+  const channelData: Float32Array[] = [];
+  for (let c = 0; c < channels; c++) channelData.push(buffer.getChannelData(c));
+  for (let i = 0; i < samples; i++) {
+    for (let c = 0; c < channels; c++) {
+      const sample = Math.max(-1, Math.min(1, channelData[c][i]));
+      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(offset, intSample, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([ab], { type: "audio/wav" });
+}
+
+export function downloadWavBlob(blob: Blob, filename: string): void {
+  if (typeof window === "undefined") return;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}

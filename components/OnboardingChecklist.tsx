@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 
 export type ChecklistStep = {
-  id: 'language' | 'accent' | 'firstTake';
+  id: string;
   label: string;
   done: boolean;
   onPress?: () => void;
@@ -19,9 +19,11 @@ export type ChecklistStep = {
 type Props = {
   steps: ChecklistStep[];
   onDismiss: () => void;
+  title?: string;
+  subtitleFormatter?: (done: number, total: number) => string;
 };
 
-export function OnboardingChecklist({ steps, onDismiss }: Props) {
+export function OnboardingChecklist({ steps, onDismiss, title, subtitleFormatter }: Props) {
   const doneCount = steps.filter((s) => s.done).length;
   const total = steps.length;
   const progress = total === 0 ? 0 : doneCount / total;
@@ -34,9 +36,9 @@ export function OnboardingChecklist({ steps, onDismiss }: Props) {
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
-          <Text style={styles.title}>Kom i gang</Text>
+          <Text style={styles.title}>{title ?? 'Kom i gang'}</Text>
           <Text style={styles.subtitle}>
-            {doneCount} av {total} steg fullført
+            {subtitleFormatter ? subtitleFormatter(doneCount, total) : `${doneCount} av ${total} steg fullført`}
           </Text>
         </View>
         <Pressable

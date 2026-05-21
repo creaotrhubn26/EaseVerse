@@ -11,6 +11,7 @@ import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
 import { parseProducerNote, formatTimestamp } from "@/lib/parse-timestamps";
@@ -56,12 +57,26 @@ type BoothPayload = {
   takes: BoothTake[];
 };
 
+const BOOTH_TIP_KEY = "@easeverse_booth_intro_dismissed_v1";
+
 export default function BoothScreen() {
   const insets = useSafeAreaInsets();
   const { trackId } = useLocalSearchParams<{ trackId: string }>();
   const [data, setData] = useState<BoothPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [introVisible, setIntroVisible] = useState(false);
+
+  useEffect(() => {
+    void AsyncStorage.getItem(BOOTH_TIP_KEY).then((v) => {
+      if (v !== "1") setIntroVisible(true);
+    });
+  }, []);
+
+  function dismissIntro() {
+    setIntroVisible(false);
+    void AsyncStorage.setItem(BOOTH_TIP_KEY, "1");
+  }
 
   const load = useCallback(async () => {
     if (!trackId) return;
@@ -103,6 +118,30 @@ export default function BoothScreen() {
         </View>
         {data?.lyrics?.bpm ? <Text style={styles.bpm}>{data.lyrics.bpm} BPM</Text> : null}
       </View>
+
+      {introVisible ? (
+        <View style={styles.introCard}>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={styles.introTitle}>Velkommen til vokalbooten</Text>
+            <Text style={styles.introBody}>
+              Nye takes dukker opp her etter hvert som produsenten laster opp.
+              Trykk en{" "}
+              <Text style={styles.introCode}>@1:23</Text>
+              {" "}i en producer-note for å hoppe rett til den sekundet, eller{" "}
+              <Text style={styles.introCode}>Loop</Text>
+              {" "}på en region producer har merket av for å høre den i ring.
+            </Text>
+          </View>
+          <Pressable
+            onPress={dismissIntro}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Skjul intro"
+          >
+            <Ionicons name="close" size={18} color={Colors.textSecondary} />
+          </Pressable>
+        </View>
+      ) : null}
 
       {loading && !data ? (
         <ActivityIndicator color={Colors.textTertiary} style={{ marginTop: 32 }} />
@@ -654,6 +693,35 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontStyle: "italic",
     marginTop: 4,
+  },
+  introCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 14,
+    marginBottom: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.gradientStart + "12",
+    borderWidth: 1,
+    borderColor: Colors.gradientStart + "44",
+  },
+  introTitle: {
+    color: Colors.textPrimary,
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+  },
+  introBody: {
+    color: Colors.textSecondary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  introCode: {
+    fontFamily: "Inter_700Bold",
+    color: Colors.gradientMid,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 4,
+    borderRadius: 4,
   },
   aiNotesBlock: { marginTop: 4 },
   aiNotesLabel: {

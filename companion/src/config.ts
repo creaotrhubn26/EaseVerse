@@ -17,6 +17,7 @@ export interface CompanionConfig {
   pairingToken?: string;
   audioStabilizeMs: number;
   audioExtensions: string[];
+  exportDir?: string;
 }
 
 function readPositiveInt(value: string | undefined, fallback: number): number {
@@ -61,5 +62,6 @@ export function loadCompanionConfig(): CompanionConfig {
       .split(',')
       .map((ext) => ext.trim().toLowerCase())
       .filter((ext) => ext.startsWith('.')),
+    exportDir: process.env.PROTOOLS_EXPORT_DIR?.trim() || undefined,
   };
 }

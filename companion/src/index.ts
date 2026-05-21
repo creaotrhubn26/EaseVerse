@@ -11,6 +11,7 @@ import {
 import { FileProToolsAdapter } from './adapters/file-adapter';
 import { ProToolsSessionInfoAdapter } from './adapters/protools-session-info-adapter';
 import { PullSnapshotWriter } from './adapters/pull-writer';
+import { ProToolsExportWriter } from './adapters/protools-export-writer';
 import { markUploaded, readTakeBytes, scanAudioFolder } from './adapters/take-watcher';
 
 async function run(): Promise<void> {
@@ -21,6 +22,7 @@ async function run(): Promise<void> {
   const pullWriter = config.importFilePath
     ? new PullSnapshotWriter(config.importFilePath)
     : null;
+  const exportWriter = config.exportDir ? new ProToolsExportWriter(config.exportDir) : null;
 
   console.log('[companion] starting Pro Tools bridge', {
     apiBaseUrl: config.apiBaseUrl,
@@ -139,6 +141,21 @@ async function run(): Promise<void> {
             regions: snapshot?.regions.length ?? 0,
             outputPath: config.importFilePath,
           });
+        }
+
+        if (exportWriter && snapshot) {
+          try {
+            const written = await exportWriter.writeIfChanged(snapshot);
+            if (written.markers || written.keepers || config.logVerbose) {
+              console.log('[companion] wrote Pro Tools export files', {
+                markers: written.markers,
+                keepers: written.keepers,
+                outputDir: config.exportDir,
+              });
+            }
+          } catch (err) {
+            console.warn('[companion] export writer failed', (err as Error).message);
+          }
         }
       }
     } catch (error) {

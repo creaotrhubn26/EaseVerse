@@ -36,6 +36,28 @@ npm run companion:dev
 - `EASEVERSE_PAIR_TOKEN` (one-time pairing token from `/admin` → "Pair companion" — required when `PROTOOLS_AUDIO_WATCH` is set)
 - `PROTOOLS_AUDIO_STABILIZE_MS` (default `1500`; how long a file must keep the same size/mtime before upload)
 - `PROTOOLS_AUDIO_EXTENSIONS` (default `.wav,.aif,.aiff`)
+- `PROTOOLS_EXPORT_DIR` (optional; folder where companion writes `easeverse-markers.txt` + `easeverse-keepers.txt` for manual Pro Tools import)
+
+## Pro Tools import files (manual sync back into the session)
+
+Set `PROTOOLS_EXPORT_DIR` to a folder on the producer's machine. The
+companion will write two files there every time the snapshot poll
+brings new data from EaseVerse:
+
+- **`easeverse-markers.txt`** — Pro Tools-compatible session-info file
+  containing a Memory Locations section with every timestamp from
+  producer notes (`@1:23 chorus needs more breath`) and every
+  loop-punch region. Import via Pro Tools → `File → Import → Session
+  Data` → check "Memory Locations / Markers".
+- **`easeverse-keepers.txt`** — human-readable summary of keeper takes
+  (suggest colouring those tracks green), re-do takes, producer notes,
+  and loop regions. Use as a reference while comping or colour-coding
+  manually.
+
+Full Pro Tools-side automation (auto colour, transport control, live
+playhead) requires Pro Tools Scripting SDK (Pro Tools 2023.12 +
+Ultimate/Studio + Avid Developer access) and a separate bridge script
+— this companion just produces the data those scripts will consume.
 
 ## Audio take auto-upload
 

@@ -72,6 +72,40 @@ export async function uploadTake(args: {
   return { url: result.url, pathname: result.pathname };
 }
 
+// React Native upload — feeds a local file:// URI to Vercel Blob via the
+// same handleUpload contract used by the web client. We materialize the
+// file as a Blob first so @vercel/blob/client can stream it.
+export async function uploadTakeFromUri(args: {
+  uri: string;
+  filename: string;
+  contentType?: string;
+  externalTrackId?: string;
+  sourcePath?: string;
+  token: string;
+  projectId?: string;
+  lyricsSnapshot?: string;
+}): Promise<{ url: string; pathname: string }> {
+  const res = await fetch(args.uri);
+  const blob = await res.blob();
+  const typed =
+    blob.type && blob.type !== ""
+      ? blob
+      : new Blob([blob], { type: args.contentType || "audio/m4a" });
+  const result = await upload(args.filename, typed, {
+    access: "public",
+    handleUploadUrl: `${getApiUrl()}/api/takes/upload`,
+    clientPayload: JSON.stringify({
+      externalTrackId: args.externalTrackId,
+      sourcePath: args.sourcePath,
+      filename: args.filename,
+      projectId: args.projectId,
+      lyricsSnapshot: args.lyricsSnapshot,
+    }),
+    headers: { Authorization: `Bearer ${args.token}` },
+  });
+  return { url: result.url, pathname: result.pathname };
+}
+
 export async function fetchTakes(token: string | null): Promise<TakeRecord[]> {
   const response = await authedFetch("/api/takes", token, { method: "GET" });
   if (!response.ok) throw new Error(`Takes fetch failed: ${response.status}`);

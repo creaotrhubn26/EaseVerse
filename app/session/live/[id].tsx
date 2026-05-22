@@ -25,8 +25,10 @@ import {
   type LiveSession,
 } from "@/lib/sessions-client";
 import { startClick, type ClickHandle } from "@/lib/click-track";
-import { uploadTake } from "@/lib/takes-client";
+import { uploadTake, uploadTakeFromUri } from "@/lib/takes-client";
 import { startLiveMeter, type MeterHandle } from "@/lib/live-meter";
+import { startNativeMeterPusher, type NativeMeterHandle } from "@/lib/live-meter-native";
+import { useRecording } from "@/lib/useRecording";
 import {
   handleIncomingSignal,
   startTalkbackAsCaller,
@@ -68,6 +70,10 @@ function Inner() {
   const meterStreamRef = useRef<MediaStream | null>(null);
   const [meshOn, setMeshOn] = useState(false);
   const meshRef = useRef<MeshHandle | null>(null);
+  const nativeRec = useRecording();
+  const nativeRecActiveRef = useRef(false);
+  const nativeMeterRef = useRef<NativeMeterHandle | null>(null);
+  const nativeLevelRef = useRef(0);
 
   // Join on mount + leave on unmount.
   useEffect(() => {
@@ -234,6 +240,31 @@ function Inner() {
     meterStreamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
 
+  // Track latest native audio level so the meter pusher can sample it.
+  useEffect(() => {
+    nativeLevelRef.current = nativeRec.audioLevel;
+  }, [nativeRec.audioLevel]);
+
+  // Native: push meter while mic is armed (independent of recording state).
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    if (!id) return;
+    if (!micArmed) {
+      nativeMeterRef.current?.stop();
+      nativeMeterRef.current = null;
+      return;
+    }
+    nativeMeterRef.current = startNativeMeterPusher({
+      sessionId: String(id),
+      getToken,
+      getLevel01: () => nativeLevelRef.current,
+    });
+    return () => {
+      nativeMeterRef.current?.stop();
+      nativeMeterRef.current = null;
+    };
+  }, [micArmed, id, getToken]);
+
   async function startTalkbackTo(remoteUserId: string) {
     if (talkback) {
       talkback.close();
@@ -280,7 +311,16 @@ function Inner() {
     const delay = Math.max(0, target - Date.now());
     const timer = setTimeout(async () => {
       try {
-        if (Platform.OS !== "web") return;
+        if (Platform.OS !== "web") {
+          // Native path: expo-audio recording, upload uri on stop.
+          const ok = await nativeRec.start();
+          if (!ok) return;
+          nativeRecActiveRef.current = true;
+          setRecording(true);
+          const t = await getToken();
+          await sendHeartbeat(t, String(id), { micArmed: true, recording: true });
+          return;
+        }
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         streamRef.current = stream;
         chunksRef.current = [];
@@ -324,8 +364,31 @@ function Inner() {
   useEffect(() => {
     if (session?.recordingStartsAt) return;
     if (!recording) return;
-    recorderRef.current?.stop();
-    recorderRef.current = null;
+    if (Platform.OS === "web") {
+      recorderRef.current?.stop();
+      recorderRef.current = null;
+    } else if (nativeRecActiveRef.current) {
+      void (async () => {
+        try {
+          const { uri } = await nativeRec.stop();
+          nativeRecActiveRef.current = false;
+          if (!uri || !session) return;
+          const token = await getToken();
+          if (!token) return;
+          const filename = `live-${session.id}-${user?.id || "anon"}-${Date.now()}.m4a`;
+          await uploadTakeFromUri({
+            uri,
+            filename,
+            contentType: "audio/m4a",
+            externalTrackId: session.externalTrackId || session.id,
+            token,
+            projectId: session.projectId,
+          });
+        } catch (err) {
+          setError("Native upload failed: " + (err as Error).message);
+        }
+      })();
+    }
     setRecording(false);
     void (async () => {
       const t = await getToken();
@@ -335,7 +398,7 @@ function Inner() {
         /* ignore */
       }
     })();
-  }, [session?.recordingStartsAt, recording, getToken, id]);
+  }, [session?.recordingStartsAt, recording, getToken, id, nativeRec, session, user?.id]);
 
   // Click track follows session.clickOn + session.bpm, gated to recording window
   useEffect(() => {
@@ -473,8 +536,7 @@ function Inner() {
         </View>
       ) : null}
 
-      {Platform.OS === "web" ? (
-        <View style={styles.controls}>
+      <View style={styles.controls}>
           <Pressable
             onPress={toggleMic}
             style={[styles.controlBtn, micArmed && styles.controlBtnActive]}
@@ -491,21 +553,23 @@ function Inner() {
             </Text>
           </Pressable>
 
-          <Pressable
-            onPress={() => setMeshOn((v) => !v)}
-            style={[styles.controlBtn, meshOn && styles.controlBtnActive]}
-            accessibilityRole="button"
-            accessibilityLabel={meshOn ? "Leave mesh talkback" : "Join mesh talkback"}
-          >
-            <Ionicons
-              name={meshOn ? "people" : "people-outline"}
-              size={16}
-              color={meshOn ? "#fff" : Colors.textPrimary}
-            />
-            <Text style={[styles.controlText, meshOn && { color: "#fff" }]}>
-              {meshOn ? "Mesh live" : "Live talkback"}
-            </Text>
-          </Pressable>
+          {Platform.OS === "web" ? (
+            <Pressable
+              onPress={() => setMeshOn((v) => !v)}
+              style={[styles.controlBtn, meshOn && styles.controlBtnActive]}
+              accessibilityRole="button"
+              accessibilityLabel={meshOn ? "Leave mesh talkback" : "Join mesh talkback"}
+            >
+              <Ionicons
+                name={meshOn ? "people" : "people-outline"}
+                size={16}
+                color={meshOn ? "#fff" : Colors.textPrimary}
+              />
+              <Text style={[styles.controlText, meshOn && { color: "#fff" }]}>
+                {meshOn ? "Mesh live" : "Live talkback"}
+              </Text>
+            </Pressable>
+          ) : null}
 
           {isProducer ? (
             <>
@@ -559,7 +623,6 @@ function Inner() {
             </>
           ) : null}
         </View>
-      ) : null}
     </ScrollView>
   );
 }

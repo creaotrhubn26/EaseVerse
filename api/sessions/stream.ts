@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
 import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
 import { getProjectMembership } from "../_lib/projects-db.js";
-import { getLiveSession, listParticipants } from "../_lib/sessions-db.js";
+import { consumeSignals, getLiveSession, listParticipants } from "../_lib/sessions-db.js";
 
 export const config = { maxDuration: 60 };
 
@@ -53,6 +53,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.write(`event: presence\ndata: ${JSON.stringify(payload)}\n\n`);
     } else {
       res.write(`: keepalive\n\n`);
+    }
+    try {
+      const signals = await consumeSignals({ sessionId: sessionId!, toUserId: userId! });
+      for (const s of signals) {
+        res.write(`event: signal\ndata: ${JSON.stringify(s)}\n\n`);
+      }
+    } catch {
+      /* ignore */
     }
   }
 

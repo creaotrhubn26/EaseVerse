@@ -26,6 +26,12 @@ import {
 } from "@/lib/sessions-client";
 import { startClick, type ClickHandle } from "@/lib/click-track";
 import { uploadTake } from "@/lib/takes-client";
+import {
+  handleIncomingSignal,
+  startTalkbackAsCaller,
+  type SignalMessage,
+  type TalkbackHandle,
+} from "@/lib/webrtc-talkback";
 
 export default function LiveSessionScreen() {
   if (!CLERK_CONFIGURED) return null;
@@ -51,6 +57,11 @@ function Inner() {
   const [countdownMs, setCountdownMs] = useState<number | null>(null);
   const [bpmInput, setBpmInput] = useState("96");
   const [clickRequested, setClickRequested] = useState(true);
+  const [talkback, setTalkback] = useState<TalkbackHandle | null>(null);
+  const peerStoreRef = useRef<{ pc: RTCPeerConnection | null; stream: MediaStream | null }>({
+    pc: null,
+    stream: null,
+  });
 
   // Join on mount + leave on unmount.
   useEffect(() => {
@@ -87,7 +98,7 @@ function Inner() {
     };
   }, [id, getToken, micArmed]);
 
-  // Subscribe to presence SSE stream
+  // Subscribe to presence + signaling SSE stream
   useEffect(() => {
     if (!id) return;
     if (typeof window === "undefined" || typeof EventSource === "undefined") return;
@@ -104,8 +115,47 @@ function Inner() {
         /* ignore */
       }
     });
+    es.addEventListener("signal", (evt) => {
+      try {
+        const sig = JSON.parse((evt as MessageEvent).data) as SignalMessage;
+        void handleIncomingSignal({
+          signal: sig,
+          sessionId: String(id),
+          getToken,
+          existing: talkback,
+          setHandle: setTalkback,
+          refStore: peerStoreRef.current,
+        });
+      } catch {
+        /* ignore */
+      }
+    });
     return () => es.close();
-  }, [id]);
+  }, [id, getToken, talkback]);
+
+  useEffect(() => () => {
+    talkback?.close();
+    peerStoreRef.current.pc?.close();
+    peerStoreRef.current.stream?.getTracks().forEach((t) => t.stop());
+  }, [talkback]);
+
+  async function startTalkbackTo(remoteUserId: string) {
+    if (talkback) {
+      talkback.close();
+      setTalkback(null);
+      return;
+    }
+    try {
+      const handle = await startTalkbackAsCaller({
+        sessionId: String(id),
+        remoteUserId,
+        getToken,
+      });
+      setTalkback(handle);
+    } catch (err) {
+      setError("Talkback failed: " + (err as Error).message);
+    }
+  }
 
   const isProducer = !!session && user?.id === session.startedByUserId;
 
@@ -304,7 +354,18 @@ function Inner() {
         {participants.length === 0 ? (
           <ActivityIndicator color={Colors.textTertiary} />
         ) : (
-          participants.map((p) => <ParticipantTile key={p.userId} p={p} />)
+          participants.map((p) => (
+            <ParticipantTile
+              key={p.userId}
+              p={p}
+              talkbackActiveWith={talkback?.remoteUserId === p.userId}
+              onTalkback={
+                isProducer && p.userId !== user?.id && Platform.OS === "web"
+                  ? () => startTalkbackTo(p.userId)
+                  : undefined
+              }
+            />
+          ))
         )}
       </View>
 
@@ -392,7 +453,15 @@ function Inner() {
   );
 }
 
-function ParticipantTile({ p }: { p: LiveParticipant }) {
+function ParticipantTile({
+  p,
+  talkbackActiveWith,
+  onTalkback,
+}: {
+  p: LiveParticipant;
+  talkbackActiveWith: boolean;
+  onTalkback?: () => void;
+}) {
   return (
     <View style={[styles.tile, !p.isOnline && { opacity: 0.45 }]}>
       <View style={styles.tileHeader}>
@@ -415,7 +484,30 @@ function ParticipantTile({ p }: { p: LiveParticipant }) {
             <Text style={[styles.badgeText, { color: "#fff" }]}>REC</Text>
           </View>
         ) : null}
+        {talkbackActiveWith ? (
+          <View style={[styles.badge, styles.badgeTalkback]}>
+            <Ionicons name="call" size={11} color="#fff" />
+            <Text style={[styles.badgeText, { color: "#fff" }]}>Live</Text>
+          </View>
+        ) : null}
       </View>
+      {onTalkback && p.isOnline ? (
+        <Pressable
+          onPress={onTalkback}
+          style={[styles.talkbackBtn, talkbackActiveWith && styles.talkbackBtnActive]}
+          accessibilityRole="button"
+          accessibilityLabel={talkbackActiveWith ? "Hang up talkback" : "Open mic to this person"}
+        >
+          <Ionicons
+            name={talkbackActiveWith ? "call" : "mic-outline"}
+            size={12}
+            color={talkbackActiveWith ? "#fff" : Colors.gradientStart}
+          />
+          <Text style={[styles.talkbackBtnText, talkbackActiveWith && { color: "#fff" }]}>
+            {talkbackActiveWith ? "Hang up" : "Talkback"}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -512,6 +604,22 @@ const styles = StyleSheet.create({
   },
   badgeMic: { borderColor: Colors.gradientMid + "55", backgroundColor: Colors.gradientMid + "16" },
   badgeRec: { borderColor: Colors.dangerUnderline, backgroundColor: Colors.dangerUnderline },
+  badgeTalkback: { borderColor: Colors.gradientStart, backgroundColor: Colors.gradientStart },
+  talkbackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.gradientStart + "55",
+    backgroundColor: Colors.surfaceGlass,
+  },
+  talkbackBtnActive: { borderColor: Colors.gradientStart, backgroundColor: Colors.gradientStart },
+  talkbackBtnText: { color: Colors.gradientStart, fontFamily: "Inter_700Bold", fontSize: 11 },
   badgeText: { fontFamily: "Inter_700Bold", fontSize: 10 },
   controls: {
     flexDirection: "row",

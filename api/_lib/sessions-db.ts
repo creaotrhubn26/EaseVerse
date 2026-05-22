@@ -45,8 +45,81 @@ async function ensureSchema(): Promise<void> {
       PRIMARY KEY (session_id, user_id)
     );
     CREATE INDEX IF NOT EXISTS live_participants_heartbeat_idx ON live_session_participants (session_id, last_heartbeat_at DESC);
+
+    CREATE TABLE IF NOT EXISTS live_session_signals (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
+      from_user_id TEXT NOT NULL,
+      to_user_id TEXT NOT NULL,
+      signal_type TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      consumed_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS live_signals_inbox_idx ON live_session_signals (session_id, to_user_id, consumed_at);
   `);
   ensured = true;
+}
+
+export type SignalType = "offer" | "answer" | "ice" | "bye";
+
+export type SignalRow = {
+  id: string;
+  sessionId: string;
+  fromUserId: string;
+  toUserId: string;
+  signalType: SignalType;
+  payload: unknown;
+  createdAt: string;
+};
+
+export async function postSignal(args: {
+  sessionId: string;
+  fromUserId: string;
+  toUserId: string;
+  signalType: SignalType;
+  payload: unknown;
+}): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  const id = `sig_${crypto.randomBytes(9).toString("base64url")}`;
+  await p.query(
+    `INSERT INTO live_session_signals (id, session_id, from_user_id, to_user_id, signal_type, payload)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [id, args.sessionId, args.fromUserId, args.toUserId, args.signalType, JSON.stringify(args.payload)],
+  );
+}
+
+export async function consumeSignals(args: {
+  sessionId: string;
+  toUserId: string;
+}): Promise<SignalRow[]> {
+  const p = getPool();
+  if (!p) return [];
+  const { rows } = await p.query<{
+    id: string;
+    session_id: string;
+    from_user_id: string;
+    to_user_id: string;
+    signal_type: string;
+    payload: unknown;
+    created_at: string;
+  }>(
+    `UPDATE live_session_signals
+     SET consumed_at = NOW()
+     WHERE session_id = $1 AND to_user_id = $2 AND consumed_at IS NULL
+     RETURNING *`,
+    [args.sessionId, args.toUserId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    sessionId: r.session_id,
+    fromUserId: r.from_user_id,
+    toUserId: r.to_user_id,
+    signalType: r.signal_type as SignalType,
+    payload: r.payload,
+    createdAt: r.created_at,
+  }));
 }
 
 export type LiveSessionRow = {

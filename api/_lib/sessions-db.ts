@@ -45,6 +45,10 @@ async function ensureSchema(): Promise<void> {
       PRIMARY KEY (session_id, user_id)
     );
     CREATE INDEX IF NOT EXISTS live_participants_heartbeat_idx ON live_session_participants (session_id, last_heartbeat_at DESC);
+    ALTER TABLE live_session_participants ADD COLUMN IF NOT EXISTS level_db REAL;
+    ALTER TABLE live_session_participants ADD COLUMN IF NOT EXISTS peak_db REAL;
+    ALTER TABLE live_session_participants ADD COLUMN IF NOT EXISTS waveform_peaks JSONB;
+    ALTER TABLE live_session_participants ADD COLUMN IF NOT EXISTS level_updated_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS live_session_signals (
       id TEXT PRIMARY KEY,
@@ -147,6 +151,10 @@ export type LiveParticipantRow = {
   micArmed: boolean;
   recording: boolean;
   isOnline: boolean;
+  levelDb: number | null;
+  peakDb: number | null;
+  waveformPeaks: number[] | null;
+  levelUpdatedAt: string | null;
 };
 
 const ONLINE_WINDOW_SEC = 15;
@@ -309,6 +317,23 @@ export async function leaveParticipant(args: {
   );
 }
 
+export async function updateParticipantLevel(args: {
+  sessionId: string;
+  userId: string;
+  levelDb: number;
+  peakDb: number;
+  waveformPeaks: number[];
+}): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await p.query(
+    `UPDATE live_session_participants SET
+       level_db = $3, peak_db = $4, waveform_peaks = $5, level_updated_at = NOW()
+     WHERE session_id = $1 AND user_id = $2`,
+    [args.sessionId, args.userId, args.levelDb, args.peakDb, JSON.stringify(args.waveformPeaks.slice(-200))],
+  );
+}
+
 export async function listParticipants(sessionId: string): Promise<LiveParticipantRow[]> {
   const p = getPool();
   if (!p) return [];
@@ -322,6 +347,10 @@ export async function listParticipants(sessionId: string): Promise<LiveParticipa
     last_heartbeat_at: string;
     mic_armed: boolean;
     recording: boolean;
+    level_db: number | null;
+    peak_db: number | null;
+    waveform_peaks: number[] | null;
+    level_updated_at: string | null;
   }>(
     `SELECT * FROM live_session_participants
      WHERE session_id = $1 ORDER BY joined_at ASC`,
@@ -338,6 +367,10 @@ export async function listParticipants(sessionId: string): Promise<LiveParticipa
     micArmed: r.mic_armed,
     recording: r.recording,
     isOnline: now - new Date(r.last_heartbeat_at).getTime() < ONLINE_WINDOW_SEC * 1000,
+    levelDb: r.level_db,
+    peakDb: r.peak_db,
+    waveformPeaks: Array.isArray(r.waveform_peaks) ? r.waveform_peaks : null,
+    levelUpdatedAt: r.level_updated_at,
   }));
 }
 

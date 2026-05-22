@@ -26,6 +26,10 @@ export type LiveParticipant = {
   micArmed: boolean;
   recording: boolean;
   isOnline: boolean;
+  levelDb: number | null;
+  peakDb: number | null;
+  waveformPeaks: number[] | null;
+  levelUpdatedAt: string | null;
 };
 
 export async function getActiveSession(

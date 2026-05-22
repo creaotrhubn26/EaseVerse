@@ -26,6 +26,7 @@ import {
 } from "@/lib/sessions-client";
 import { startClick, type ClickHandle } from "@/lib/click-track";
 import { uploadTake } from "@/lib/takes-client";
+import { startLiveMeter, type MeterHandle } from "@/lib/live-meter";
 import {
   handleIncomingSignal,
   startTalkbackAsCaller,
@@ -62,6 +63,8 @@ function Inner() {
     pc: null,
     stream: null,
   });
+  const meterRef = useRef<MeterHandle | null>(null);
+  const meterStreamRef = useRef<MediaStream | null>(null);
 
   // Join on mount + leave on unmount.
   useEffect(() => {
@@ -138,6 +141,45 @@ function Inner() {
     peerStoreRef.current.pc?.close();
     peerStoreRef.current.stream?.getTracks().forEach((t) => t.stop());
   }, [talkback]);
+
+  // Start live meter as soon as mic is armed; stop when disarmed.
+  useEffect(() => {
+    if (!id) return;
+    if (Platform.OS !== "web") return;
+    let cancelled = false;
+    if (!micArmed) {
+      meterRef.current?.stop();
+      meterRef.current = null;
+      meterStreamRef.current?.getTracks().forEach((t) => t.stop());
+      meterStreamRef.current = null;
+      return;
+    }
+    void (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        meterStreamRef.current = stream;
+        meterRef.current = startLiveMeter({
+          stream,
+          sessionId: String(id),
+          getToken,
+        });
+      } catch (err) {
+        setError("Meter failed: " + (err as Error).message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [micArmed, id, getToken]);
+
+  useEffect(() => () => {
+    meterRef.current?.stop();
+    meterStreamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
 
   async function startTalkbackTo(remoteUserId: string) {
     if (talkback) {
@@ -462,6 +504,15 @@ function ParticipantTile({
   talkbackActiveWith: boolean;
   onTalkback?: () => void;
 }) {
+  const levelFresh = p.levelUpdatedAt
+    ? Date.now() - new Date(p.levelUpdatedAt).getTime() < 3000
+    : false;
+  const levelDb = levelFresh ? p.levelDb ?? -60 : -60;
+  const meterPct = Math.max(0, Math.min(1, (levelDb + 60) / 60));
+  const peakDb = levelFresh ? p.peakDb ?? -60 : -60;
+  const peakPct = Math.max(0, Math.min(1, (peakDb + 60) / 60));
+  const clipping = peakDb > -1;
+
   return (
     <View style={[styles.tile, !p.isOnline && { opacity: 0.45 }]}>
       <View style={styles.tileHeader}>
@@ -471,6 +522,42 @@ function ParticipantTile({
         </Text>
       </View>
       <Text style={styles.tileRole}>{labelRole(p.projectRole)}</Text>
+      {levelFresh ? (
+        <View style={styles.meterWrap}>
+          <View style={styles.meterTrack}>
+            <View
+              style={[
+                styles.meterFill,
+                {
+                  width: `${meterPct * 100}%`,
+                  backgroundColor: clipping
+                    ? Colors.dangerUnderline
+                    : meterPct > 0.85
+                      ? Colors.gradientMid
+                      : Colors.successUnderline,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.peakMark,
+                { left: `${peakPct * 100}%`, backgroundColor: clipping ? Colors.dangerUnderline : "#fff" },
+              ]}
+            />
+          </View>
+          <Text style={styles.meterLabel}>
+            {Math.round(levelDb)} dB · peak {Math.round(peakDb)}
+          </Text>
+        </View>
+      ) : null}
+      {p.waveformPeaks && p.waveformPeaks.length > 0 && levelFresh ? (
+        <View style={styles.waveformRow}>
+          {p.waveformPeaks.slice(-30).map((db, i) => {
+            const h = Math.max(2, Math.min(18, ((db + 60) / 60) * 18));
+            return <View key={i} style={[styles.waveformBar, { height: h }]} />;
+          })}
+        </View>
+      ) : null}
       <View style={styles.tileBadges}>
         {p.micArmed ? (
           <View style={[styles.badge, styles.badgeMic]}>
@@ -620,6 +707,45 @@ const styles = StyleSheet.create({
   },
   talkbackBtnActive: { borderColor: Colors.gradientStart, backgroundColor: Colors.gradientStart },
   talkbackBtnText: { color: Colors.gradientStart, fontFamily: "Inter_700Bold", fontSize: 11 },
+  meterWrap: { gap: 4, marginTop: 4 },
+  meterTrack: {
+    width: "100%",
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.surfaceGlass,
+    position: "relative",
+    overflow: "hidden",
+  },
+  meterFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 3,
+  },
+  peakMark: {
+    position: "absolute",
+    top: -1,
+    bottom: -1,
+    width: 2,
+  },
+  meterLabel: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+  },
+  waveformRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 1,
+    height: 20,
+    marginTop: 4,
+  },
+  waveformBar: {
+    width: 3,
+    borderRadius: 1,
+    backgroundColor: Colors.gradientMid,
+  },
   badgeText: { fontFamily: "Inter_700Bold", fontSize: 10 },
   controls: {
     flexDirection: "row",

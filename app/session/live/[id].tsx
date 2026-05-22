@@ -33,6 +33,7 @@ import {
   type SignalMessage,
   type TalkbackHandle,
 } from "@/lib/webrtc-talkback";
+import { startMesh, type MeshHandle, type MeshSignal } from "@/lib/webrtc-mesh";
 
 export default function LiveSessionScreen() {
   if (!CLERK_CONFIGURED) return null;
@@ -65,6 +66,8 @@ function Inner() {
   });
   const meterRef = useRef<MeterHandle | null>(null);
   const meterStreamRef = useRef<MediaStream | null>(null);
+  const [meshOn, setMeshOn] = useState(false);
+  const meshRef = useRef<MeshHandle | null>(null);
 
   // Join on mount + leave on unmount.
   useEffect(() => {
@@ -121,6 +124,10 @@ function Inner() {
     es.addEventListener("signal", (evt) => {
       try {
         const sig = JSON.parse((evt as MessageEvent).data) as SignalMessage;
+        if (meshRef.current && user?.id && sig.toUserId === user.id) {
+          void meshRef.current.handleSignal(sig as MeshSignal);
+          return;
+        }
         void handleIncomingSignal({
           signal: sig,
           sessionId: String(id),
@@ -134,7 +141,53 @@ function Inner() {
       }
     });
     return () => es.close();
-  }, [id, getToken, talkback]);
+  }, [id, getToken, talkback, user?.id]);
+
+  // Start/stop mesh as toggle flips
+  useEffect(() => {
+    if (!id || !user?.id) return;
+    if (Platform.OS !== "web") return;
+    let cancelled = false;
+    if (!meshOn) {
+      meshRef.current?.stop();
+      meshRef.current = null;
+      return;
+    }
+    void (async () => {
+      try {
+        const handle = await startMesh({
+          sessionId: String(id),
+          selfUserId: user.id,
+          getToken,
+        });
+        if (cancelled) {
+          handle.stop();
+          return;
+        }
+        meshRef.current = handle;
+      } catch (err) {
+        setError("Mesh failed: " + (err as Error).message);
+        setMeshOn(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [meshOn, id, user?.id, getToken]);
+
+  // Keep mesh peer list in sync with online participants who also have mic armed
+  useEffect(() => {
+    if (!meshRef.current || !user?.id) return;
+    const others = participants
+      .filter((p) => p.userId !== user.id && p.isOnline && p.micArmed)
+      .map((p) => p.userId);
+    void meshRef.current.ensurePeers(others);
+  }, [participants, user?.id, meshOn]);
+
+  useEffect(() => () => {
+    meshRef.current?.stop();
+    meshRef.current = null;
+  }, []);
 
   useEffect(() => () => {
     talkback?.close();
@@ -435,6 +488,22 @@ function Inner() {
             />
             <Text style={[styles.controlText, micArmed && { color: "#fff" }]}>
               {micArmed ? "Mic armed" : "Arm mic"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setMeshOn((v) => !v)}
+            style={[styles.controlBtn, meshOn && styles.controlBtnActive]}
+            accessibilityRole="button"
+            accessibilityLabel={meshOn ? "Leave mesh talkback" : "Join mesh talkback"}
+          >
+            <Ionicons
+              name={meshOn ? "people" : "people-outline"}
+              size={16}
+              color={meshOn ? "#fff" : Colors.textPrimary}
+            />
+            <Text style={[styles.controlText, meshOn && { color: "#fff" }]}>
+              {meshOn ? "Mesh live" : "Live talkback"}
             </Text>
           </Pressable>
 

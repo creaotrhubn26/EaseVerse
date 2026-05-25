@@ -158,6 +158,42 @@ export type LiveSessionTakesResponse = {
   takes: LiveSessionTake[];
 };
 
+export type MixdownStatus = {
+  status: "queued" | "processing" | "done" | "error" | null;
+  url: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+};
+
+export async function fetchMixdownStatus(
+  token: string | null,
+  sessionId: string,
+): Promise<MixdownStatus> {
+  const res = await authedFetch(
+    `/api/sessions/mixdown?id=${encodeURIComponent(sessionId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(`Mixdown status failed: ${res.status}`);
+  return (await res.json()) as MixdownStatus;
+}
+
+export async function startMixdown(
+  token: string | null,
+  sessionId: string,
+): Promise<void> {
+  const res = await authedFetch(
+    `/api/sessions/mixdown?id=${encodeURIComponent(sessionId)}`,
+    token,
+    { method: "POST" },
+  );
+  if (!res.ok && res.status !== 202 && res.status !== 409) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Mixdown start failed: ${res.status}`);
+  }
+}
+
 export async function fetchLiveSessionTakes(
   token: string | null,
   sessionId: string,

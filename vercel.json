@@ -6,6 +6,10 @@
   "functions": {
     "api/**/*.ts": {
       "maxDuration": 30
+    },
+    "api/sessions/mixdown.ts": {
+      "maxDuration": 300,
+      "includeFiles": "node_modules/ffmpeg-static/**"
     }
   },
   "crons": [

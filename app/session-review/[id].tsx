@@ -13,7 +13,13 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
-import { fetchLiveSessionTakes, type LiveSessionTake } from "@/lib/sessions-client";
+import {
+  fetchLiveSessionTakes,
+  fetchMixdownStatus,
+  startMixdown,
+  type LiveSessionTake,
+  type MixdownStatus,
+} from "@/lib/sessions-client";
 
 export default function LiveSessionReviewScreen() {
   if (!CLERK_CONFIGURED) return null;
@@ -36,6 +42,9 @@ function Inner() {
   const [soloId, setSoloId] = useState<string | null>(null);
   const audiosRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [mixdown, setMixdown] = useState<MixdownStatus | null>(null);
+  const [mixdownBusy, setMixdownBusy] = useState(false);
+  const mixdownPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -60,6 +69,52 @@ function Inner() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadMixdown = useCallback(async () => {
+    if (!id) return;
+    try {
+      const token = await getToken();
+      const status = await fetchMixdownStatus(token, String(id));
+      setMixdown(status);
+      return status;
+    } catch {
+      return null;
+    }
+  }, [id, getToken]);
+
+  useEffect(() => {
+    void loadMixdown();
+  }, [loadMixdown]);
+
+  useEffect(() => {
+    if (mixdown?.status !== "processing") {
+      if (mixdownPollRef.current) clearInterval(mixdownPollRef.current);
+      mixdownPollRef.current = null;
+      return;
+    }
+    if (mixdownPollRef.current) return;
+    mixdownPollRef.current = setInterval(() => {
+      void loadMixdown();
+    }, 3000);
+    return () => {
+      if (mixdownPollRef.current) clearInterval(mixdownPollRef.current);
+      mixdownPollRef.current = null;
+    };
+  }, [mixdown?.status, loadMixdown]);
+
+  const triggerMixdown = useCallback(async () => {
+    if (!id) return;
+    setMixdownBusy(true);
+    try {
+      const token = await getToken();
+      await startMixdown(token, String(id));
+      await loadMixdown();
+    } catch (err) {
+      setError("Mixdown failed: " + (err as Error).message);
+    } finally {
+      setMixdownBusy(false);
+    }
+  }, [id, getToken, loadMixdown]);
 
   // Create / refresh hidden audio elements when takes change (web only)
   useEffect(() => {
@@ -89,6 +144,7 @@ function Inner() {
 
   useEffect(() => () => {
     if (tickRef.current) clearInterval(tickRef.current);
+    if (mixdownPollRef.current) clearInterval(mixdownPollRef.current);
     for (const el of audiosRef.current.values()) {
       el.pause();
       el.remove();
@@ -241,6 +297,46 @@ function Inner() {
               the PWA to mix tracks together.
             </Text>
           )}
+
+          <View style={styles.mixdownRow}>
+            <Pressable
+              onPress={triggerMixdown}
+              disabled={mixdownBusy || mixdown?.status === "processing"}
+              style={[
+                styles.controlBtn,
+                (mixdownBusy || mixdown?.status === "processing") && { opacity: 0.5 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Bounce to WAV"
+            >
+              <Ionicons name="cloud-download-outline" size={16} color={Colors.textPrimary} />
+              <Text style={styles.controlText}>
+                {mixdown?.status === "processing"
+                  ? "Mixing…"
+                  : mixdown?.status === "done"
+                    ? "Re-mix"
+                    : "Bounce to WAV"}
+              </Text>
+            </Pressable>
+            {mixdown?.status === "done" && mixdown.url ? (
+              <Pressable
+                onPress={() => {
+                  if (typeof window !== "undefined") window.open(mixdown.url!, "_blank");
+                }}
+                style={[styles.controlBtn, styles.controlBtnActive]}
+                accessibilityRole="link"
+                accessibilityLabel="Download mixed WAV"
+              >
+                <Ionicons name="download-outline" size={16} color="#fff" />
+                <Text style={[styles.controlText, { color: "#fff" }]}>Download WAV</Text>
+              </Pressable>
+            ) : null}
+            {mixdown?.status === "error" ? (
+              <Text style={styles.mixdownError} numberOfLines={2}>
+                {mixdown.error || "Mixdown failed"}
+              </Text>
+            ) : null}
+          </View>
 
           {Platform.OS === "web" && maxDurationSec > 0 ? (
             <View style={styles.seekRow}>
@@ -403,6 +499,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   seekRow: { flexDirection: "row", paddingHorizontal: 2 },
+  mixdownRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" },
+  mixdownError: {
+    color: Colors.dangerUnderline,
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+    flex: 1,
+  },
   trackRow: {
     padding: 10,
     borderRadius: 10,

@@ -32,6 +32,11 @@ async function ensureSchema(): Promise<void> {
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS recording_starts_at TIMESTAMPTZ;
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS recording_stopped_at TIMESTAMPTZ;
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS click_on BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_url TEXT;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_status TEXT;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_started_at TIMESTAMPTZ;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_finished_at TIMESTAMPTZ;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_error TEXT;
 
     CREATE TABLE IF NOT EXISTS live_session_participants (
       session_id TEXT NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
@@ -139,6 +144,11 @@ export type LiveSessionRow = {
   recordingStartsAt: string | null;
   recordingStoppedAt: string | null;
   clickOn: boolean;
+  mixdownUrl: string | null;
+  mixdownStatus: "queued" | "processing" | "done" | "error" | null;
+  mixdownStartedAt: string | null;
+  mixdownFinishedAt: string | null;
+  mixdownError: string | null;
 };
 
 export type LiveParticipantRow = {
@@ -174,20 +184,7 @@ export async function createLiveSession(args: {
     [args.projectId],
   );
   const id = `lsess_${crypto.randomBytes(9).toString("base64url")}`;
-  const { rows } = await p.query<{
-    id: string;
-    project_id: string;
-    external_track_id: string | null;
-    started_by_user_id: string;
-    started_at: string;
-    ended_at: string | null;
-    status: LiveSessionRow["status"];
-    bpm: number | null;
-    recording_armed_at: string | null;
-    recording_starts_at: string | null;
-    recording_stopped_at: string | null;
-    click_on: boolean;
-  }>(
+  const { rows } = await p.query<SessionDbRow>(
     `INSERT INTO live_sessions (id, project_id, external_track_id, started_by_user_id)
      VALUES ($1, $2, $3, $4) RETURNING *`,
     [id, args.projectId, args.externalTrackId ?? null, args.startedByUserId],
@@ -216,20 +213,7 @@ export async function getActiveSessionForProject(
   const p = getPool();
   if (!p) return null;
   await ensureSchema();
-  const { rows } = await p.query<{
-    id: string;
-    project_id: string;
-    external_track_id: string | null;
-    started_by_user_id: string;
-    started_at: string;
-    ended_at: string | null;
-    status: LiveSessionRow["status"];
-    bpm: number | null;
-    recording_armed_at: string | null;
-    recording_starts_at: string | null;
-    recording_stopped_at: string | null;
-    click_on: boolean;
-  }>(
+  const { rows } = await p.query<SessionDbRow>(
     `SELECT * FROM live_sessions WHERE project_id = $1 AND status = 'active'
      ORDER BY started_at DESC LIMIT 1`,
     [projectId],
@@ -241,20 +225,7 @@ export async function getLiveSession(sessionId: string): Promise<LiveSessionRow 
   const p = getPool();
   if (!p) return null;
   await ensureSchema();
-  const { rows } = await p.query<{
-    id: string;
-    project_id: string;
-    external_track_id: string | null;
-    started_by_user_id: string;
-    started_at: string;
-    ended_at: string | null;
-    status: LiveSessionRow["status"];
-    bpm: number | null;
-    recording_armed_at: string | null;
-    recording_starts_at: string | null;
-    recording_stopped_at: string | null;
-    click_on: boolean;
-  }>(`SELECT * FROM live_sessions WHERE id = $1`, [sessionId]);
+  const { rows } = await p.query<SessionDbRow>(`SELECT * FROM live_sessions WHERE id = $1`, [sessionId]);
   return rows[0] ? mapSession(rows[0]) : null;
 }
 
@@ -374,7 +345,7 @@ export async function listParticipants(sessionId: string): Promise<LiveParticipa
   }));
 }
 
-function mapSession(row: {
+type SessionDbRow = {
   id: string;
   project_id: string;
   external_track_id: string | null;
@@ -387,7 +358,14 @@ function mapSession(row: {
   recording_starts_at: string | null;
   recording_stopped_at: string | null;
   click_on: boolean;
-}): LiveSessionRow {
+  mixdown_url: string | null;
+  mixdown_status: string | null;
+  mixdown_started_at: string | null;
+  mixdown_finished_at: string | null;
+  mixdown_error: string | null;
+};
+
+function mapSession(row: SessionDbRow): LiveSessionRow {
   return {
     id: row.id,
     projectId: row.project_id,
@@ -401,7 +379,57 @@ function mapSession(row: {
     recordingStartsAt: row.recording_starts_at,
     recordingStoppedAt: row.recording_stopped_at,
     clickOn: Boolean(row.click_on),
+    mixdownUrl: row.mixdown_url,
+    mixdownStatus: (row.mixdown_status as LiveSessionRow["mixdownStatus"]) ?? null,
+    mixdownStartedAt: row.mixdown_started_at,
+    mixdownFinishedAt: row.mixdown_finished_at,
+    mixdownError: row.mixdown_error,
   };
+}
+
+export async function setMixdownStatus(args: {
+  sessionId: string;
+  status: NonNullable<LiveSessionRow["mixdownStatus"]>;
+  mixdownUrl?: string | null;
+  error?: string | null;
+}): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await ensureSchema();
+  if (args.status === "processing") {
+    await p.query(
+      `UPDATE live_sessions
+         SET mixdown_status = 'processing',
+             mixdown_started_at = NOW(),
+             mixdown_error = NULL
+       WHERE id = $1`,
+      [args.sessionId],
+    );
+    return;
+  }
+  if (args.status === "done") {
+    await p.query(
+      `UPDATE live_sessions
+         SET mixdown_status = 'done',
+             mixdown_url = $2,
+             mixdown_finished_at = NOW(),
+             mixdown_error = NULL
+       WHERE id = $1`,
+      [args.sessionId, args.mixdownUrl ?? null],
+    );
+    return;
+  }
+  if (args.status === "error") {
+    await p.query(
+      `UPDATE live_sessions
+         SET mixdown_status = 'error',
+             mixdown_finished_at = NOW(),
+             mixdown_error = $2
+       WHERE id = $1`,
+      [args.sessionId, args.error ?? null],
+    );
+    return;
+  }
 }
 
 export async function armRecording(args: {
@@ -415,20 +443,7 @@ export async function armRecording(args: {
   if (!p) return null;
   await ensureSchema();
   const startsAt = new Date(Date.now() + args.countdownSec * 1000).toISOString();
-  const { rows } = await p.query<{
-    id: string;
-    project_id: string;
-    external_track_id: string | null;
-    started_by_user_id: string;
-    started_at: string;
-    ended_at: string | null;
-    status: LiveSessionRow["status"];
-    bpm: number | null;
-    recording_armed_at: string | null;
-    recording_starts_at: string | null;
-    recording_stopped_at: string | null;
-    click_on: boolean;
-  }>(
+  const { rows } = await p.query<SessionDbRow>(
     `UPDATE live_sessions SET
        recording_armed_at = NOW(),
        recording_starts_at = $3,
@@ -455,20 +470,7 @@ export async function stopRecording(args: {
   const p = getPool();
   if (!p) return null;
   await ensureSchema();
-  const { rows } = await p.query<{
-    id: string;
-    project_id: string;
-    external_track_id: string | null;
-    started_by_user_id: string;
-    started_at: string;
-    ended_at: string | null;
-    status: LiveSessionRow["status"];
-    bpm: number | null;
-    recording_armed_at: string | null;
-    recording_starts_at: string | null;
-    recording_stopped_at: string | null;
-    click_on: boolean;
-  }>(
+  const { rows } = await p.query<SessionDbRow>(
     `UPDATE live_sessions SET recording_stopped_at = NOW(), recording_armed_at = NULL, recording_starts_at = NULL
      WHERE id = $1 AND started_by_user_id = $2 AND status = 'active'
      RETURNING *`,

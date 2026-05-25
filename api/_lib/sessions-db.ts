@@ -37,6 +37,11 @@ async function ensureSchema(): Promise<void> {
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_started_at TIMESTAMPTZ;
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_finished_at TIMESTAMPTZ;
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_error TEXT;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS dawbundle_url TEXT;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS dawbundle_status TEXT;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS dawbundle_started_at TIMESTAMPTZ;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS dawbundle_finished_at TIMESTAMPTZ;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS dawbundle_error TEXT;
 
     CREATE TABLE IF NOT EXISTS live_session_debriefs (
       session_id TEXT PRIMARY KEY REFERENCES live_sessions(id) ON DELETE CASCADE,
@@ -159,6 +164,11 @@ export type LiveSessionRow = {
   mixdownStartedAt: string | null;
   mixdownFinishedAt: string | null;
   mixdownError: string | null;
+  dawBundleUrl: string | null;
+  dawBundleStatus: "queued" | "processing" | "done" | "error" | null;
+  dawBundleStartedAt: string | null;
+  dawBundleFinishedAt: string | null;
+  dawBundleError: string | null;
 };
 
 export type LiveParticipantRow = {
@@ -373,6 +383,11 @@ type SessionDbRow = {
   mixdown_started_at: string | null;
   mixdown_finished_at: string | null;
   mixdown_error: string | null;
+  dawbundle_url: string | null;
+  dawbundle_status: string | null;
+  dawbundle_started_at: string | null;
+  dawbundle_finished_at: string | null;
+  dawbundle_error: string | null;
 };
 
 function mapSession(row: SessionDbRow): LiveSessionRow {
@@ -394,6 +409,11 @@ function mapSession(row: SessionDbRow): LiveSessionRow {
     mixdownStartedAt: row.mixdown_started_at,
     mixdownFinishedAt: row.mixdown_finished_at,
     mixdownError: row.mixdown_error,
+    dawBundleUrl: row.dawbundle_url,
+    dawBundleStatus: (row.dawbundle_status as LiveSessionRow["dawBundleStatus"]) ?? null,
+    dawBundleStartedAt: row.dawbundle_started_at,
+    dawBundleFinishedAt: row.dawbundle_finished_at,
+    dawBundleError: row.dawbundle_error,
   };
 }
 
@@ -488,6 +508,51 @@ export async function setDebriefError(args: {
      WHERE session_id = $1`,
     [args.sessionId, args.errorMessage.slice(0, 1000)],
   );
+}
+
+export async function setDawBundleStatus(args: {
+  sessionId: string;
+  status: NonNullable<LiveSessionRow["dawBundleStatus"]>;
+  url?: string | null;
+  error?: string | null;
+}): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await ensureSchema();
+  if (args.status === "processing") {
+    await p.query(
+      `UPDATE live_sessions
+         SET dawbundle_status = 'processing',
+             dawbundle_started_at = NOW(),
+             dawbundle_error = NULL
+       WHERE id = $1`,
+      [args.sessionId],
+    );
+    return;
+  }
+  if (args.status === "done") {
+    await p.query(
+      `UPDATE live_sessions
+         SET dawbundle_status = 'done',
+             dawbundle_url = $2,
+             dawbundle_finished_at = NOW(),
+             dawbundle_error = NULL
+       WHERE id = $1`,
+      [args.sessionId, args.url ?? null],
+    );
+    return;
+  }
+  if (args.status === "error") {
+    await p.query(
+      `UPDATE live_sessions
+         SET dawbundle_status = 'error',
+             dawbundle_finished_at = NOW(),
+             dawbundle_error = $2
+       WHERE id = $1`,
+      [args.sessionId, args.error ?? null],
+    );
+    return;
+  }
 }
 
 export async function setMixdownStatus(args: {

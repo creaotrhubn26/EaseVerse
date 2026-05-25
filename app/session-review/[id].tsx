@@ -14,11 +14,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import {
+  fetchDawBundleStatus,
   fetchDebrief,
   fetchLiveSessionTakes,
   fetchMixdownStatus,
+  startDawExport,
   startDebrief,
   startMixdown,
+  type DawBundleStatus,
   type Debrief,
   type LiveSessionTake,
   type MixdownStatus,
@@ -51,6 +54,9 @@ function Inner() {
   const [debrief, setDebrief] = useState<Debrief | null>(null);
   const [debriefBusy, setDebriefBusy] = useState(false);
   const debriefPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [dawBundle, setDawBundle] = useState<DawBundleStatus | null>(null);
+  const [dawBundleBusy, setDawBundleBusy] = useState(false);
+  const dawBundlePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -154,6 +160,52 @@ function Inner() {
     }
   }, [id, getToken, loadDebrief]);
 
+  const loadDawBundle = useCallback(async () => {
+    if (!id) return;
+    try {
+      const token = await getToken();
+      const status = await fetchDawBundleStatus(token, String(id));
+      setDawBundle(status);
+      return status;
+    } catch {
+      return null;
+    }
+  }, [id, getToken]);
+
+  useEffect(() => {
+    void loadDawBundle();
+  }, [loadDawBundle]);
+
+  useEffect(() => {
+    if (dawBundle?.status !== "processing") {
+      if (dawBundlePollRef.current) clearInterval(dawBundlePollRef.current);
+      dawBundlePollRef.current = null;
+      return;
+    }
+    if (dawBundlePollRef.current) return;
+    dawBundlePollRef.current = setInterval(() => {
+      void loadDawBundle();
+    }, 3000);
+    return () => {
+      if (dawBundlePollRef.current) clearInterval(dawBundlePollRef.current);
+      dawBundlePollRef.current = null;
+    };
+  }, [dawBundle?.status, loadDawBundle]);
+
+  const triggerDawExport = useCallback(async () => {
+    if (!id) return;
+    setDawBundleBusy(true);
+    try {
+      const token = await getToken();
+      await startDawExport(token, String(id));
+      await loadDawBundle();
+    } catch (err) {
+      setError("DAW export failed: " + (err as Error).message);
+    } finally {
+      setDawBundleBusy(false);
+    }
+  }, [id, getToken, loadDawBundle]);
+
   const triggerMixdown = useCallback(async () => {
     if (!id) return;
     setMixdownBusy(true);
@@ -198,6 +250,7 @@ function Inner() {
     if (tickRef.current) clearInterval(tickRef.current);
     if (mixdownPollRef.current) clearInterval(mixdownPollRef.current);
     if (debriefPollRef.current) clearInterval(debriefPollRef.current);
+    if (dawBundlePollRef.current) clearInterval(dawBundlePollRef.current);
     for (const el of audiosRef.current.values()) {
       el.pause();
       el.remove();
@@ -467,6 +520,44 @@ function Inner() {
             {mixdown?.status === "error" ? (
               <Text style={styles.mixdownError} numberOfLines={2}>
                 {mixdown.error || "Mixdown failed"}
+              </Text>
+            ) : null}
+
+            <Pressable
+              onPress={triggerDawExport}
+              disabled={dawBundleBusy || dawBundle?.status === "processing"}
+              style={[
+                styles.controlBtn,
+                (dawBundleBusy || dawBundle?.status === "processing") && { opacity: 0.5 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Export to DAW bundle"
+            >
+              <Ionicons name="musical-notes-outline" size={16} color={Colors.textPrimary} />
+              <Text style={styles.controlText}>
+                {dawBundle?.status === "processing"
+                  ? "Packing…"
+                  : dawBundle?.status === "done"
+                    ? "Re-pack DAW"
+                    : "Export to DAW"}
+              </Text>
+            </Pressable>
+            {dawBundle?.status === "done" && dawBundle.url ? (
+              <Pressable
+                onPress={() => {
+                  if (typeof window !== "undefined") window.open(dawBundle.url!, "_blank");
+                }}
+                style={[styles.controlBtn, styles.controlBtnActive]}
+                accessibilityRole="link"
+                accessibilityLabel="Download DAW bundle"
+              >
+                <Ionicons name="download-outline" size={16} color="#fff" />
+                <Text style={[styles.controlText, { color: "#fff" }]}>Download .zip</Text>
+              </Pressable>
+            ) : null}
+            {dawBundle?.status === "error" ? (
+              <Text style={styles.mixdownError} numberOfLines={2}>
+                {dawBundle.error || "DAW export failed"}
               </Text>
             ) : null}
           </View>

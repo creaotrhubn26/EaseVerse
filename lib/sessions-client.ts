@@ -243,6 +243,42 @@ export async function startDebrief(
   }
 }
 
+export type DawBundleStatus = {
+  status: "queued" | "processing" | "done" | "error" | null;
+  url: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+};
+
+export async function fetchDawBundleStatus(
+  token: string | null,
+  sessionId: string,
+): Promise<DawBundleStatus> {
+  const res = await authedFetch(
+    `/api/sessions/daw-export?id=${encodeURIComponent(sessionId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(`DAW export status failed: ${res.status}`);
+  return (await res.json()) as DawBundleStatus;
+}
+
+export async function startDawExport(
+  token: string | null,
+  sessionId: string,
+): Promise<void> {
+  const res = await authedFetch(
+    `/api/sessions/daw-export?id=${encodeURIComponent(sessionId)}`,
+    token,
+    { method: "POST" },
+  );
+  if (!res.ok && res.status !== 202 && res.status !== 409) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `DAW export failed: ${res.status}`);
+  }
+}
+
 export async function fetchLiveSessionTakes(
   token: string | null,
   sessionId: string,

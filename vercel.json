@@ -8,6 +8,10 @@
       "maxDuration": 300,
       "includeFiles": "node_modules/ffmpeg-static/**"
     },
+    "api/sessions/daw-export.ts": {
+      "maxDuration": 300,
+      "includeFiles": "node_modules/ffmpeg-static/**"
+    },
     "api/**/*.ts": {
       "maxDuration": 30
     }

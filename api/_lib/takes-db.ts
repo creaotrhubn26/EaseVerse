@@ -231,6 +231,65 @@ export async function listTakesForLiveSession(sessionId: string): Promise<TakeRo
   return rows.map(mapTakeRow);
 }
 
+export async function listTakesWithAnalysisForLiveSession(
+  sessionId: string,
+): Promise<Array<TakeRow & { analysis: TakeAnalysisRow | null }>> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  const { rows } = await p.query<
+    TakeRowDb & {
+      analysis_take_id: string | null;
+      transcript: string | null;
+      transcript_words: Array<{ word: string; start: number; end: number }> | null;
+      pitch_mean_hz: number | null;
+      pitch_stddev_cents: number | null;
+      vibrato_rate_hz: number | null;
+      energy_avg_db: number | null;
+      energy_stddev_db: number | null;
+      timing_score: number | null;
+      pronunciation_score: number | null;
+      ai_notes: string | null;
+      best_take_in_group: boolean | null;
+      processed_at: string | null;
+    }
+  >(
+    `SELECT t.*,
+            a.take_id AS analysis_take_id,
+            a.transcript, a.transcript_words, a.pitch_mean_hz, a.pitch_stddev_cents,
+            a.vibrato_rate_hz, a.energy_avg_db, a.energy_stddev_db,
+            a.timing_score, a.pronunciation_score, a.ai_notes,
+            a.best_take_in_group, a.processed_at
+     FROM takes t
+     LEFT JOIN take_analyses a ON a.take_id = t.id
+     WHERE t.live_session_id = $1
+     ORDER BY t.uploaded_at ASC`,
+    [sessionId],
+  );
+  return rows.map((row) => {
+    const take = mapTakeRow(row);
+    if (!row.analysis_take_id) return { ...take, analysis: null };
+    return {
+      ...take,
+      analysis: {
+        takeId: row.analysis_take_id,
+        transcript: row.transcript,
+        transcriptWords: Array.isArray(row.transcript_words) ? row.transcript_words : null,
+        pitchMeanHz: row.pitch_mean_hz,
+        pitchStddevCents: row.pitch_stddev_cents,
+        vibratoRateHz: row.vibrato_rate_hz,
+        energyAvgDb: row.energy_avg_db,
+        energyStddevDb: row.energy_stddev_db,
+        timingScore: row.timing_score,
+        pronunciationScore: row.pronunciation_score,
+        aiNotes: row.ai_notes,
+        bestTakeInGroup: Boolean(row.best_take_in_group),
+        processedAt: row.processed_at,
+      },
+    };
+  });
+}
+
 export async function getTakeById(takeId: string): Promise<TakeRow | null> {
   const p = getPool();
   if (!p) return null;

@@ -194,6 +194,55 @@ export async function startMixdown(
   }
 }
 
+export type DebriefSection = {
+  label: string;
+  type: string;
+  startSec: number;
+  endSec: number;
+  winnerTakeId: string | null;
+  runnerUpTakeId: string | null;
+  notes: string;
+};
+
+export type Debrief = {
+  sessionId: string;
+  status: "processing" | "done" | "error";
+  sections: DebriefSection[] | null;
+  overallNotes: string | null;
+  generatedAt: string | null;
+  errorMessage: string | null;
+  startedAt: string;
+};
+
+export async function fetchDebrief(
+  token: string | null,
+  sessionId: string,
+): Promise<Debrief | null> {
+  const res = await authedFetch(
+    `/api/sessions/debrief?id=${encodeURIComponent(sessionId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(`Debrief fetch failed: ${res.status}`);
+  const json = (await res.json()) as { debrief: Debrief | null };
+  return json.debrief;
+}
+
+export async function startDebrief(
+  token: string | null,
+  sessionId: string,
+): Promise<void> {
+  const res = await authedFetch(
+    `/api/sessions/debrief?id=${encodeURIComponent(sessionId)}`,
+    token,
+    { method: "POST" },
+  );
+  if (!res.ok && res.status !== 202 && res.status !== 409) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Debrief start failed: ${res.status}`);
+  }
+}
+
 export async function fetchLiveSessionTakes(
   token: string | null,
   sessionId: string,

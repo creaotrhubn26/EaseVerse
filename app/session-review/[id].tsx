@@ -14,9 +14,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { CLERK_CONFIGURED } from "@/lib/use-app-user";
 import {
+  fetchDebrief,
   fetchLiveSessionTakes,
   fetchMixdownStatus,
+  startDebrief,
   startMixdown,
+  type Debrief,
   type LiveSessionTake,
   type MixdownStatus,
 } from "@/lib/sessions-client";
@@ -45,6 +48,9 @@ function Inner() {
   const [mixdown, setMixdown] = useState<MixdownStatus | null>(null);
   const [mixdownBusy, setMixdownBusy] = useState(false);
   const mixdownPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [debrief, setDebrief] = useState<Debrief | null>(null);
+  const [debriefBusy, setDebriefBusy] = useState(false);
+  const debriefPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -102,6 +108,52 @@ function Inner() {
     };
   }, [mixdown?.status, loadMixdown]);
 
+  const loadDebrief = useCallback(async () => {
+    if (!id) return;
+    try {
+      const token = await getToken();
+      const data = await fetchDebrief(token, String(id));
+      setDebrief(data);
+      return data;
+    } catch {
+      return null;
+    }
+  }, [id, getToken]);
+
+  useEffect(() => {
+    void loadDebrief();
+  }, [loadDebrief]);
+
+  useEffect(() => {
+    if (debrief?.status !== "processing") {
+      if (debriefPollRef.current) clearInterval(debriefPollRef.current);
+      debriefPollRef.current = null;
+      return;
+    }
+    if (debriefPollRef.current) return;
+    debriefPollRef.current = setInterval(() => {
+      void loadDebrief();
+    }, 3000);
+    return () => {
+      if (debriefPollRef.current) clearInterval(debriefPollRef.current);
+      debriefPollRef.current = null;
+    };
+  }, [debrief?.status, loadDebrief]);
+
+  const triggerDebrief = useCallback(async () => {
+    if (!id) return;
+    setDebriefBusy(true);
+    try {
+      const token = await getToken();
+      await startDebrief(token, String(id));
+      await loadDebrief();
+    } catch (err) {
+      setError("Debrief failed: " + (err as Error).message);
+    } finally {
+      setDebriefBusy(false);
+    }
+  }, [id, getToken, loadDebrief]);
+
   const triggerMixdown = useCallback(async () => {
     if (!id) return;
     setMixdownBusy(true);
@@ -145,6 +197,7 @@ function Inner() {
   useEffect(() => () => {
     if (tickRef.current) clearInterval(tickRef.current);
     if (mixdownPollRef.current) clearInterval(mixdownPollRef.current);
+    if (debriefPollRef.current) clearInterval(debriefPollRef.current);
     for (const el of audiosRef.current.values()) {
       el.pause();
       el.remove();
@@ -297,6 +350,86 @@ function Inner() {
               the PWA to mix tracks together.
             </Text>
           )}
+
+          <View style={styles.debriefRow}>
+            <Pressable
+              onPress={triggerDebrief}
+              disabled={debriefBusy || debrief?.status === "processing"}
+              style={[
+                styles.controlBtn,
+                (debriefBusy || debrief?.status === "processing") && { opacity: 0.5 },
+                debrief?.status === "done" && styles.controlBtnActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Run AI session debrief"
+            >
+              <Ionicons
+                name="sparkles-outline"
+                size={16}
+                color={debrief?.status === "done" ? "#fff" : Colors.textPrimary}
+              />
+              <Text
+                style={[
+                  styles.controlText,
+                  debrief?.status === "done" && { color: "#fff" },
+                ]}
+              >
+                {debrief?.status === "processing"
+                  ? "Analysing…"
+                  : debrief?.status === "done"
+                    ? "Re-run debrief"
+                    : "AI debrief"}
+              </Text>
+            </Pressable>
+            {debrief?.status === "error" ? (
+              <Text style={styles.mixdownError} numberOfLines={2}>
+                {debrief.errorMessage || "Debrief failed"}
+              </Text>
+            ) : null}
+          </View>
+
+          {debrief?.status === "done" && debrief.sections && debrief.sections.length > 0 ? (
+            <View style={styles.debriefPanel}>
+              {debrief.overallNotes ? (
+                <Text style={styles.debriefOverall}>{debrief.overallNotes}</Text>
+              ) : null}
+              {debrief.sections.map((s, idx) => {
+                const winner = grouped.find((t) => t.takeId === s.winnerTakeId);
+                const runnerUp = grouped.find((t) => t.takeId === s.runnerUpTakeId);
+                return (
+                  <View key={`${s.label}-${idx}`} style={styles.debriefSection}>
+                    <View style={styles.debriefSectionHeader}>
+                      <Text style={styles.debriefSectionLabel}>{s.label}</Text>
+                      <Text style={styles.debriefSectionRange}>
+                        {formatTime(s.startSec)} – {formatTime(s.endSec)}
+                      </Text>
+                    </View>
+                    {winner ? (
+                      <View style={styles.debriefPick}>
+                        <Ionicons name="trophy-outline" size={13} color={Colors.gradientStart} />
+                        <Text style={styles.debriefPickText}>
+                          Winner: {winner.displayName || winner.userId.slice(0, 8)}
+                        </Text>
+                        <Pressable
+                          onPress={() => seek(s.startSec)}
+                          style={styles.debriefJump}
+                          accessibilityLabel="Jump to section"
+                        >
+                          <Ionicons name="play" size={11} color="#fff" />
+                        </Pressable>
+                      </View>
+                    ) : null}
+                    {runnerUp ? (
+                      <Text style={styles.debriefRunnerUp}>
+                        Runner-up: {runnerUp.displayName || runnerUp.userId.slice(0, 8)}
+                      </Text>
+                    ) : null}
+                    {s.notes ? <Text style={styles.debriefNotes}>{s.notes}</Text> : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
 
           <View style={styles.mixdownRow}>
             <Pressable
@@ -500,6 +633,63 @@ const styles = StyleSheet.create({
   },
   seekRow: { flexDirection: "row", paddingHorizontal: 2 },
   mixdownRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" },
+  debriefRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" },
+  debriefPanel: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.gradientStart + "33",
+    backgroundColor: Colors.gradientStart + "0a",
+    gap: 10,
+  },
+  debriefOverall: {
+    color: Colors.textPrimary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  debriefSection: {
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderGlass,
+    gap: 4,
+  },
+  debriefSectionHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  debriefSectionLabel: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+  },
+  debriefSectionRange: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
+  },
+  debriefPick: { flexDirection: "row", alignItems: "center", gap: 6 },
+  debriefPickText: {
+    flex: 1,
+    color: Colors.gradientStart,
+    fontFamily: "Inter_700Bold",
+    fontSize: 12,
+  },
+  debriefJump: {
+    backgroundColor: Colors.gradientStart,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  debriefRunnerUp: {
+    color: Colors.textTertiary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+  },
+  debriefNotes: {
+    color: Colors.textSecondary,
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    lineHeight: 17,
+  },
   mixdownError: {
     color: Colors.dangerUnderline,
     fontFamily: "Inter_500Medium",

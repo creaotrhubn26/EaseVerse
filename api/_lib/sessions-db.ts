@@ -38,6 +38,16 @@ async function ensureSchema(): Promise<void> {
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_finished_at TIMESTAMPTZ;
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS mixdown_error TEXT;
 
+    CREATE TABLE IF NOT EXISTS live_session_debriefs (
+      session_id TEXT PRIMARY KEY REFERENCES live_sessions(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      sections JSONB,
+      overall_notes TEXT,
+      generated_at TIMESTAMPTZ,
+      error_message TEXT,
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS live_session_participants (
       session_id TEXT NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL,
@@ -385,6 +395,99 @@ function mapSession(row: SessionDbRow): LiveSessionRow {
     mixdownFinishedAt: row.mixdown_finished_at,
     mixdownError: row.mixdown_error,
   };
+}
+
+export type DebriefSection = {
+  label: string;
+  type: string;
+  startSec: number;
+  endSec: number;
+  winnerTakeId: string | null;
+  runnerUpTakeId: string | null;
+  notes: string;
+};
+
+export type DebriefRow = {
+  sessionId: string;
+  status: "processing" | "done" | "error";
+  sections: DebriefSection[] | null;
+  overallNotes: string | null;
+  generatedAt: string | null;
+  errorMessage: string | null;
+  startedAt: string;
+};
+
+export async function getDebrief(sessionId: string): Promise<DebriefRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const { rows } = await p.query<{
+    session_id: string;
+    status: DebriefRow["status"];
+    sections: DebriefSection[] | null;
+    overall_notes: string | null;
+    generated_at: string | null;
+    error_message: string | null;
+    started_at: string;
+  }>(`SELECT * FROM live_session_debriefs WHERE session_id = $1`, [sessionId]);
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    sessionId: r.session_id,
+    status: r.status,
+    sections: r.sections,
+    overallNotes: r.overall_notes,
+    generatedAt: r.generated_at,
+    errorMessage: r.error_message,
+    startedAt: r.started_at,
+  };
+}
+
+export async function setDebriefProcessing(sessionId: string): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await ensureSchema();
+  await p.query(
+    `INSERT INTO live_session_debriefs (session_id, status, started_at, error_message)
+     VALUES ($1, 'processing', NOW(), NULL)
+     ON CONFLICT (session_id) DO UPDATE
+       SET status = 'processing', started_at = NOW(), error_message = NULL`,
+    [sessionId],
+  );
+}
+
+export async function setDebriefDone(args: {
+  sessionId: string;
+  sections: DebriefSection[];
+  overallNotes: string;
+}): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await ensureSchema();
+  await p.query(
+    `UPDATE live_session_debriefs
+       SET status = 'done',
+           sections = $2,
+           overall_notes = $3,
+           generated_at = NOW(),
+           error_message = NULL
+     WHERE session_id = $1`,
+    [args.sessionId, JSON.stringify(args.sections), args.overallNotes],
+  );
+}
+
+export async function setDebriefError(args: {
+  sessionId: string;
+  errorMessage: string;
+}): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await ensureSchema();
+  await p.query(
+    `UPDATE live_session_debriefs SET status = 'error', error_message = $2, generated_at = NOW()
+     WHERE session_id = $1`,
+    [args.sessionId, args.errorMessage.slice(0, 1000)],
+  );
 }
 
 export async function setMixdownStatus(args: {

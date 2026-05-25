@@ -343,6 +343,7 @@ function Inner() {
               externalTrackId: session.externalTrackId || session.id,
               token,
               projectId: session.projectId,
+              liveSessionId: session.id,
             });
           } catch (err) {
             setError("Upload failed: " + (err as Error).message);
@@ -383,6 +384,7 @@ function Inner() {
             externalTrackId: session.externalTrackId || session.id,
             token,
             projectId: session.projectId,
+            liveSessionId: session.id,
           });
         } catch (err) {
           setError("Native upload failed: " + (err as Error).message);
@@ -501,6 +503,14 @@ function Inner() {
         <Text style={styles.summaryText}>
           {onlineCount} av {participants.length} online
         </Text>
+        <Pressable
+          onPress={() => router.push(`/session-review/${String(id)}`)}
+          style={styles.reviewBtn}
+          accessibilityRole="button"
+        >
+          <Ionicons name="albums-outline" size={14} color={Colors.textPrimary} />
+          <Text style={styles.reviewBtnText}>Multi-track review</Text>
+        </Pressable>
         {isProducer ? (
           <Pressable onPress={handleEnd} style={styles.endBtn} accessibilityRole="button">
             <Text style={styles.endBtnText}>End session</Text>
@@ -796,6 +806,18 @@ const styles = StyleSheet.create({
     borderColor: Colors.dangerUnderline + "66",
   },
   endBtnText: { color: Colors.dangerUnderline, fontFamily: "Inter_700Bold", fontSize: 12 },
+  reviewBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    backgroundColor: Colors.surfaceGlass,
+  },
+  reviewBtnText: { color: Colors.textPrimary, fontFamily: "Inter_700Bold", fontSize: 12 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   tile: {
     width: 158,

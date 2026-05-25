@@ -56,6 +56,7 @@ export async function uploadTake(args: {
   token: string;
   projectId?: string;
   lyricsSnapshot?: string;
+  liveSessionId?: string;
 }): Promise<{ url: string; pathname: string }> {
   const result = await upload(args.file.name, args.file, {
     access: "public",
@@ -66,6 +67,7 @@ export async function uploadTake(args: {
       filename: args.file.name,
       projectId: args.projectId,
       lyricsSnapshot: args.lyricsSnapshot,
+      liveSessionId: args.liveSessionId,
     }),
     headers: { Authorization: `Bearer ${args.token}` },
   });
@@ -84,6 +86,7 @@ export async function uploadTakeFromUri(args: {
   token: string;
   projectId?: string;
   lyricsSnapshot?: string;
+  liveSessionId?: string;
 }): Promise<{ url: string; pathname: string }> {
   const res = await fetch(args.uri);
   const blob = await res.blob();
@@ -100,6 +103,7 @@ export async function uploadTakeFromUri(args: {
       filename: args.filename,
       projectId: args.projectId,
       lyricsSnapshot: args.lyricsSnapshot,
+      liveSessionId: args.liveSessionId,
     }),
     headers: { Authorization: `Bearer ${args.token}` },
   });

@@ -45,6 +45,8 @@ async function ensureSchema(): Promise<void> {
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS lyrics_snapshot_at TIMESTAMPTZ;
     ALTER TABLE takes ADD COLUMN IF NOT EXISTS project_id TEXT;
     CREATE INDEX IF NOT EXISTS takes_project_idx ON takes (project_id);
+    ALTER TABLE takes ADD COLUMN IF NOT EXISTS live_session_id TEXT;
+    CREATE INDEX IF NOT EXISTS takes_live_session_idx ON takes (live_session_id, uploaded_at);
 
     CREATE TABLE IF NOT EXISTS take_consensus_votes (
       take_id TEXT NOT NULL REFERENCES takes(id) ON DELETE CASCADE,
@@ -153,6 +155,7 @@ export type TakeRow = {
   projectId: string | null;
   lyricsSnapshot: string | null;
   lyricsSnapshotAt: string | null;
+  liveSessionId: string | null;
 };
 
 export type ConsensusVote = "agree" | "disagree";
@@ -191,14 +194,15 @@ export async function createTake(args: {
   storageUrl: string;
   projectId?: string | null;
   lyricsSnapshot?: string | null;
+  liveSessionId?: string | null;
 }): Promise<TakeRow | null> {
   const p = getPool();
   if (!p) return null;
   await ensureSchema();
   const { rows } = await p.query<TakeRowDb>(
     `INSERT INTO takes
-      (id, user_id, external_track_id, source_path, filename, byte_size, storage_url, project_id, lyrics_snapshot, lyrics_snapshot_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $9 IS NULL THEN NULL ELSE NOW() END)
+      (id, user_id, external_track_id, source_path, filename, byte_size, storage_url, project_id, lyrics_snapshot, lyrics_snapshot_at, live_session_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $9 IS NULL THEN NULL ELSE NOW() END, $10)
      RETURNING *`,
     [
       args.id,
@@ -210,9 +214,21 @@ export async function createTake(args: {
       args.storageUrl,
       args.projectId ?? null,
       args.lyricsSnapshot ?? null,
+      args.liveSessionId ?? null,
     ],
   );
   return rows[0] ? mapTakeRow(rows[0]) : null;
+}
+
+export async function listTakesForLiveSession(sessionId: string): Promise<TakeRow[]> {
+  const p = getPool();
+  if (!p) return [];
+  await ensureSchema();
+  const { rows } = await p.query<TakeRowDb>(
+    `SELECT * FROM takes WHERE live_session_id = $1 ORDER BY uploaded_at ASC`,
+    [sessionId],
+  );
+  return rows.map(mapTakeRow);
 }
 
 export async function getTakeById(takeId: string): Promise<TakeRow | null> {
@@ -470,6 +486,7 @@ type TakeRowDb = {
   project_id: string | null;
   lyrics_snapshot: string | null;
   lyrics_snapshot_at: string | null;
+  live_session_id: string | null;
 };
 
 function mapTakeRow(row: TakeRowDb): TakeRow {
@@ -493,6 +510,7 @@ function mapTakeRow(row: TakeRowDb): TakeRow {
     projectId: row.project_id,
     lyricsSnapshot: row.lyrics_snapshot,
     lyricsSnapshotAt: row.lyrics_snapshot_at,
+    liveSessionId: row.live_session_id,
   };
 }
 

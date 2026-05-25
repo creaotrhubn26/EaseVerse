@@ -131,3 +131,42 @@ export async function updateBpm(
 export function sessionStreamUrl(sessionId: string): string {
   return `${getApiUrl()}/api/sessions/stream?id=${encodeURIComponent(sessionId)}`;
 }
+
+export type LiveSessionTake = {
+  takeId: string;
+  userId: string;
+  displayName: string | null;
+  projectRole: string | null;
+  storageUrl: string;
+  filename: string;
+  durationSec: number | null;
+  uploadedAt: string;
+  offsetSec: number;
+  status: "queued" | "processing" | "done" | "error";
+};
+
+export type LiveSessionTakesResponse = {
+  session: {
+    id: string;
+    externalTrackId: string | null;
+    bpm: number | null;
+    recordingStartsAt: string | null;
+    recordingStoppedAt: string | null;
+    endedAt: string | null;
+    startedAt: string;
+  };
+  takes: LiveSessionTake[];
+};
+
+export async function fetchLiveSessionTakes(
+  token: string | null,
+  sessionId: string,
+): Promise<LiveSessionTakesResponse> {
+  const res = await authedFetch(
+    `/api/sessions/takes?id=${encodeURIComponent(sessionId)}`,
+    token,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(`Session takes fetch failed: ${res.status}`);
+  return (await res.json()) as LiveSessionTakesResponse;
+}

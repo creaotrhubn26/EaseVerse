@@ -110,6 +110,26 @@ export async function listLyrics(f: { projectId?: string; source?: string }): Pr
   return { records: r.rows.map(mapLyrics), storage: "postgres" };
 }
 
+/* ── Takes (keeper-vokalopptak) — for CreatorHub review-versjoner ──────────── */
+export async function getKeeperTakes(externalTrackId: string): Promise<{ takes: any[]; storage: string }> {
+  const p = getPool();
+  if (!p) return { takes: [], storage: "memory" };
+  try {
+    const r = await p.query(
+      `SELECT id, filename, storage_url, producer_decision, decision_locked_at, created_at
+         FROM takes WHERE external_track_id = $1 AND producer_decision = 'keeper'
+        ORDER BY decision_locked_at DESC NULLS LAST, created_at DESC LIMIT 50`, [externalTrackId]);
+    const takes = r.rows.map((row) => ({
+      id: String(row.id), filename: row.filename || "take.wav", url: row.storage_url,
+      decision: "keeper", decisionLockedAt: row.decision_locked_at || null, createdAt: row.created_at || null,
+    }));
+    return { takes, storage: "postgres" };
+  } catch (e) {
+    console.error("getKeeperTakes failed:", e);
+    return { takes: [], storage: "error" };
+  }
+}
+
 /* ── Pro Tools sync ──────────────────────────────────────────────────────── */
 export type ProToolsRecord = {
   externalTrackId: string; projectId: string; source: string; bpm?: number;

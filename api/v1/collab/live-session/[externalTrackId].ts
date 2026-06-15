@@ -36,7 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
   } catch (e) {
-    console.error("collab live-session error:", e);
-    return res.status(500).json({ error: "Failed to load live session" });
+    // Tabellen finnes kanskje ikke ennå (ingen live-økt opprettet) → behandle som ikke-live.
+    console.error("collab live-session error:", (e as any)?.message || e);
+    return res.status(200).json({ ok: true, live: false });
   }
 }

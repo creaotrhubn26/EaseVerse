@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireExternalKey } from "../../../_lib/collab-store.js";
-import { warmUpExercises, voiceSafetyRules } from "../../../../constants/warmup.js";
-import { breathingPatterns, energyTechniques, moodOptions, affirmations, visualizations } from "../../../../constants/mindfulness.js";
+import { warmUpExercises, voiceSafetyRules } from "../../../_lib/warmup-content.js";
+import { breathingPatterns, energyTechniques, moodOptions, affirmations, visualizations } from "../../../_lib/mindfulness-content.js";
 
 // Eksponerer EaseVerse sitt oppvarmings- og mindfulness-innhold for søsterapper
 // (Audio Showcase i CreatorHub) via collab-API-et. Lese-only, statisk innhold.

@@ -1,5 +1,5 @@
-import { ComponentProps } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
+import type { Ionicons } from '@expo/vector-icons';
 
 export type MoodLevel = 'anxious' | 'scattered' | 'low' | 'neutral' | 'energized' | 'confident';
 

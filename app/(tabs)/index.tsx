@@ -1164,31 +1164,37 @@ export default function SingScreen() {
           </View>
         )}
 
-        <View style={styles.primaryActionCard}>
-          <View style={styles.primaryActionTopRow}>
-            <View style={styles.primaryActionStateRow}>
-              <View style={[styles.statusDot, {
-                backgroundColor: isRecording && !isPaused
-                  ? Colors.successUnderline
-                  : isPaused
-                  ? Colors.warningUnderline
-                  : isAnalyzing
-                  ? Colors.gradientStart
-                  : Colors.textTertiary,
-              }]} />
-              <Text style={styles.primaryActionStateText}>{recordingStageLabel}</Text>
+        {/* Skjul status-kortet i tom tilstand (uten låt + ikke opptak) — ellers
+            overlapper det det mørke tom-tilstand-overlegget («Choose Existing
+            Song»/«Add Lyrics») fordi controls har høyere zIndex enn overlegget.
+            Vises fortsatt under opptak/analyse (også ved hurtig-idé-opptak). */}
+        {(activeSong || isRecording || isAnalyzing) && (
+          <View style={styles.primaryActionCard}>
+            <View style={styles.primaryActionTopRow}>
+              <View style={styles.primaryActionStateRow}>
+                <View style={[styles.statusDot, {
+                  backgroundColor: isRecording && !isPaused
+                    ? Colors.successUnderline
+                    : isPaused
+                    ? Colors.warningUnderline
+                    : isAnalyzing
+                    ? Colors.gradientStart
+                    : Colors.textTertiary,
+                }]} />
+                <Text style={styles.primaryActionStateText}>{recordingStageLabel}</Text>
+              </View>
+              {(isRecording || isAnalyzing) && (
+                <Text style={styles.primaryActionTimer}>
+                  {isAnalyzing ? 'Processing…' : formatTime(duration)}
+                </Text>
+              )}
             </View>
-            {(isRecording || isAnalyzing) && (
-              <Text style={styles.primaryActionTimer}>
-                {isAnalyzing ? 'Processing…' : formatTime(duration)}
-              </Text>
-            )}
+            <Text style={styles.primaryActionHeadline} accessibilityLiveRegion="polite">
+              {statusText}
+            </Text>
+            <Text style={styles.primaryActionHintText}>{recordingActionHint}</Text>
           </View>
-          <Text style={styles.primaryActionHeadline} accessibilityLiveRegion="polite">
-            {statusText}
-          </Text>
-          <Text style={styles.primaryActionHintText}>{recordingActionHint}</Text>
-        </View>
+        )}
 
         <View style={styles.transportRow}>
           <Pressable

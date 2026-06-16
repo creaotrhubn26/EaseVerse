@@ -5,10 +5,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { putObject, presignDownload, PUBLIC_BASE, isB2Configured } from "../_lib/b2-storage.js";
+import { nativePut, nativeDownloadUrl, isB2NativeConfigured, PUBLIC_BASE } from "../_lib/b2-native.js";
 import ffmpegStatic from "ffmpeg-static";
-
-const dawKey = (sessionId: string) => `easeverse/sessions/${sessionId}/daw.zip`;
 import ffmpeg from "fluent-ffmpeg";
 import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
 import { getProjectMembership } from "../_lib/projects-db.js";
@@ -25,6 +23,7 @@ export const config = { maxDuration: 300 };
 if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic as unknown as string);
 
 const MAX_TAKES = 24;
+const dawKey = (sessionId: string) => `easeverse/sessions/${sessionId}/daw.zip`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST" && req.method !== "GET") {
@@ -33,10 +32,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   // Åpen nedlastings-proxy (presignert B2 GET) — ingen auth-header trengs.
   if (req.method === "GET" && req.query.download) {
-    if (!isB2Configured()) return res.status(503).json({ error: "B2 storage is not configured." });
+    if (!isB2NativeConfigured()) return res.status(503).json({ error: "B2 storage is not configured." });
     const sid = typeof req.query.id === "string" ? req.query.id : null;
     if (!sid) return res.status(400).json({ error: "id required" });
-    const url = await presignDownload(dawKey(sid));
+    const url = await nativeDownloadUrl(dawKey(sid));
     res.setHeader("Cache-Control", "private, max-age=300");
     return res.redirect(302, url);
   }
@@ -63,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  if (!isB2Configured()) {
+  if (!isB2NativeConfigured()) {
     return res.status(503).json({ error: "B2 storage is not configured." });
   }
   if (session.dawBundleStatus === "processing") {
@@ -233,7 +232,7 @@ async function runDawExport(args: { sessionId: string }): Promise<void> {
     });
 
     const zipBytes = fs.readFileSync(zipPath);
-    await putObject(dawKey(args.sessionId), zipBytes, "application/zip");
+    await nativePut(dawKey(args.sessionId), zipBytes, "application/zip");
     const url = `${PUBLIC_BASE}/api/sessions/daw-export?id=${encodeURIComponent(args.sessionId)}&download=1`;
 
     await setDawBundleStatus({

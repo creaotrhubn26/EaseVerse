@@ -22,7 +22,10 @@
         "resourceClass": "m-medium"
       },
       "credentialsSource": "local",
-      "node": "22.18.0"
+      "node": "22.18.0",
+      "env": {
+        "EAS_BUILD_SKIP_LOCKFILE_CHECK": "1"
+      }
     }
   },
   "submit": {
@@ -30,7 +33,9 @@
       "ios": {
         "ascApiKeyId": "9YKHP6L25P",
         "ascApiKeyIssuerId": "c514ca4b-cd18-46a1-bb72-dc1446ed5735",
-        "appleTeamId": "9TAUZCPK95"
+        "appleTeamId": "9TAUZCPK95",
+        "ascApiKeyPath": "./ios-creds/asc-key.p8",
+        "ascAppId": "6780806167"
       }
     }
   }

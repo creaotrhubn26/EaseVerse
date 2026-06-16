@@ -51,3 +51,12 @@ export function presignDownload(key: string, expiresIn = 3600): Promise<string> 
     { expiresIn },
   );
 }
+
+// Server-side opplasting (for filer backend genererer selv — DAW-zip, mixdown).
+export async function putObject(key: string, body: Buffer | Uint8Array, contentType: string): Promise<void> {
+  await client().send(new PutObjectCommand({ Bucket: B2_BUCKET, Key: key, Body: body, ContentType: contentType }));
+}
+
+// Stabil offentlig base for proxy-URL-er som lagres i DB (bygd i bakgrunns-jobber
+// uten request-kontekst). Overstyr med EASEVERSE_PUBLIC_URL ved behov.
+export const PUBLIC_BASE = (process.env.EASEVERSE_PUBLIC_URL || "https://easeverse.vercel.app").replace(/\/+$/, "");

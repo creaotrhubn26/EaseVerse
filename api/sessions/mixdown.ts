@@ -1,11 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { put } from "@vercel/blob";
+import { putObject, presignDownload, PUBLIC_BASE, isB2Configured } from "../_lib/b2-storage.js";
 import ffmpegStatic from "ffmpeg-static";
+
+const mixKey = (sessionId: string) => `easeverse/sessions/${sessionId}/mixdown.wav`;
 import ffmpeg from "fluent-ffmpeg";
 import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
 import { getProjectMembership } from "../_lib/projects-db.js";
@@ -23,6 +24,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST" && req.method !== "GET") {
     res.setHeader("Allow", "POST, GET");
     return res.status(405).json({ error: "Method not allowed" });
+  }
+  // Åpen avspillings-/nedlastings-proxy (presignert B2 GET) — ingen auth-header.
+  if (req.method === "GET" && req.query.download) {
+    if (!isB2Configured()) return res.status(503).json({ error: "B2 storage is not configured." });
+    const sid = typeof req.query.id === "string" ? req.query.id : null;
+    if (!sid) return res.status(400).json({ error: "id required" });
+    const url = await presignDownload(mixKey(sid));
+    res.setHeader("Cache-Control", "private, max-age=300");
+    return res.redirect(302, url);
   }
   if (!isClerkConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
@@ -47,10 +57,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!isB2Configured()) {
     return res
       .status(503)
-      .json({ error: "Vercel Blob is not configured." });
+      .json({ error: "B2 storage is not configured." });
   }
   if (session.mixdownStatus === "processing") {
     return res.status(409).json({ error: "Mixdown already in progress" });
@@ -131,20 +141,16 @@ async function runMixdown(args: { sessionId: string; items: MixItem[] }): Promis
 
     const stat = fs.statSync(outputPath);
     const buffer = fs.readFileSync(outputPath);
-    const filename = `mix-${args.sessionId}-${crypto.randomBytes(4).toString("hex")}.wav`;
-    const blob = await put(`sessions/${args.sessionId}/${filename}`, buffer, {
-      access: "public",
-      contentType: "audio/wav",
-      addRandomSuffix: false,
-    });
+    await putObject(mixKey(args.sessionId), buffer, "audio/wav");
+    const mixdownUrl = `${PUBLIC_BASE}/api/sessions/mixdown?id=${encodeURIComponent(args.sessionId)}&download=1`;
 
     await setMixdownStatus({
       sessionId: args.sessionId,
       status: "done",
-      mixdownUrl: blob.url,
+      mixdownUrl,
     });
 
-    console.log("[mixdown] done", { sessionId: args.sessionId, bytes: stat.size, url: blob.url });
+    console.log("[mixdown] done", { sessionId: args.sessionId, bytes: stat.size, url: mixdownUrl });
   } finally {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });

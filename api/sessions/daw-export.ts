@@ -5,8 +5,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { put } from "@vercel/blob";
+import { putObject, presignDownload, PUBLIC_BASE, isB2Configured } from "../_lib/b2-storage.js";
 import ffmpegStatic from "ffmpeg-static";
+
+const dawKey = (sessionId: string) => `easeverse/sessions/${sessionId}/daw.zip`;
 import ffmpeg from "fluent-ffmpeg";
 import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
 import { getProjectMembership } from "../_lib/projects-db.js";
@@ -28,6 +30,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST" && req.method !== "GET") {
     res.setHeader("Allow", "POST, GET");
     return res.status(405).json({ error: "Method not allowed" });
+  }
+  // Åpen nedlastings-proxy (presignert B2 GET) — ingen auth-header trengs.
+  if (req.method === "GET" && req.query.download) {
+    if (!isB2Configured()) return res.status(503).json({ error: "B2 storage is not configured." });
+    const sid = typeof req.query.id === "string" ? req.query.id : null;
+    if (!sid) return res.status(400).json({ error: "id required" });
+    const url = await presignDownload(dawKey(sid));
+    res.setHeader("Cache-Control", "private, max-age=300");
+    return res.redirect(302, url);
   }
   if (!isClerkConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
@@ -52,8 +63,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return res.status(503).json({ error: "Vercel Blob is not configured." });
+  if (!isB2Configured()) {
+    return res.status(503).json({ error: "B2 storage is not configured." });
   }
   if (session.dawBundleStatus === "processing") {
     return res.status(409).json({ error: "DAW export already in progress" });
@@ -222,26 +233,19 @@ async function runDawExport(args: { sessionId: string }): Promise<void> {
     });
 
     const zipBytes = fs.readFileSync(zipPath);
-    const blob = await put(
-      `sessions/${args.sessionId}/${projectName}-${crypto.randomBytes(4).toString("hex")}.zip`,
-      zipBytes,
-      {
-        access: "public",
-        contentType: "application/zip",
-        addRandomSuffix: false,
-      },
-    );
+    await putObject(dawKey(args.sessionId), zipBytes, "application/zip");
+    const url = `${PUBLIC_BASE}/api/sessions/daw-export?id=${encodeURIComponent(args.sessionId)}&download=1`;
 
     await setDawBundleStatus({
       sessionId: args.sessionId,
       status: "done",
-      url: blob.url,
+      url,
     });
     console.log("[daw-export] done", {
       sessionId: args.sessionId,
       bytes: zipBytes.length,
       stems: stems.length,
-      url: blob.url,
+      url,
     });
   } finally {
     try {

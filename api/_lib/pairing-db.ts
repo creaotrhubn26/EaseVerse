@@ -48,9 +48,9 @@ function cleanupMemory() {
   }
 }
 
-export async function createPairingToken(userId: string): Promise<PairingRecord> {
+export async function createPairingToken(userId: string, ttlSeconds = TTL_SECONDS): Promise<PairingRecord> {
   const token = `pair_${crypto.randomBytes(18).toString("base64url")}`;
-  const expiresAt = new Date(Date.now() + TTL_SECONDS * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
   const createdAt = new Date().toISOString();
 
   const p = getPool();

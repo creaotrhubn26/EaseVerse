@@ -356,7 +356,7 @@
           <div class="icon step-num">1</div>
           <div style="flex:1">
             <div class="card-title">Connect to EaseVerse</div>
-            <div class="card-hint">Paste a 15-minute pairing token from your studio admin.</div>
+            <div class="card-hint">Pair this computer with your EaseVerse account — no copy-paste.</div>
           </div>
         </div>
         <div class="card-body">
@@ -364,9 +364,22 @@
             <div class="field-label">API base URL</div>
             <input id="apiBaseUrl" type="text" value="https://easeverse.vercel.app" />
           </div>
-          <div>
-            <div class="field-label">Pairing token</div>
-            <div class="row token-row">
+          <div id="pairBlock">
+            <div class="field-label">Pair this computer</div>
+            <div class="card-hint">Click below, then type the code at <b>/admin</b> in EaseVerse → it connects automatically.</div>
+            <div class="row" style="margin-top:8px">
+              <button id="pairBtn" class="primary">Get pairing code</button>
+              <button id="openAdminBtn" title="Open the EaseVerse admin page">Open /admin ↗</button>
+            </div>
+            <div id="pairCodeBox" style="display:none;margin-top:10px">
+              <div id="pairCode" style="font-family:Menlo,monospace;font-size:34px;letter-spacing:8px;font-weight:700;text-align:center;padding:10px 0"></div>
+              <div class="token-meta" id="pairStatus" style="text-align:center">Waiting for approval…</div>
+            </div>
+            <div class="token-meta" id="pairedMeta" style="display:none">✓ Paired — connected to your account.</div>
+          </div>
+          <details id="advancedPair">
+            <summary class="field-label" style="cursor:pointer;list-style:revert">Advanced: paste a CLI token</summary>
+            <div class="row token-row" style="margin-top:8px">
               <input id="pairToken" type="text" placeholder="pair_…" autocomplete="off" />
               <button id="testBtn" title="Test the token">Test</button>
             </div>
@@ -374,7 +387,7 @@
               <div class="countdown-fill" id="countdownFill" style="width:100%"></div>
             </div>
             <div class="token-meta" id="tokenMeta"></div>
-          </div>
+          </details>
         </div>
       </div>
 
@@ -607,11 +620,84 @@
           $("incMarkers").checked = cfg.exportIncludeMarkers !== false;
           $("incRegions").checked = cfg.exportIncludeRegions !== false;
           $("incKeepers").checked = cfg.exportIncludeKeepers !== false;
-          if (cfg.pairToken) startCountdown();
+          if (cfg.pairToken) {
+            $("pairedMeta").style.display = "block";
+            $("pairBtn").textContent = "Re-pair";
+          }
+          // Auto-foreslå Pro Tools-mappe hvis ingen er valgt.
+          if (!cfg.audioWatch) {
+            try {
+              const f = await invoke("detect_protools_folder");
+              if (f) { $("audioWatch").value = f; appendLog("Foreslo Pro Tools-mappe: " + f); }
+            } catch (e) { /* ignore */ }
+          }
+          // Auto-start overvåking hvis allerede paret + mappe valgt.
+          if (cfg.pairToken && $("audioWatch").value.trim()) {
+            try {
+              await invoke("start_watcher", { config: gatherConfig() });
+              setStatus("live", "Watching");
+              $("startBtn").disabled = true;
+              $("stopBtn").disabled = false;
+              appendLog("Auto-startet overvåking ved oppstart");
+            } catch (e) { appendLog("auto-start feilet: " + e, "err"); }
+          }
         } catch (e) {
           appendLog("load_config error: " + e, "err");
         }
       }
+
+      // Device-kode-paring: hent kode, vis den, poll til godkjent.
+      let pairPollTimer = null;
+      $("openAdminBtn").addEventListener("click", async () => {
+        const base = ($("apiBaseUrl").value || "https://easeverse.vercel.app").replace(/\/+$/, "");
+        try { await invoke("open_url", { url: base + "/admin" }); } catch (e) { appendLog("open_url: " + e, "err"); }
+      });
+      $("pairBtn").addEventListener("click", async () => {
+        const base = ($("apiBaseUrl").value || "https://easeverse.vercel.app").replace(/\/+$/, "");
+        if (pairPollTimer) { clearInterval(pairPollTimer); pairPollTimer = null; }
+        $("pairBtn").disabled = true;
+        try {
+          const r = await invoke("device_request", { apiBaseUrl: base });
+          $("pairCode").textContent = r.userCode;
+          $("pairCodeBox").style.display = "block";
+          $("pairStatus").textContent = "Type this code at " + base + "/admin → it pairs automatically.";
+          const deadline = Date.now() + (r.expiresIn || 900) * 1000;
+          pairPollTimer = setInterval(async () => {
+            if (Date.now() > deadline) {
+              clearInterval(pairPollTimer); pairPollTimer = null;
+              $("pairStatus").textContent = "Code expired — click Get pairing code again.";
+              $("pairBtn").disabled = false;
+              return;
+            }
+            try {
+              const p = await invoke("device_poll", { apiBaseUrl: base, deviceCode: r.deviceCode });
+              if (p.status === "approved" && p.pairToken) {
+                clearInterval(pairPollTimer); pairPollTimer = null;
+                $("pairToken").value = p.pairToken;
+                $("pairCodeBox").style.display = "none";
+                $("pairedMeta").style.display = "block";
+                $("pairBtn").textContent = "Re-pair";
+                $("pairBtn").disabled = false;
+                await invoke("save_config", { config: gatherConfig() });
+                setStatus("live", "Paired");
+                appendLog("Device paret — varig token lagret");
+                // start overvåking hvis mappe er klar
+                if ($("audioWatch").value.trim()) {
+                  try { await invoke("start_watcher", { config: gatherConfig() }); setStatus("live", "Watching"); $("startBtn").disabled = true; $("stopBtn").disabled = false; } catch (e) {}
+                }
+              } else if (p.status === "expired") {
+                clearInterval(pairPollTimer); pairPollTimer = null;
+                $("pairStatus").textContent = "Code expired — click Get pairing code again.";
+                $("pairBtn").disabled = false;
+              }
+            } catch (e) { /* nettverks-blip, fortsett polling */ }
+          }, (r.interval || 3) * 1000);
+        } catch (e) {
+          $("pairBtn").disabled = false;
+          appendLog("device_request feilet: " + e, "err");
+          setStatus("error", "Pairing failed");
+        }
+      });
 
       $("testBtn").addEventListener("click", async () => {
         const cfg = gatherConfig();

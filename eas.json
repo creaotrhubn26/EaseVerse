@@ -6,20 +6,23 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "node": "22.11.0"
     },
     "preview": {
       "distribution": "internal",
       "ios": {
         "resourceClass": "m-medium"
-      }
+      },
+      "node": "22.11.0"
     },
     "production": {
       "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"
       },
-      "credentialsSource": "local"
+      "credentialsSource": "local",
+      "node": "22.11.0"
     }
   },
   "submit": {

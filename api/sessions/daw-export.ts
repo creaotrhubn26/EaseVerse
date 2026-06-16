@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import archiver from "archiver";
+import { createRequire } from "node:module";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -24,6 +24,9 @@ if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic as unknown as string);
 
 const MAX_TAKES = 24;
 const dawKey = (sessionId: string) => `easeverse/sessions/${sessionId}/daw.zip`;
+// archiver er CommonJS — ESM default-import feiler i Vercel-runtime
+// («does not provide an export named 'default'»). Last via createRequire.
+const archiver = createRequire(import.meta.url)("archiver") as typeof import("archiver");
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST" && req.method !== "GET") {

@@ -255,6 +255,83 @@ pub fn now_ms() -> u128 {
         .unwrap_or(0)
 }
 
+// Device-kode-paring: be backend om en kode (vises i UI), bruker godkjenner i /admin.
+#[tauri::command]
+async fn device_request(api_base_url: String) -> Result<serde_json::Value, String> {
+    let base = api_base_url.trim_end_matches('/');
+    let r = reqwest::Client::new()
+        .post(format!("{}/api/companion/device", base))
+        .json(&serde_json::json!({ "action": "request" }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !r.status().is_success() {
+        return Err(format!("request failed: {} {}", r.status(), r.text().await.unwrap_or_default()));
+    }
+    r.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+}
+
+// Poll til godkjent → returnerer { status, pairToken? }.
+#[tauri::command]
+async fn device_poll(api_base_url: String, device_code: String) -> Result<serde_json::Value, String> {
+    let base = api_base_url.trim_end_matches('/');
+    let r = reqwest::Client::new()
+        .post(format!("{}/api/companion/device", base))
+        .json(&serde_json::json!({ "action": "poll", "deviceCode": device_code }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    r.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+}
+
+// Auto-foreslå Pro Tools sin eksport-mappe (nyeste session med Bounced/Audio Files).
+#[tauri::command]
+fn detect_protools_folder() -> Option<String> {
+    let home = dirs::home_dir()?;
+    let roots = [
+        home.join("Documents/Pro Tools"),
+        home.join("Documents/Pro Tools/Sessions"),
+        home.join("Music/Pro Tools"),
+    ];
+    let mut best: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+    for root in roots.iter().filter(|p| p.is_dir()) {
+        if let Ok(entries) = std::fs::read_dir(root) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if !p.is_dir() {
+                    continue;
+                }
+                for sub in ["Bounced Files", "Audio Files"] {
+                    let cand = p.join(sub);
+                    if cand.is_dir() {
+                        let m = e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+                        if best.as_ref().map_or(true, |(bm, _)| m > *bm) {
+                            best = Some((m, cand));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if let Some((_, p)) = best {
+        return Some(p.to_string_lossy().to_string());
+    }
+    roots.iter().find(|p| p.is_dir()).map(|p| p.to_string_lossy().to_string())
+}
+
+// Åpne en URL i standard nettleser (for «Åpne paringsside»).
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let prog = "open";
+    #[cfg(target_os = "linux")]
+    let prog = "xdg-open";
+    #[cfg(target_os = "windows")]
+    let prog = "explorer";
+    std::process::Command::new(prog).arg(&url).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -271,7 +348,11 @@ pub fn run() {
             test_pairing,
             start_watcher,
             stop_watcher,
-            trigger_protools_import
+            trigger_protools_import,
+            device_request,
+            device_poll,
+            detect_protools_folder,
+            open_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

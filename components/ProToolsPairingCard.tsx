@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -45,6 +46,32 @@ function PairingCardInner({ horizontalMargin = 16, getToken }: Props & { getToke
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [code, setCode] = useState("");
+  const [approving, setApproving] = useState(false);
+  const [approveMsg, setApproveMsg] = useState<string | null>(null);
+  const [showLegacy, setShowLegacy] = useState(false);
+
+  async function approveCode() {
+    const userCode = code.trim().toUpperCase();
+    if (userCode.length < 6) { setApproveMsg("Enter the 6-character code"); return; }
+    setApproving(true); setApproveMsg(null);
+    try {
+      const token = await getToken();
+      const response = await authedFetch("/api/companion/device", token, {
+        method: "POST",
+        body: JSON.stringify({ action: "approve", userCode }),
+      });
+      if (!response.ok) {
+        throw new Error(response.status === 404 ? "Code not found or expired — check the app" : `Failed: ${response.status}`);
+      }
+      setApproveMsg("✓ Companion paired — it'll connect automatically");
+      setCode("");
+    } catch (err) {
+      setApproveMsg((err as Error).message || "Pairing failed");
+    } finally {
+      setApproving(false);
+    }
+  }
 
   async function generate() {
     setLoading(true);
@@ -91,12 +118,58 @@ function PairingCardInner({ horizontalMargin = 16, getToken }: Props & { getToke
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Pro Tools companion</Text>
           <Text style={styles.subtitle}>
-            Generate a short-lived token, then run the companion CLI with it.
+            Open the Companion app, then type the 6-character code it shows below.
           </Text>
         </View>
       </View>
 
-      {pairing ? (
+      <View style={styles.tokenBox}>
+        <Text style={styles.tokenLabel}>Pairing code from the Companion app</Text>
+        <View style={styles.row}>
+          <TextInput
+            value={code}
+            onChangeText={(t) => setCode(t.toUpperCase())}
+            placeholder="e.g. HNSGHZ"
+            placeholderTextColor={Colors.textTertiary}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={6}
+            style={styles.codeInput}
+            accessibilityLabel="Companion pairing code"
+          />
+          <Pressable
+            onPress={approveCode}
+            disabled={approving}
+            style={styles.secondaryBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Pair companion with this code"
+          >
+            {approving ? (
+              <ActivityIndicator color={Colors.textPrimary} />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle-outline" size={14} color={Colors.textPrimary} />
+                <Text style={styles.secondaryBtnText}>Pair</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+        {approveMsg ? (
+          <Text style={approveMsg.startsWith("✓") ? styles.okText : styles.errorText}>{approveMsg}</Text>
+        ) : null}
+      </View>
+
+      <Pressable
+        onPress={() => setShowLegacy((v) => !v)}
+        style={styles.guideHeader}
+        accessibilityRole="button"
+        accessibilityLabel={showLegacy ? "Hide CLI token option" : "Show CLI token option"}
+      >
+        <Ionicons name={showLegacy ? "chevron-down" : "chevron-forward"} size={14} color={Colors.textSecondary} />
+        <Text style={styles.guideHeaderText}>Advanced: use a CLI token instead</Text>
+      </Pressable>
+
+      {showLegacy ? (pairing ? (
         <View style={styles.tokenBox}>
           <Text style={styles.tokenLabel}>Token (expires in {Math.round(pairing.ttlSeconds / 60)} min)</Text>
           <Text style={styles.tokenValue} selectable>
@@ -146,7 +219,7 @@ function PairingCardInner({ horizontalMargin = 16, getToken }: Props & { getToke
             )}
           </LinearGradient>
         </Pressable>
-      )}
+      )) : null}
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -281,7 +354,21 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderGlass,
   },
   secondaryBtnText: { color: Colors.textPrimary, fontFamily: "Inter_600SemiBold", fontSize: 12 },
+  codeInput: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderGlass,
+    color: Colors.textPrimary,
+    fontFamily: Platform.OS === "web" ? "Menlo, monospace" : "Inter_600SemiBold",
+    fontSize: 18,
+    letterSpacing: 4,
+  },
   errorText: { color: Colors.dangerUnderline, fontFamily: "Inter_500Medium", fontSize: 12 },
+  okText: { color: Colors.successUnderline, fontFamily: "Inter_600SemiBold", fontSize: 12 },
   guideHeader: {
     flexDirection: "row",
     alignItems: "center",

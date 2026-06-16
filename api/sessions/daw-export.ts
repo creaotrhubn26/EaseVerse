@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createRequire } from "node:module";
+import "archiver"; // side-effekt: tvinger Vercel/ncc til å bundle archiver (lastes via createRequire under)
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";

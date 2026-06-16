@@ -12,7 +12,8 @@ import { AppProvider } from "@/lib/AppContext";
 import { clerkTokenCache } from "@/lib/clerk-token-cache";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
-import { ResizeMode, Video, AVPlaybackStatus } from "expo-av";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { useEventListener } from "expo";
 import Colors from "@/constants/colors";
 
 const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -156,7 +157,11 @@ export default function RootLayout() {
   const [introMuted, setIntroMuted] = useState(Platform.OS === "web");
   const introOpacity = useRef(new Animated.Value(1)).current;
   const introDismissedRef = useRef(false);
-  const introVideoRef = useRef<Video | null>(null);
+  const introPlayer = useVideoPlayer(introVideoSource, (p) => {
+    p.loop = false;
+    p.muted = Platform.OS === "web";
+    p.play();
+  });
 
   const dismissIntro = useCallback(() => {
     if (introDismissedRef.current) {
@@ -171,17 +176,14 @@ export default function RootLayout() {
     }).start(() => setShowIntro(false));
   }, [introOpacity]);
 
-  const handleIntroStatusUpdate = useCallback(
-    (status: AVPlaybackStatus) => {
-      if (!status.isLoaded) {
-        return;
-      }
-      if (status.didJustFinish) {
-        dismissIntro();
-      }
-    },
-    [dismissIntro]
-  );
+  // expo-video: 'playToEnd' tilsvarer expo-av sin didJustFinish; ved feil-status
+  // hopper vi rett til appen (samme oppførsel som onError før).
+  useEventListener(introPlayer, "playToEnd", () => dismissIntro());
+  useEventListener(introPlayer, "statusChange", ({ status }) => {
+    if (status === "error") {
+      dismissIntro();
+    }
+  });
 
   useEffect(() => {
     if (!showIntro) {
@@ -249,23 +251,18 @@ export default function RootLayout() {
               <RootLayoutNav />
               {showIntro ? (
                 <Animated.View style={[styles.introOverlay, { opacity: introOpacity }]}>
-                  <Video
-                    ref={introVideoRef}
-                    source={introVideoSource}
+                  <VideoView
+                    player={introPlayer}
                     style={styles.introVideo}
-                    shouldPlay
-                    isLooping={false}
-                    isMuted={introMuted}
-                    resizeMode={ResizeMode.COVER}
-                    onError={dismissIntro}
-                    onPlaybackStatusUpdate={handleIntroStatusUpdate}
+                    contentFit="cover"
+                    nativeControls={false}
                   />
                   <View style={styles.introActions}>
                     {Platform.OS === "web" && introMuted ? (
                       <Pressable
                         onPress={() => {
                           setIntroMuted(false);
-                          void introVideoRef.current?.setIsMutedAsync(false);
+                          introPlayer.muted = false;
                         }}
                         style={styles.introActionButton}
                         accessibilityRole="button"

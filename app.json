@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.easeverse.app"
+      "bundleIdentifier": "com.easeverse.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.easeverse.app",
@@ -23,7 +26,11 @@
         "foregroundImage": "./assets/images/easeverse_logo_App.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/images/easeverse_logo_App_favicon.web.png",
@@ -41,11 +48,21 @@
       "expo-audio",
       "expo-image",
       "expo-asset",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": "https://replit.com/"
+      },
+      "eas": {
+        "projectId": "2667c360-477b-4c39-9bb6-63195af299b9"
+      }
+    },
+    "owner": "creatorhubn"
   }
 }

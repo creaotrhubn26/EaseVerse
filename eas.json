@@ -7,14 +7,14 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "node": "22.11.0"
+      "node": "22.18.0"
     },
     "preview": {
       "distribution": "internal",
       "ios": {
         "resourceClass": "m-medium"
       },
-      "node": "22.11.0"
+      "node": "22.18.0"
     },
     "production": {
       "autoIncrement": true,
@@ -22,7 +22,7 @@
         "resourceClass": "m-medium"
       },
       "credentialsSource": "local",
-      "node": "22.11.0"
+      "node": "22.18.0"
     }
   },
   "submit": {

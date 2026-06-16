@@ -229,14 +229,14 @@ export default function BoothScreen() {
       {introVisible ? (
         <View style={styles.introCard}>
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={styles.introTitle}>Velkommen til vokalbooten</Text>
+            <Text style={styles.introTitle}>Welcome to the vocal booth</Text>
             <Text style={styles.introBody}>
-              Nye takes dukker opp her etter hvert som produsenten laster opp.
-              Trykk en{" "}
+              New takes appear here as the producer uploads them.
+              Tap an{" "}
               <Text style={styles.introCode}>@1:23</Text>
-              {" "}i en producer-note for å hoppe rett til den sekundet, eller{" "}
+              {" "}in a producer note to jump straight to that second, or{" "}
               <Text style={styles.introCode}>Loop</Text>
-              {" "}på en region producer har merket av for å høre den i ring.
+              {" "}on a region the producer has marked to hear it on repeat.
             </Text>
           </View>
           <Pressable

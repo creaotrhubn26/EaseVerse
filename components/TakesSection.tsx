@@ -731,7 +731,7 @@ function TakeRow({
             <TextInput
               value={regionLabel}
               onChangeText={setRegionLabel}
-              placeholder="Label (e.g. 'Chorus 2 — kjør igjen')"
+              placeholder="Label (e.g. 'Chorus 2 — redo')"
               placeholderTextColor={Colors.textTertiary}
               style={styles.producerNoteInput}
               autoFocus

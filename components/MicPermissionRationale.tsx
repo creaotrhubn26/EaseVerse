@@ -24,15 +24,15 @@ export function MicPermissionRationale({ visible, onAllow, onCancel }: Props) {
           <View style={styles.iconCircle}>
             <Ionicons name="mic" size={32} color="#fff" />
           </View>
-          <Text style={styles.title}>Vi trenger mikrofonen din</Text>
+          <Text style={styles.title}>We need your microphone</Text>
           <Text style={styles.body}>
-            EaseVerse tar opp sang lokalt på enheten din for live-lyrikk-følging og pronunciation-coaching.
-            Opptak lagres bare hvis du velger å beholde dem.
+            EaseVerse records vocals locally on your device for live lyric tracking and pronunciation coaching.
+            Recordings are only saved if you choose to keep them.
           </Text>
           <View style={styles.bulletList}>
-            <Bullet icon="musical-notes-outline">Live highlighting av lyrikk-ord mens du synger</Bullet>
-            <Bullet icon="sparkles-outline">Coach-tips for uttale, rytme og clarity</Bullet>
-            <Bullet icon="lock-closed-outline">Lyd forlater aldri enheten uten ditt valg</Bullet>
+            <Bullet icon="musical-notes-outline">Live highlighting of lyric words as you sing</Bullet>
+            <Bullet icon="sparkles-outline">Coach tips for pronunciation, rhythm and clarity</Bullet>
+            <Bullet icon="lock-closed-outline">Audio never leaves your device without your choice</Bullet>
           </View>
           <Pressable onPress={onAllow} accessibilityRole="button">
             <LinearGradient
@@ -41,11 +41,11 @@ export function MicPermissionRationale({ visible, onAllow, onCancel }: Props) {
               end={{ x: 1, y: 0 }}
               style={styles.allowButton}
             >
-              <Text style={styles.allowText}>Tillat mikrofon</Text>
+              <Text style={styles.allowText}>Allow microphone</Text>
             </LinearGradient>
           </Pressable>
           <Pressable onPress={onCancel} accessibilityRole="button" style={styles.cancelButton}>
-            <Text style={styles.cancelText}>Ikke nå</Text>
+            <Text style={styles.cancelText}>Not now</Text>
           </Pressable>
         </Pressable>
       </Pressable>

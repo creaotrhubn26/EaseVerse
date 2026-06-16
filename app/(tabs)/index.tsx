@@ -931,7 +931,7 @@ export default function SingScreen() {
           steps={[
             {
               id: 'language',
-              label: `Velg språk (${settings.language})`,
+              label: `Choose language (${settings.language})`,
               done: onboardingFlags.languageConfirmed,
               onPress: () => {
                 void Storage.updateOnboardingFlags({ languageConfirmed: true }).then(
@@ -942,7 +942,7 @@ export default function SingScreen() {
             },
             {
               id: 'accent',
-              label: `Velg accent goal (${settings.accentGoal})`,
+              label: `Choose accent goal (${settings.accentGoal})`,
               done: onboardingFlags.accentConfirmed,
               onPress: () => {
                 void Storage.updateOnboardingFlags({ accentConfirmed: true }).then(
@@ -953,7 +953,7 @@ export default function SingScreen() {
             },
             {
               id: 'firstTake',
-              label: 'Ta din første take',
+              label: 'Record your first take',
               done: sessions.length > 0,
             },
           ] satisfies ChecklistStep[]}

@@ -36,15 +36,15 @@ export function OnboardingChecklist({ steps, onDismiss, title, subtitleFormatter
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
-          <Text style={styles.title}>{title ?? 'Kom i gang'}</Text>
+          <Text style={styles.title}>{title ?? 'Get started'}</Text>
           <Text style={styles.subtitle}>
-            {subtitleFormatter ? subtitleFormatter(doneCount, total) : `${doneCount} av ${total} steg fullført`}
+            {subtitleFormatter ? subtitleFormatter(doneCount, total) : `${doneCount} of ${total} steps completed`}
           </Text>
         </View>
         <Pressable
           onPress={onDismiss}
           accessibilityRole="button"
-          accessibilityLabel="Skjul onboarding"
+          accessibilityLabel="Dismiss onboarding"
           hitSlop={12}
           style={styles.dismissButton}
         >

@@ -52,3 +52,5 @@ playwright-report/
 
 # Claude Code local state
 .claude/
+credentials.json
+ios-creds/

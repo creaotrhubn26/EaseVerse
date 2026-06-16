@@ -1,0 +1,5 @@
+node_modules/
+ios-creds/
+credentials.json
+.git/
+companion-desktop/

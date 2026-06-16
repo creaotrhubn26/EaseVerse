@@ -1,4 +1,3 @@
-import { upload } from "@vercel/blob/client";
 import { authedFetch } from "./authed-fetch";
 import { getApiUrl } from "./query-client";
 
@@ -20,17 +19,30 @@ export async function uploadReferenceTrack(args: {
   durationSec?: number;
   token: string;
 }): Promise<{ url: string; pathname: string }> {
-  const result = await upload(args.file.name, args.file, {
-    access: "public",
-    handleUploadUrl: `${getApiUrl()}/api/projects/reference-upload`,
-    clientPayload: JSON.stringify({
+  const contentType = args.file.type || "application/octet-stream";
+  const initRes = await authedFetch("/api/projects/reference-upload", args.token, {
+    method: "POST",
+    body: JSON.stringify({ projectId: args.projectId, contentType }),
+  });
+  if (!initRes.ok) throw new Error(`Reference init failed: ${initRes.status}`);
+  const { uploadUrl, key } = (await initRes.json()) as { uploadUrl: string; key: string };
+  const putRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: args.file,
+  });
+  if (!putRes.ok) throw new Error(`Reference upload failed: ${putRes.status}`);
+  const finRes = await authedFetch("/api/projects/reference-upload", args.token, {
+    method: "POST",
+    body: JSON.stringify({
       projectId: args.projectId,
+      action: "finalize",
       name: args.file.name,
       durationSec: args.durationSec,
     }),
-    headers: { Authorization: `Bearer ${args.token}` },
   });
-  return { url: result.url, pathname: result.pathname };
+  if (!finRes.ok) throw new Error(`Reference finalize failed: ${finRes.status}`);
+  return { url: `${getApiUrl()}/api/projects/reference-upload?id=${encodeURIComponent(args.projectId)}`, pathname: key };
 }
 
 export type ProjectListItem = Project & { role: ProjectRole; memberCount: number };

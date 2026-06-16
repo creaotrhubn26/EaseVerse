@@ -99,8 +99,8 @@ function Inner() {
     <OnboardingChecklist
       steps={steps}
       onDismiss={onDismiss}
-      title={isVocalistFlow ? "Velkommen til vokal-økten" : "Sett i gang studio-økten"}
-      subtitleFormatter={(d, t) => `${d}/${t} steg fullført${isVocalistFlow ? " · du blir invitert av producer" : ""}`}
+      title={isVocalistFlow ? "Welcome to the vocal session" : "Set up your studio session"}
+      subtitleFormatter={(d, t) => `${d}/${t} steps completed${isVocalistFlow ? " · you'll be invited by the producer" : ""}`}
     />
   );
 }
@@ -109,25 +109,25 @@ function buildProducerSteps(snap: Snapshot): ChecklistStep[] {
   return [
     {
       id: "download-companion",
-      label: "Last ned Companion-appen for Pro Tools",
+      label: "Download the Companion app for Pro Tools",
       done: false, // we can't detect this reliably; producer marks done by clicking
       onPress: () => router.push("/companion"),
     },
     {
       id: "create-project",
-      label: snap.hasProject ? "Opprett et prosjekt" : "Opprett ditt første prosjekt",
+      label: snap.hasProject ? "Create a project" : "Create your first project",
       done: snap.hasProject,
       onPress: () => router.push("/projects"),
     },
     {
       id: "invite-band",
-      label: "Inviter vokalist + band-medlemmer",
+      label: "Invite vocalist + band members",
       done: snap.hasInvitedMember,
       onPress: () => router.push("/projects"),
     },
     {
       id: "first-take",
-      label: "Last opp første take (eller la Pro Tools sende automatisk)",
+      label: "Upload your first take (or let Pro Tools send automatically)",
       done: snap.hasTake,
       onPress: () => router.push("/(tabs)"),
     },
@@ -138,18 +138,18 @@ function buildVocalistSteps(snap: Snapshot): ChecklistStep[] {
   return [
     {
       id: "open-booth",
-      label: "Be producer om din Booth-URL (eller åpne fra invitasjon)",
+      label: "Ask the producer for your Booth URL (or open from invite)",
       done: false,
     },
     {
       id: "mic-permission",
-      label: "Tillat mikrofon-tilgang",
+      label: "Allow microphone access",
       done: false,
       onPress: () => router.push("/(tabs)"),
     },
     {
       id: "first-take",
-      label: snap.hasTake ? "Spille inn første take" : "Vent på producer for å starte",
+      label: snap.hasTake ? "Record your first take" : "Wait for the producer to start",
       done: snap.hasTake,
     },
   ];

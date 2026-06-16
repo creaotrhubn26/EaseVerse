@@ -37,6 +37,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
+    "@aws-sdk/client-s3": "^3.1069.0",
+    "@aws-sdk/s3-request-presigner": "^3.1069.0",
     "@clerk/backend": "^2.33.3",
     "@clerk/clerk-expo": "^2.19.36",
     "@expo/vector-icons": "^15.0.3",

@@ -1950,7 +1950,12 @@ export default function LyricsScreen() {
       )}
 
       {!(isDesktopWriteLayout && focusMode) && (
-        <View style={[styles.tabBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[styles.tabBar, sectionWrapStyle]}
+          contentContainerStyle={[styles.tabBarContent, { paddingHorizontal: horizontalInset }]}
+        >
           {tabs.map(tab => (
             <Pressable
               key={tab.key}
@@ -1978,7 +1983,7 @@ export default function LyricsScreen() {
               </Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       )}
 
       <ScrollView
@@ -3204,10 +3209,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
   },
   tabBar: {
+    marginBottom: 16,
+    flexGrow: 0,
+  },
+  tabBarContent: {
     flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
     gap: 8,
-    marginBottom: 16,
   },
   tab: {
     flexDirection: 'row',

@@ -931,7 +931,7 @@ export default function SingScreen() {
           steps={[
             {
               id: 'language',
-              label: `Velg språk (${settings.language})`,
+              label: `Choose language (${settings.language})`,
               done: onboardingFlags.languageConfirmed,
               onPress: () => {
                 void Storage.updateOnboardingFlags({ languageConfirmed: true }).then(
@@ -942,7 +942,7 @@ export default function SingScreen() {
             },
             {
               id: 'accent',
-              label: `Velg accent goal (${settings.accentGoal})`,
+              label: `Choose accent goal (${settings.accentGoal})`,
               done: onboardingFlags.accentConfirmed,
               onPress: () => {
                 void Storage.updateOnboardingFlags({ accentConfirmed: true }).then(
@@ -953,7 +953,7 @@ export default function SingScreen() {
             },
             {
               id: 'firstTake',
-              label: 'Ta din første take',
+              label: 'Record your first take',
               done: sessions.length > 0,
             },
           ] satisfies ChecklistStep[]}
@@ -1788,12 +1788,15 @@ const styles = StyleSheet.create({
   },
   emptyOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(14,15,20,0.85)',
+    backgroundColor: 'rgba(14,15,20,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    zIndex: 1,
-    elevation: 1,
+    // Over kontrollene (zIndex 10) så opptaksknappen/transport ikke lekker
+    // gjennom og overlapper «Add Lyrics» i tom tilstand. «Capture a vocal idea»
+    // setter activeSong → overlegget forsvinner → transport vises som normalt.
+    zIndex: 20,
+    elevation: 20,
   },
   quickMemoBtn: {
     flexDirection: 'row',

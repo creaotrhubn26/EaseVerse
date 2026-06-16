@@ -12,7 +12,9 @@ import { AppProvider } from "@/lib/AppContext";
 import { clerkTokenCache } from "@/lib/clerk-token-cache";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
-import { ResizeMode, Video, AVPlaybackStatus } from "expo-av";
+// expo-av fjernet: deprecated, kompilerer ikke mot ExpoModulesCore (SDK 55).
+// Intro-splash-videoen er midlertidig deaktivert — migrer til expo-video for å
+// gjeninnføre den (se @/assets/videos/Easeverse_intro.MP4).
 import Colors from "@/constants/colors";
 
 const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -247,46 +249,7 @@ export default function RootLayout() {
           <AppProvider>
               <StatusBar style="light" />
               <RootLayoutNav />
-              {showIntro ? (
-                <Animated.View style={[styles.introOverlay, { opacity: introOpacity }]}>
-                  <Video
-                    ref={introVideoRef}
-                    source={introVideoSource}
-                    style={styles.introVideo}
-                    shouldPlay
-                    isLooping={false}
-                    isMuted={introMuted}
-                    resizeMode={ResizeMode.COVER}
-                    onError={dismissIntro}
-                    onPlaybackStatusUpdate={handleIntroStatusUpdate}
-                  />
-                  <View style={styles.introActions}>
-                    {Platform.OS === "web" && introMuted ? (
-                      <Pressable
-                        onPress={() => {
-                          setIntroMuted(false);
-                          void introVideoRef.current?.setIsMutedAsync(false);
-                        }}
-                        style={styles.introActionButton}
-                        accessibilityRole="button"
-                        accessibilityLabel="Enable intro sound"
-                        accessibilityHint="Turns on intro audio"
-                      >
-                        <Text style={styles.introActionText}>Enable Sound</Text>
-                      </Pressable>
-                    ) : null}
-                    <Pressable
-                      onPress={dismissIntro}
-                      style={styles.introActionButton}
-                      accessibilityRole="button"
-                      accessibilityLabel="Skip intro"
-                      accessibilityHint="Skips intro and opens the app immediately"
-                    >
-                      <Text style={styles.introActionText}>Skip</Text>
-                    </Pressable>
-                  </View>
-                </Animated.View>
-              ) : null}
+              {/* Intro-splash-video deaktivert (expo-av fjernet for SDK 55). */}
           </AppProvider>
         </KeyboardProvider>
       </GestureHandlerRootView>

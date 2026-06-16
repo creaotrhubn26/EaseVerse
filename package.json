@@ -59,7 +59,6 @@
     "expo-asset": "~55.0.4",
     "expo-audio": "~55.0.5",
     "expo-auth-session": "~55.0.16",
-    "expo-av": "^16.0.8",
     "expo-blur": "~55.0.5",
     "expo-constants": "~55.0.4",
     "expo-crypto": "~55.0.15",

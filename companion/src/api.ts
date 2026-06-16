@@ -233,6 +233,17 @@ export async function fetchCollabLyricsList(
   return Array.isArray(data.items) ? data.items : [];
 }
 
+function mimeForFilename(name: string): string {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const map: Record<string, string> = {
+    wav: 'audio/wav', wave: 'audio/wav', aif: 'audio/aiff', aiff: 'audio/aiff',
+    mp3: 'audio/mpeg', m4a: 'audio/x-m4a', mp4: 'audio/mp4', flac: 'audio/flac', ogg: 'audio/ogg',
+  };
+  return map[ext] || 'application/octet-stream';
+}
+
+// Backblaze B2-opplasting i to steg (erstatter Vercel Blob): be backend om en
+// presignert PUT-URL, PUT bytes direkte til B2, finaliser (oppretter take-rad).
 export async function uploadTake(
   config: CompanionConfig,
   args: { file: Buffer; filename: string; absolutePath: string; externalTrackId?: string }
@@ -240,20 +251,43 @@ export async function uploadTake(
   if (!config.pairingToken) {
     throw new Error('uploadTake: missing pairingToken (set EASEVERSE_PAIR_TOKEN)');
   }
-  const { upload } = await import('@vercel/blob/client');
   const baseUrl = preferredApiBaseUrl || normalizeBaseUrl(config.apiBaseUrl);
-  const blob = new Blob([new Uint8Array(args.file)]);
-  const result = await upload(args.filename, blob, {
-    access: 'public',
-    handleUploadUrl: `${baseUrl}/api/takes/upload`,
-    clientPayload: JSON.stringify({
-      externalTrackId: args.externalTrackId ?? config.trackId ?? null,
-      sourcePath: args.absolutePath,
-      filename: args.filename,
-    }),
-    headers: { Authorization: `Bearer ${config.pairingToken}` },
+  const externalTrackId = args.externalTrackId ?? config.trackId ?? null;
+  const contentType = mimeForFilename(args.filename);
+  const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${config.pairingToken}` };
+
+  const initRes = await fetch(`${baseUrl}/api/takes/upload`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ filename: args.filename, contentType, byteSize: args.file.length }),
   });
-  return { url: result.url, pathname: result.pathname };
+  if (!initRes.ok) throw new Error(`Upload init failed: ${initRes.status} ${await initRes.text()}`);
+  const { takeId, uploadUrl, key } = (await initRes.json()) as {
+    takeId: string;
+    uploadUrl: string;
+    key: string;
+  };
+
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: new Uint8Array(args.file),
+  });
+  if (!putRes.ok) throw new Error(`B2 upload failed: ${putRes.status}`);
+
+  const finRes = await fetch(`${baseUrl}/api/takes/finalize`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({
+      takeId,
+      filename: args.filename,
+      externalTrackId,
+      sourcePath: args.absolutePath,
+    }),
+  });
+  if (!finRes.ok) throw new Error(`Finalize failed: ${finRes.status} ${await finRes.text()}`);
+  const data = (await finRes.json()) as { take?: { storageUrl?: string } };
+  return { url: data?.take?.storageUrl ?? '', pathname: key };
 }
 
 export type CompanionSnapshot = {

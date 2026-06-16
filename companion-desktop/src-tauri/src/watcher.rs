@@ -181,52 +181,40 @@ async fn upload_take(
 ) -> Result<String, String> {
     let bytes = tokio::fs::read(path).await.map_err(|e| e.to_string())?;
     let base = config.api_base_url.trim_end_matches('/');
-    let client_payload = json!({
-        "externalTrackId": if config.track_id.is_empty() { None } else { Some(config.track_id.clone()) },
-        "sourcePath": path.to_string_lossy(),
-        "filename": filename,
-    });
+    let content_type = "audio/wav";
 
-    // Step 1: ask /api/takes/upload to mint a client-upload token (handleUpload pattern).
-    let mint_body = json!({
-        "type": "blob.generate-client-token",
-        "payload": {
-            "pathname": filename,
-            "callbackUrl": format!("{}/api/takes/upload", base),
-            "clientPayload": client_payload.to_string(),
-            "multipart": false,
-        }
+    // Steg 1: be /api/takes/upload om en presignert Backblaze B2 PUT-URL
+    // (erstatter Vercel Blob handleUpload-flyten).
+    let init_body = json!({
+        "filename": filename,
+        "contentType": content_type,
+        "byteSize": size,
     });
     let resp = reqwest::Client::new()
         .post(format!("{}/api/takes/upload", base))
         .bearer_auth(&config.pair_token)
-        .json(&mint_body)
+        .json(&init_body)
         .send()
         .await
         .map_err(|e| e.to_string())?;
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!("token mint failed: {} {}", status, body));
+        return Err(format!("upload init failed: {} {}", status, body));
     }
     #[derive(serde::Deserialize)]
-    struct MintResponse {
-        #[serde(rename = "type")]
-        _ty: String,
-        #[serde(rename = "clientToken")]
-        client_token: String,
+    struct InitResponse {
+        #[serde(rename = "takeId")]
+        take_id: String,
+        #[serde(rename = "uploadUrl")]
+        upload_url: String,
     }
-    let mint: MintResponse = resp.json().await.map_err(|e| e.to_string())?;
+    let init: InitResponse = resp.json().await.map_err(|e| e.to_string())?;
 
-    // Step 2: PUT bytes directly to Vercel Blob using the client token.
-    let put_url = format!(
-        "https://blob.vercel-storage.com/{}?access=public",
-        urlencode(filename)
-    );
+    // Steg 2: PUT bytes direkte til B2 via presignert URL.
     let put = reqwest::Client::new()
-        .put(&put_url)
-        .bearer_auth(&mint.client_token)
-        .header("content-type", "application/octet-stream")
+        .put(&init.upload_url)
+        .header("content-type", content_type)
         .body(bytes)
         .send()
         .await
@@ -234,46 +222,43 @@ async fn upload_take(
     let put_status = put.status();
     if !put_status.is_success() {
         let body = put.text().await.unwrap_or_default();
-        return Err(format!("blob put failed: {} {}", put_status, body));
+        return Err(format!("b2 put failed: {} {}", put_status, body));
     }
-    #[derive(serde::Deserialize)]
-    struct BlobPutResponse {
-        url: String,
-        pathname: String,
-    }
-    let blob: BlobPutResponse = put.json().await.map_err(|e| e.to_string())?;
-    let _ = app.emit(
-        "companion-log",
-        format!("blob put OK ({} bytes) -> {}", size, blob.pathname),
-    );
+    let _ = app.emit("companion-log", format!("b2 put OK ({} bytes)", size));
 
-    // Step 3: notify /api/takes/upload that upload completed so it creates the take row + processes.
-    let completed_body = json!({
-        "type": "blob.upload-completed",
-        "payload": {
-            "blob": { "url": blob.url, "pathname": blob.pathname, "contentType": "audio/wav", "contentDisposition": format!("inline; filename=\"{}\"", filename) },
-            "tokenPayload": serde_json::to_string(&json!({
-                "externalTrackId": if config.track_id.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(config.track_id.clone()) },
-                "sourcePath": path.to_string_lossy(),
-                "filename": filename,
-            })).unwrap_or_default(),
-        }
+    // Steg 3: finaliser — oppretter take-rad + starter prosessering.
+    let finalize_body = json!({
+        "takeId": init.take_id,
+        "filename": filename,
+        "externalTrackId": if config.track_id.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(config.track_id.clone()) },
+        "sourcePath": path.to_string_lossy(),
     });
     let complete = reqwest::Client::new()
-        .post(format!("{}/api/takes/upload", base))
+        .post(format!("{}/api/takes/finalize", base))
         .bearer_auth(&config.pair_token)
-        .json(&completed_body)
+        .json(&finalize_body)
         .send()
         .await
         .map_err(|e| e.to_string())?;
     let complete_status = complete.status();
     if !complete_status.is_success() {
         let body = complete.text().await.unwrap_or_default();
-        return Err(format!("completion notify failed: {} {}", complete_status, body));
+        return Err(format!("finalize failed: {} {}", complete_status, body));
     }
-    Ok(blob.url)
+    #[derive(serde::Deserialize)]
+    struct FinalizeResponse {
+        take: Option<TakeRef>,
+    }
+    #[derive(serde::Deserialize)]
+    struct TakeRef {
+        #[serde(rename = "storageUrl")]
+        storage_url: Option<String>,
+    }
+    let fin: FinalizeResponse = complete.json().await.map_err(|e| e.to_string())?;
+    Ok(fin.take.and_then(|t| t.storage_url).unwrap_or_default())
 }
 
+#[allow(dead_code)] // beholdt; ikke lenger brukt etter B2-migrering (var for Vercel Blob).
 fn urlencode(input: &str) -> String {
     url::form_urlencoded::byte_serialize(input.as_bytes()).collect()
 }

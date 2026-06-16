@@ -1,123 +1,53 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import crypto from "node:crypto";
 import { isClerkConfigured, requireAuthOrPairing } from "../_lib/auth.js";
-import { createTake, getTakeWithAnalysis } from "../_lib/takes-db.js";
-import { processTake } from "../_lib/take-processor.js";
 import { getProjectMembership } from "../_lib/projects-db.js";
+import { isB2Configured, presignUpload, takeObjectKey } from "../_lib/b2-storage.js";
 
-const ALLOWED_CONTENT_TYPES = [
-  "audio/wav",
-  "audio/wave",
-  "audio/x-wav",
-  "audio/aiff",
-  "audio/x-aiff",
-  "audio/mpeg",
-  "audio/mp3",
-  "audio/mp4",
-  "audio/x-m4a",
-  "audio/flac",
-  "audio/ogg",
-  "application/octet-stream",
-];
+const MAX_BYTES = 200 * 1024 * 1024;
 
+// Steg 1 av take-opplasting (B2): autentiser, sjekk prosjekt-tilgang, og gi
+// klienten en presignert PUT-URL. Klienten PUT-er fila direkte til Backblaze B2
+// (RN-trygt — ingen Vercel Blob / Web Crypto), og kaller deretter /api/takes/finalize.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return res.status(503).json({
-      error: "Vercel Blob is not configured. Enable Vercel Blob in the project and add BLOB_READ_WRITE_TOKEN.",
-    });
+  if (!isB2Configured()) {
+    return res.status(503).json({ error: "B2 storage is not configured (B2_APPLICATION_KEY_ID/KEY/BUCKET)." });
+  }
+  if (!isClerkConfigured()) {
+    return res.status(503).json({ error: "Auth is not configured." });
   }
 
-  const body = req.body as HandleUploadBody;
-  // blob.upload-completed comes from Vercel Blob's webhook (no Bearer); only
-  // blob.generate-client-token comes from the user and needs Clerk/pairing auth.
-  const isClientTokenRequest =
-    typeof body === "object" && body !== null && (body as { type?: string }).type === "blob.generate-client-token";
-
-  let userIdForClientToken: string | null = null;
-  if (isClientTokenRequest) {
-    if (!isClerkConfigured()) {
-      return res.status(503).json({ error: "Auth is not configured." });
-    }
-    userIdForClientToken = await requireAuthOrPairing(req, res);
-    if (!userIdForClientToken) return;
-  }
+  const userId = await requireAuthOrPairing(req, res);
+  if (!userId) return;
 
   try {
-    const jsonResponse = await handleUpload({
-      body,
-      request: req as unknown as Request,
-      onBeforeGenerateToken: async (_pathname, clientPayload) => {
-        const payload = clientPayload ? JSON.parse(clientPayload) : null;
-        const projectId = payload?.projectId ?? null;
-        if (projectId && userIdForClientToken) {
-          const membership = await getProjectMembership(projectId, userIdForClientToken);
-          if (!membership || membership.role === "observer") {
-            throw new Error("You can't upload takes to this project");
-          }
-        }
-        return {
-          allowedContentTypes: ALLOWED_CONTENT_TYPES,
-          maximumSizeInBytes: 200 * 1024 * 1024,
-          tokenPayload: JSON.stringify({
-            userId: userIdForClientToken,
-            externalTrackId: payload?.externalTrackId ?? null,
-            sourcePath: payload?.sourcePath ?? null,
-            filename: payload?.filename ?? null,
-            projectId,
-            lyricsSnapshot:
-              typeof payload?.lyricsSnapshot === "string"
-                ? payload.lyricsSnapshot.slice(0, 10000)
-                : null,
-            liveSessionId: payload?.liveSessionId ?? null,
-          }),
-        };
-      },
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log("[takes/upload] onUploadCompleted fired", {
-          blobUrl: blob.url,
-          blobPathname: blob.pathname,
-          hasTokenPayload: !!tokenPayload,
-        });
-        try {
-          const meta = tokenPayload ? JSON.parse(tokenPayload) : {};
-          console.log("[takes/upload] parsed meta", { hasUserId: !!meta.userId, externalTrackId: meta.externalTrackId });
-          if (!meta.userId) {
-            console.warn("[takes/upload] missing userId in tokenPayload, skipping createTake");
-            return;
-          }
-          const takeId = crypto.randomBytes(12).toString("base64url");
-          await createTake({
-            id: takeId,
-            userId: meta.userId,
-            externalTrackId: meta.externalTrackId,
-            sourcePath: meta.sourcePath,
-            filename: meta.filename || blob.pathname,
-            storageUrl: blob.url,
-            projectId: meta.projectId ?? null,
-            lyricsSnapshot: meta.lyricsSnapshot ?? null,
-            liveSessionId: meta.liveSessionId ?? null,
-          });
-          console.log("[takes/upload] createTake OK", { takeId, externalTrackId: meta.externalTrackId });
-          const take = await getTakeWithAnalysis(takeId);
-          if (take) {
-            void processTake(take).catch((err) =>
-              console.warn("[takes/upload] processTake failed:", err),
-            );
-          }
-        } catch (err) {
-          console.error("[takes/upload] onUploadCompleted ERROR:", err);
-          throw err;
-        }
-      },
-    });
-    return res.status(200).json(jsonResponse);
+    const body = (typeof req.body === "object" && req.body) || {};
+    const filename = String((body as { filename?: string }).filename || "take.wav").slice(0, 200);
+    const contentType = String((body as { contentType?: string }).contentType || "application/octet-stream");
+    const projectId = (body as { projectId?: string | null }).projectId ?? null;
+    const byteSize = Number((body as { byteSize?: number }).byteSize || 0);
+
+    if (byteSize && byteSize > MAX_BYTES) {
+      return res.status(413).json({ error: "File too large (max 200 MB)." });
+    }
+    if (projectId) {
+      const membership = await getProjectMembership(projectId, userId);
+      if (!membership || membership.role === "observer") {
+        return res.status(403).json({ error: "You can't upload takes to this project" });
+      }
+    }
+
+    const takeId = crypto.randomBytes(12).toString("base64url");
+    const key = takeObjectKey(takeId, filename);
+    const uploadUrl = await presignUpload(key, contentType);
+
+    return res.status(200).json({ takeId, uploadUrl, key, filename, contentType });
   } catch (error) {
-    console.error("Upload handler error:", error);
-    return res.status(400).json({ error: (error as Error).message || "Upload failed" });
+    console.error("[takes/upload] presign error:", error);
+    return res.status(500).json({ error: (error as Error).message || "Could not create upload URL" });
   }
 }

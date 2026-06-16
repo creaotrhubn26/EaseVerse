@@ -1,4 +1,5 @@
-import { upload } from "@vercel/blob/client";
+// All take-lagring (takes, produsent-memo, comp-eksport) går nå til Backblaze B2
+// via presignerte URL-er — ingen Vercel Blob / Web Crypto (RN-trygt).
 import { authedFetch } from "./authed-fetch";
 import { getApiUrl } from "./query-client";
 
@@ -49,6 +50,61 @@ export type TakeAnalysis = {
   processedAt: string | null;
 };
 
+// Backblaze B2-opplasting i to steg (RN-trygt — ingen @vercel/blob / Web Crypto):
+//  1) be backend om en presignert PUT-URL,  2) PUT fila direkte til B2,
+//  3) finaliser (oppretter take-rad + starter prosessering).
+async function uploadTakeToB2(args: {
+  blob: Blob;
+  filename: string;
+  contentType: string;
+  token: string;
+  externalTrackId?: string;
+  sourcePath?: string;
+  projectId?: string;
+  lyricsSnapshot?: string;
+  liveSessionId?: string;
+}): Promise<{ url: string; pathname: string }> {
+  const initRes = await authedFetch("/api/takes/upload", args.token, {
+    method: "POST",
+    body: JSON.stringify({
+      filename: args.filename,
+      contentType: args.contentType,
+      projectId: args.projectId ?? null,
+      byteSize: args.blob.size,
+    }),
+  });
+  if (!initRes.ok) throw new Error(`Upload init failed: ${initRes.status}`);
+  const { takeId, uploadUrl, key } = (await initRes.json()) as {
+    takeId: string;
+    uploadUrl: string;
+    key: string;
+  };
+
+  const putRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": args.contentType },
+    body: args.blob,
+  });
+  if (!putRes.ok) throw new Error(`B2 upload failed: ${putRes.status}`);
+
+  const finRes = await authedFetch("/api/takes/finalize", args.token, {
+    method: "POST",
+    body: JSON.stringify({
+      takeId,
+      filename: args.filename,
+      externalTrackId: args.externalTrackId ?? null,
+      sourcePath: args.sourcePath ?? null,
+      projectId: args.projectId ?? null,
+      lyricsSnapshot: args.lyricsSnapshot ?? null,
+      liveSessionId: args.liveSessionId ?? null,
+      byteSize: args.blob.size,
+    }),
+  });
+  if (!finRes.ok) throw new Error(`Finalize failed: ${finRes.status}`);
+  const data = (await finRes.json()) as { take?: { storageUrl?: string } };
+  return { url: data?.take?.storageUrl ?? "", pathname: key };
+}
+
 export async function uploadTake(args: {
   file: File;
   externalTrackId?: string;
@@ -58,25 +114,21 @@ export async function uploadTake(args: {
   lyricsSnapshot?: string;
   liveSessionId?: string;
 }): Promise<{ url: string; pathname: string }> {
-  const result = await upload(args.file.name, args.file, {
-    access: "public",
-    handleUploadUrl: `${getApiUrl()}/api/takes/upload`,
-    clientPayload: JSON.stringify({
-      externalTrackId: args.externalTrackId,
-      sourcePath: args.sourcePath,
-      filename: args.file.name,
-      projectId: args.projectId,
-      lyricsSnapshot: args.lyricsSnapshot,
-      liveSessionId: args.liveSessionId,
-    }),
-    headers: { Authorization: `Bearer ${args.token}` },
+  return uploadTakeToB2({
+    blob: args.file,
+    filename: args.file.name,
+    contentType: args.file.type || "application/octet-stream",
+    token: args.token,
+    externalTrackId: args.externalTrackId,
+    sourcePath: args.sourcePath,
+    projectId: args.projectId,
+    lyricsSnapshot: args.lyricsSnapshot,
+    liveSessionId: args.liveSessionId,
   });
-  return { url: result.url, pathname: result.pathname };
 }
 
-// React Native upload — feeds a local file:// URI to Vercel Blob via the
-// same handleUpload contract used by the web client. We materialize the
-// file as a Blob first so @vercel/blob/client can stream it.
+// React Native upload — materialize the local file:// URI as a Blob, then PUT
+// it directly to B2 via the presigned URL.
 export async function uploadTakeFromUri(args: {
   uri: string;
   filename: string;
@@ -90,24 +142,19 @@ export async function uploadTakeFromUri(args: {
 }): Promise<{ url: string; pathname: string }> {
   const res = await fetch(args.uri);
   const blob = await res.blob();
-  const typed =
-    blob.type && blob.type !== ""
-      ? blob
-      : new Blob([blob], { type: args.contentType || "audio/m4a" });
-  const result = await upload(args.filename, typed, {
-    access: "public",
-    handleUploadUrl: `${getApiUrl()}/api/takes/upload`,
-    clientPayload: JSON.stringify({
-      externalTrackId: args.externalTrackId,
-      sourcePath: args.sourcePath,
-      filename: args.filename,
-      projectId: args.projectId,
-      lyricsSnapshot: args.lyricsSnapshot,
-      liveSessionId: args.liveSessionId,
-    }),
-    headers: { Authorization: `Bearer ${args.token}` },
+  const contentType = blob.type && blob.type !== "" ? blob.type : args.contentType || "audio/m4a";
+  const typed = blob.type ? blob : new Blob([blob], { type: contentType });
+  return uploadTakeToB2({
+    blob: typed,
+    filename: args.filename,
+    contentType,
+    token: args.token,
+    externalTrackId: args.externalTrackId,
+    sourcePath: args.sourcePath,
+    projectId: args.projectId,
+    lyricsSnapshot: args.lyricsSnapshot,
+    liveSessionId: args.liveSessionId,
   });
-  return { url: result.url, pathname: result.pathname };
 }
 
 export async function fetchTakes(token: string | null): Promise<TakeRecord[]> {
@@ -129,17 +176,26 @@ export async function uploadProducerMemo(args: {
   durationSec: number;
   token: string;
 }): Promise<{ url: string; pathname: string }> {
-  const filename = `memo-${args.takeId}-${Date.now()}.webm`;
-  const result = await upload(filename, args.blob, {
-    access: "public",
-    handleUploadUrl: `${getApiUrl()}/api/takes/memo-upload`,
-    clientPayload: JSON.stringify({
-      takeId: args.takeId,
-      durationSec: args.durationSec,
-    }),
-    headers: { Authorization: `Bearer ${args.token}` },
+  const contentType = args.blob.type || "audio/webm";
+  const initRes = await authedFetch("/api/takes/memo-upload", args.token, {
+    method: "POST",
+    body: JSON.stringify({ takeId: args.takeId, contentType }),
   });
-  return { url: result.url, pathname: result.pathname };
+  if (!initRes.ok) throw new Error(`Memo init failed: ${initRes.status}`);
+  const { uploadUrl, key } = (await initRes.json()) as { uploadUrl: string; key: string };
+  const putRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: args.blob,
+  });
+  if (!putRes.ok) throw new Error(`Memo upload failed: ${putRes.status}`);
+  const finRes = await authedFetch("/api/takes/memo-upload", args.token, {
+    method: "POST",
+    body: JSON.stringify({ takeId: args.takeId, action: "finalize", durationSec: args.durationSec }),
+  });
+  if (!finRes.ok) throw new Error(`Memo finalize failed: ${finRes.status}`);
+  const data = (await finRes.json()) as { url?: string };
+  return { url: data?.url ?? "", pathname: key };
 }
 
 export async function castVote(
@@ -349,13 +405,24 @@ export async function uploadCompExport(args: {
   blob: Blob;
   token: string;
 }): Promise<{ url: string; pathname: string }> {
-  const result = await upload(args.filename, args.blob, {
-    access: "public",
-    handleUploadUrl: `${getApiUrl()}/api/takes/comp-export`,
-    clientPayload: JSON.stringify({ compId: args.compId, filename: args.filename }),
-    headers: { Authorization: `Bearer ${args.token}` },
+  const initRes = await authedFetch("/api/takes/comp-export", args.token, {
+    method: "POST",
+    body: JSON.stringify({ compId: args.compId, filename: args.filename }),
   });
-  return { url: result.url, pathname: result.pathname };
+  if (!initRes.ok) throw new Error(`Comp export init failed: ${initRes.status}`);
+  const { uploadUrl, key } = (await initRes.json()) as { uploadUrl: string; key: string };
+  const putRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": "audio/wav" },
+    body: args.blob,
+  });
+  if (!putRes.ok) throw new Error(`Comp upload failed: ${putRes.status}`);
+  const finRes = await authedFetch("/api/takes/comp-export", args.token, {
+    method: "POST",
+    body: JSON.stringify({ compId: args.compId, filename: args.filename, action: "finalize" }),
+  });
+  if (!finRes.ok) throw new Error(`Comp finalize failed: ${finRes.status}`);
+  return { url: `${getApiUrl()}/api/takes/comp-export?id=${encodeURIComponent(args.compId)}`, pathname: key };
 }
 
 export async function deleteComp(token: string | null, compId: string): Promise<void> {

@@ -1788,12 +1788,15 @@ const styles = StyleSheet.create({
   },
   emptyOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(14,15,20,0.85)',
+    backgroundColor: 'rgba(14,15,20,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    zIndex: 1,
-    elevation: 1,
+    // Over kontrollene (zIndex 10) så opptaksknappen/transport ikke lekker
+    // gjennom og overlapper «Add Lyrics» i tom tilstand. «Capture a vocal idea»
+    // setter activeSong → overlegget forsvinner → transport vises som normalt.
+    zIndex: 20,
+    elevation: 20,
   },
   quickMemoBtn: {
     flexDirection: 'row',

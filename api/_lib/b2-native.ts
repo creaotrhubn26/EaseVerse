@@ -50,7 +50,8 @@ export async function nativePut(key: string, body: Buffer, contentType: string):
       "X-Bz-Content-Sha1": sha1,
       "Content-Length": String(body.length),
     },
-    body,
+    // Buffer er en Uint8Array i runtime, men TS' BodyInit utelater begge.
+    body: new Uint8Array(body.buffer, body.byteOffset, body.byteLength) as unknown as BodyInit,
   });
   if (!put.ok) throw new Error(`b2 upload ${put.status}: ${await put.text()}`);
 }

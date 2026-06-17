@@ -322,14 +322,24 @@ fn detect_protools_folder() -> Option<String> {
 // Åpne en URL i standard nettleser (for «Åpne paringsside»).
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let prog = "open";
-    #[cfg(target_os = "linux")]
-    let prog = "xdg-open";
     #[cfg(target_os = "windows")]
-    let prog = "explorer";
-    std::process::Command::new(prog).arg(&url).spawn().map_err(|e| e.to_string())?;
-    Ok(())
+    {
+        // `explorer <url>` er upålitelig for URL-er med query-string; bruk `cmd start`.
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        #[cfg(target_os = "macos")]
+        let prog = "open";
+        #[cfg(target_os = "linux")]
+        let prog = "xdg-open";
+        std::process::Command::new(prog).arg(&url).spawn().map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

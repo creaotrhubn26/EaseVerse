@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { putObject, presignDownload, PUBLIC_BASE, isB2Configured } from "../_lib/b2-storage.js";
+import { nativePut, nativeDownloadUrl, PUBLIC_BASE, isB2NativeConfigured } from "../_lib/b2-native.js";
 import ffmpegStatic from "ffmpeg-static";
 
 const mixKey = (sessionId: string) => `easeverse/sessions/${sessionId}/mixdown.wav`;
@@ -27,10 +27,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   // Åpen avspillings-/nedlastings-proxy (presignert B2 GET) — ingen auth-header.
   if (req.method === "GET" && req.query.download) {
-    if (!isB2Configured()) return res.status(503).json({ error: "B2 storage is not configured." });
+    if (!isB2NativeConfigured()) return res.status(503).json({ error: "B2 storage is not configured." });
     const sid = typeof req.query.id === "string" ? req.query.id : null;
     if (!sid) return res.status(400).json({ error: "id required" });
-    const url = await presignDownload(mixKey(sid));
+    const url = await nativeDownloadUrl(mixKey(sid));
     res.setHeader("Cache-Control", "private, max-age=300");
     return res.redirect(302, url);
   }
@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  if (!isB2Configured()) {
+  if (!isB2NativeConfigured()) {
     return res
       .status(503)
       .json({ error: "B2 storage is not configured." });
@@ -141,7 +141,7 @@ async function runMixdown(args: { sessionId: string; items: MixItem[] }): Promis
 
     const stat = fs.statSync(outputPath);
     const buffer = fs.readFileSync(outputPath);
-    await putObject(mixKey(args.sessionId), buffer, "audio/wav");
+    await nativePut(mixKey(args.sessionId), buffer, "audio/wav");
     const mixdownUrl = `${PUBLIC_BASE}/api/sessions/mixdown?id=${encodeURIComponent(args.sessionId)}&download=1`;
 
     await setMixdownStatus({

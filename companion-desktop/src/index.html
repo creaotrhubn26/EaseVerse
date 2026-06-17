@@ -561,25 +561,29 @@
         return remaining > 0;
       }
 
-      // Folder drop targets — drag a folder from Finder/Explorer onto the input
-      ["audioDrop", "sessionInfoDrop", "exportDrop"].forEach((id) => {
-        const el = $(id);
-        if (!el) return;
-        el.addEventListener("dragover", (e) => {
-          e.preventDefault();
-          el.classList.add("drag-over");
+      // Folder drag-drop: HTML5 drop-events fire ikke i Tauri-webviewen (OS-droppet
+      // fanges av Tauri) og file.path er tom — bruk den native drag-drop-eventen
+      // som gir ekte filsystem-stier. Slippes en mappe → settes audio-mappa.
+      try {
+        window.__TAURI__.webview.getCurrentWebview().onDragDropEvent((event) => {
+          const p = event.payload;
+          const zone = $("audioDrop");
+          if (p.type === "over") {
+            if (zone) zone.classList.add("drag-over");
+          } else if (p.type === "leave" || p.type === "cancelled") {
+            if (zone) zone.classList.remove("drag-over");
+          } else if (p.type === "drop") {
+            if (zone) zone.classList.remove("drag-over");
+            const path = p.paths && p.paths[0];
+            if (path) {
+              $("audioWatch").value = path;
+              appendLog("Mappe sluppet: " + path);
+            }
+          }
         });
-        el.addEventListener("dragleave", () => el.classList.remove("drag-over"));
-        el.addEventListener("drop", (e) => {
-          e.preventDefault();
-          el.classList.remove("drag-over");
-          const file = e.dataTransfer?.files?.[0];
-          if (!file) return;
-          const path = file.path || file.name;
-          const input = el.querySelector("input");
-          if (input) input.value = path;
-        });
-      });
+      } catch (e) {
+        /* drag-drop er valgfritt — «Pick folder»-knappene fungerer uansett */
+      }
 
       $("pickAudioBtn").addEventListener("click", async () => {
         const p = await open({ directory: true });

@@ -28,10 +28,12 @@ function client(): S3Client {
   return cached;
 }
 
-// Deterministisk objekt-nøkkel for en take (rekonstruerbar fra id + filnavn).
-export function takeObjectKey(takeId: string, filename: string): string {
-  const safe = (filename || "take").replace(/[^A-Za-z0-9._-]/g, "_").slice(-120);
-  return `easeverse/takes/${takeId}/${safe}`;
+// Deterministisk objekt-nøkkel for en take — KUN avhengig av takeId (ikke
+// filnavn), så upload-presign og avspillings-proxy alltid matcher uansett om
+// klienten sender ulikt filnavn til upload vs finalize. Content-type lagres som
+// B2-metadata, så ingen filtype-suffiks trengs.
+export function takeObjectKey(takeId: string): string {
+  return `easeverse/takes/${takeId}/audio`;
 }
 
 // Presignert PUT-URL (klienten laster opp direkte til B2).

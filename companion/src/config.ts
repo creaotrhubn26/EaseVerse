@@ -64,7 +64,9 @@ export function loadCompanionConfig(): CompanionConfig {
     audioExtensions: (process.env.PROTOOLS_AUDIO_EXTENSIONS?.trim() || '.wav,.aif,.aiff')
       .split(',')
       .map((ext) => ext.trim().toLowerCase())
-      .filter((ext) => ext.startsWith('.')),
+      .filter(Boolean)
+      // Normaliser: tillat brukere å skrive «wav» uten ledende punktum.
+      .map((ext) => (ext.startsWith('.') ? ext : `.${ext}`)),
     exportDir: process.env.PROTOOLS_EXPORT_DIR?.trim() || undefined,
   };
 }

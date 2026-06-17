@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else {
       const take = await getTakeWithAnalysis(id);
       if (!take) return res.status(404).json({ error: "Take not found" });
-      key = takeObjectKey(id, take.filename);
+      key = takeObjectKey(id);
     }
     const url = await presignDownload(key);
     res.setHeader("Cache-Control", "private, max-age=300");

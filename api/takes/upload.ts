@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const takeId = crypto.randomBytes(12).toString("base64url");
-    const key = takeObjectKey(takeId, filename);
+    const key = takeObjectKey(takeId);
     const uploadUrl = await presignUpload(key, contentType);
 
     return res.status(200).json({ takeId, uploadUrl, key, filename, contentType });

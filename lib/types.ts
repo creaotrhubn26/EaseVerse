@@ -76,4 +76,6 @@ export interface UserSettings {
   countIn: 0 | 2 | 4;
   narrationVoice: NarrationVoice;
   metronomeEnabled: boolean;
+  /** Per-beat haptic on the metronome (in addition to the audible click). */
+  metronomeHaptics: boolean;
 }

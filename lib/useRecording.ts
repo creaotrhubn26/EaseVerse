@@ -130,7 +130,12 @@ export function useRecording() {
     if (!permitted) return false;
 
     try {
+      // iOS needs the audio session to explicitly allow recording — without
+      // allowsRecording the session stays playback-only and recorder.record()
+      // throws, surfacing as "Unable to start recording" even though the mic
+      // permission was just granted.
       await AudioModule.setAudioModeAsync({
+        allowsRecording: true,
         playsInSilentMode: true,
       });
 
@@ -236,7 +241,9 @@ export function useRecording() {
       durationRef.current = 0;
       setDuration(0);
 
+      // Restore playback routing now that recording has stopped.
       await AudioModule.setAudioModeAsync({
+        allowsRecording: false,
         playsInSilentMode: true,
       });
 

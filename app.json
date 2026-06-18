@@ -49,7 +49,14 @@
       "expo-image",
       "expo-asset",
       "expo-secure-store",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "EaseVerse uses the microphone to turn your voice into lyrics.",
+          "speechRecognitionPermission": "EaseVerse uses speech recognition to transcribe your singing and speaking into lyrics."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

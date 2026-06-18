@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +9,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
 import Colors from '@/constants/colors';
 
 type Props = {
@@ -19,113 +22,76 @@ type Props = {
   onAdd: (text: string) => void;
 };
 
-type SpeechRecognitionEventLike = {
-  resultIndex: number;
-  results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }>;
-};
-
-type SpeechRecognitionLike = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: Event) => void) | null;
-  onend: (() => void) | null;
-};
-
-function getRecognitionCtor(): { new (): SpeechRecognitionLike } | null {
-  if (typeof window === 'undefined') return null;
-  const w = window as Window & {
-    SpeechRecognition?: { new (): SpeechRecognitionLike };
-    webkitSpeechRecognition?: { new (): SpeechRecognitionLike };
-  };
-  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
-}
-
 export function SpeechToLyricsModal({ visible, language, onCancel, onAdd }: Props) {
   const [partial, setPartial] = useState('');
   const [committed, setCommitted] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const [listening, setListening] = useState(false);
+
+  // expo-speech-recognition works on native (iOS SFSpeechRecognizer) AND web,
+  // so the same flow replaces the old web-only SpeechRecognition path.
+  useSpeechRecognitionEvent('start', () => {
+    setListening(true);
+    setError(null);
+  });
+  useSpeechRecognitionEvent('end', () => setListening(false));
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results?.[0]?.transcript?.trim() ?? '';
+    if (!transcript) return;
+    if (event.isFinal) {
+      setCommitted((prev) => `${prev}${prev ? '\n' : ''}${transcript}`);
+      setPartial('');
+    } else {
+      setPartial(transcript);
+    }
+  });
+  useSpeechRecognitionEvent('error', (event) => {
+    // "no-speech"/"aborted" are routine when the user pauses — don't surface those.
+    if (event.error === 'no-speech' || event.error === 'aborted') return;
+    setError(event.message || 'Recognition error. Try again.');
+    setListening(false);
+  });
 
   useEffect(() => {
     if (!visible) {
       setPartial('');
       setCommitted('');
       setError(null);
+      setListening(false);
       try {
-        recognitionRef.current?.abort();
+        ExpoSpeechRecognitionModule.abort();
       } catch {
         // Ignore.
       }
-      recognitionRef.current = null;
       return;
     }
 
-    if (Platform.OS !== 'web') {
-      setError('Speech-to-lyrics is currently web-only.');
-      return;
-    }
-
-    const Ctor = getRecognitionCtor();
-    if (!Ctor) {
-      setError(
-        'Your browser does not support live speech recognition. Try the latest Chrome or Safari.',
-      );
-      return;
-    }
-
-    const recognition = new Ctor();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = language || 'en-US';
-
-    recognition.onresult = (event) => {
-      let interim = '';
-      const finals: string[] = [];
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const alt = result[0];
-        if (!alt) continue;
-        if (result.isFinal) {
-          finals.push(alt.transcript.trim());
-        } else {
-          interim += alt.transcript;
-        }
-      }
-      if (finals.length > 0) {
-        setCommitted((prev) => `${prev}${prev ? '\n' : ''}${finals.join(' ')}`);
-      }
-      setPartial(interim.trim());
-    };
-    recognition.onerror = () => {
-      setError('Recognition error. Try again.');
-    };
-    recognition.onend = () => {
-      // Restart while modal is open so dictation continues.
+    let cancelled = false;
+    void (async () => {
       try {
-        if (recognitionRef.current === recognition) {
-          recognition.start();
+        const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+        if (cancelled) return;
+        if (!perm.granted) {
+          setError('Microphone & speech-recognition access is needed. Enable them in Settings and try again.');
+          return;
         }
-      } catch {
-        // Ignore — typically thrown when starting too quickly.
+        ExpoSpeechRecognitionModule.start({
+          lang: language || 'en-US',
+          interimResults: true,
+          continuous: true,
+        });
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('Speech start failed:', err);
+          setError('Could not start speech recognition. Try again.');
+        }
       }
-    };
-
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch (err) {
-      console.warn('Speech start failed:', err);
-    }
+    })();
 
     return () => {
-      recognitionRef.current = null;
+      cancelled = true;
       try {
-        recognition.abort();
+        ExpoSpeechRecognitionModule.abort();
       } catch {
         // Ignore.
       }
@@ -164,7 +130,7 @@ export function SpeechToLyricsModal({ visible, language, onCancel, onAdd }: Prop
         <View style={styles.body}>
           <View style={styles.micRow}>
             <View style={styles.micDot} />
-            <Text style={styles.micLabel}>{error ? 'Idle' : 'Listening…'}</Text>
+            <Text style={styles.micLabel}>{error ? 'Idle' : listening ? 'Listening…' : 'Starting…'}</Text>
           </View>
 
           {error ? (

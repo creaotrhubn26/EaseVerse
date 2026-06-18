@@ -1221,6 +1221,33 @@ export default function ProfileScreen() {
         <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
           <View style={styles.sectionTitleRow}>
             <Image
+              source={require('@/assets/images/metronome_icon.png')}
+              style={[
+                styles.sectionTitleIcon,
+                {
+                  width: sectionTitleIconSize,
+                  height: sectionTitleIconSize,
+                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
+                },
+              ]}
+              resizeMode="contain"
+              accessibilityRole="header"
+              accessibilityLabel="Metronome vibration"
+            />
+          </View>
+          <SegmentedControl<string>
+            options={[
+              { key: 'off', label: 'Click only' },
+              { key: 'on', label: 'Click + Vibrate' },
+            ]}
+            value={settings.metronomeHaptics ? 'on' : 'off'}
+            onChange={v => updateSettings({ metronomeHaptics: v === 'on' })}
+          />
+        </View>
+
+        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
+          <View style={styles.sectionTitleRow}>
+            <Image
               source={require('@/assets/images/icon-set/Mindfullness_voice.png')}
               style={[
                 styles.sectionTitleIcon,

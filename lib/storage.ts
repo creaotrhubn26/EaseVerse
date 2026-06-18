@@ -195,6 +195,7 @@ const defaultSettings: UserSettings = {
   countIn: 0,
   narrationVoice: 'female',
   metronomeEnabled: false,
+  metronomeHaptics: false,
 };
 
 function safeParseJson(raw: string): unknown | null {

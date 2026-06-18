@@ -328,7 +328,10 @@ export default function SingScreen() {
 
   const playMetronomeTick = useCallback(
     (accent: boolean) => {
-      if (Platform.OS !== 'web') {
+      // Per-beat haptic is opt-in (settings.metronomeHaptics) — the audible
+      // click is always the primary cue. Keeps the metronome from buzzing on
+      // every beat unless the user explicitly turns vibration on.
+      if (Platform.OS !== 'web' && settings.metronomeHaptics) {
         void Haptics.selectionAsync();
       }
 
@@ -337,10 +340,10 @@ export default function SingScreen() {
         void metronomePlayer.seekTo(0).catch(() => undefined);
         metronomePlayer.play();
       } catch {
-        // Ignore playback errors; haptics still provides a usable metronome.
+        // Ignore playback errors; the click is the primary metronome cue.
       }
     },
-    [metronomePlayer]
+    [metronomePlayer, settings.metronomeHaptics]
   );
 
   const startMetronome = useCallback(

@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { AudioModule, useAudioPlayer } from 'expo-audio';
 import Animated, {
   Easing,
@@ -240,6 +241,10 @@ export default function SingScreen() {
 
   const isRecording = recording.isRecording;
   const isPaused = recording.isPaused;
+  // True only while the record tab is the visible screen. Tabs stay mounted in
+  // expo-router, so without this the metronome kept ticking (and haptic-buzzing)
+  // on other tabs whenever a recording was still active in the background.
+  const screenFocused = useIsFocused();
   const duration = recording.duration;
   const pitchReading = usePitchDetection(isRecording && !isPaused);
   const vibratoReading = useVibratoDetection(pitchReading);
@@ -387,7 +392,7 @@ export default function SingScreen() {
     // gate (the sibling pitch/tracking effects all have it) the click + per-beat
     // Haptics.selectionAsync fired continuously just from sitting idle on a song
     // with a BPM and the metronome setting on — a phone buzzing every beat.
-    if (!isRecording || !settings.metronomeEnabled || !bpmValue || isPaused || isAnalyzing) {
+    if (!screenFocused || !isRecording || !settings.metronomeEnabled || !bpmValue || isPaused || isAnalyzing) {
       stopMetronome();
       return;
     }
@@ -396,7 +401,7 @@ export default function SingScreen() {
       void startMetronome({ immediate: false });
     }
     return () => stopMetronome();
-  }, [beatMs, bpmValue, isAnalyzing, isPaused, isRecording, settings.metronomeEnabled, startMetronome, stopMetronome]);
+  }, [beatMs, bpmValue, isAnalyzing, isPaused, isRecording, screenFocused, settings.metronomeEnabled, startMetronome, stopMetronome]);
 
   useEffect(() => {
     if (lyricsText) {

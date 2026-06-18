@@ -380,7 +380,11 @@ export default function SingScreen() {
   );
 
   useEffect(() => {
-    if (!settings.metronomeEnabled || !bpmValue || isPaused || isAnalyzing) {
+    // Only run the metronome while actively recording. Without the isRecording
+    // gate (the sibling pitch/tracking effects all have it) the click + per-beat
+    // Haptics.selectionAsync fired continuously just from sitting idle on a song
+    // with a BPM and the metronome setting on — a phone buzzing every beat.
+    if (!isRecording || !settings.metronomeEnabled || !bpmValue || isPaused || isAnalyzing) {
       stopMetronome();
       return;
     }
@@ -389,7 +393,7 @@ export default function SingScreen() {
       void startMetronome({ immediate: false });
     }
     return () => stopMetronome();
-  }, [beatMs, bpmValue, isAnalyzing, isPaused, settings.metronomeEnabled, startMetronome, stopMetronome]);
+  }, [beatMs, bpmValue, isAnalyzing, isPaused, isRecording, settings.metronomeEnabled, startMetronome, stopMetronome]);
 
   useEffect(() => {
     if (lyricsText) {

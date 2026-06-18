@@ -588,7 +588,7 @@ export default function SingScreen() {
           : 'Listening.'
       );
     } else if (isPaused) {
-      setStatusText('Paused. Tap record to resume.');
+      setStatusText('Paused. Tap record to resume — or Stop to play it back.');
     } else {
       setStatusText('Ready. Tap record to start your take.');
     }
@@ -893,7 +893,7 @@ export default function SingScreen() {
         : isRecording && !isPaused
           ? 'Tap stop to open Session Review.'
           : isPaused
-            ? 'Tap record to resume, or stop to review.'
+            ? 'Tap record to resume. To hear your take, tap Stop — it opens Session Review with playback.'
             : 'Tap record to start a take.';
 
   return (

@@ -254,7 +254,11 @@ export default function RootLayout() {
                   <VideoView
                     player={introPlayer}
                     style={styles.introVideo}
-                    contentFit="cover"
+                    // contain (not cover) so the whole intro frame — including
+                    // the tagline text — is visible instead of being cropped at
+                    // the edges. The overlay is solid black, so the letterbox
+                    // bars are invisible.
+                    contentFit="contain"
                     nativeControls={false}
                   />
                   <View style={styles.introActions}>

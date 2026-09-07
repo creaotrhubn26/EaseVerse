@@ -12,11 +12,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 import { createProject, listProjects, type ProjectListItem } from "@/lib/projects-client";
 
 export default function ProjectsScreen() {
-  if (!CLERK_CONFIGURED) {
+  if (!AUTH_CONFIGURED) {
     return (
       <View style={styles.screen}>
         <Text style={styles.title}>Projects are unavailable</Text>
@@ -29,7 +29,7 @@ export default function ProjectsScreen() {
 
 function ProjectsInner() {
   const insets = useSafeAreaInsets();
-  const { useAuth } = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+  const { useAuth } = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
   const { getToken, isSignedIn } = useAuth();
   const [projects, setProjectList] = useState<ProjectListItem[]>([]);
   const [loading, setLoading] = useState(true);

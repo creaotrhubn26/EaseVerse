@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { fetchUserEmail, isClerkConfigured, requireAuth } from "../_lib/auth.js";
+import { fetchUserEmail, isAuthConfigured, requireAuth } from "../_lib/auth.js";
 import { createProject, listProjectsForUser } from "../_lib/projects-db.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!isClerkConfigured()) {
+  if (!isAuthConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
   }
   const userId = await requireAuth(req, res);

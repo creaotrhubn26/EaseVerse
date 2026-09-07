@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAuth } from "@/lib/creatorhub-auth";
 import Colors from "@/constants/colors";
 import { authedFetch } from "@/lib/authed-fetch";
 

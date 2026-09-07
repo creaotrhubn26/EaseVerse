@@ -3,21 +3,19 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useClerk, useUser } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@/lib/creatorhub-auth';
 import Colors from '@/constants/colors';
 
-const clerkConfigured = Boolean(process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 type Props = { horizontalMargin?: number };
 
 export function AccountSection({ horizontalMargin = 16 }: Props) {
-  if (!clerkConfigured) return null;
   return <AccountSectionInner horizontalMargin={horizontalMargin} />;
 }
 
 function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number }) {
   const { user, isLoaded } = useUser();
-  const { signOut } = useClerk();
+  const { signOut } = useAuth();
   const [signingOut, setSigningOut] = React.useState(false);
 
   if (!isLoaded) {
@@ -62,10 +60,7 @@ function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number })
   }
 
   const displayName =
-    user.fullName ||
-    user.username ||
-    user.primaryEmailAddress?.emailAddress ||
-    'Signed in';
+    user.displayName || user.name || user.email || 'Signed in';
 
   return (
     <View style={[styles.card, { marginHorizontal: horizontalMargin }]}>
@@ -77,11 +72,9 @@ function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number })
           <Text style={styles.title} numberOfLines={1}>
             {displayName}
           </Text>
-          {user.primaryEmailAddress ? (
-            <Text style={styles.subtitle} numberOfLines={1}>
-              {user.primaryEmailAddress.emailAddress}
-            </Text>
-          ) : null}
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {user.email}
+          </Text>
         </View>
       </View>
       <Pressable

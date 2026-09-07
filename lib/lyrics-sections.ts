@@ -1,5 +1,5 @@
 import type { SongSection } from './types';
-import { generateId } from './storage';
+import { generateId } from './id';
 
 type CreateId = () => string;
 type ExplicitHeader = {

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isClerkConfigured, requireAuthOrPairing } from "../_lib/auth.js";
+import { isAuthConfigured, requireAuthOrPairing } from "../_lib/auth.js";
 import { recordSessionCheckpoint } from "../_lib/takes-db.js";
 import { getProjectMembership } from "../_lib/projects-db.js";
 
@@ -8,7 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  if (!isClerkConfigured()) {
+  if (!isAuthConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
   }
   const userId = await requireAuthOrPairing(req, res);

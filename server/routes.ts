@@ -112,7 +112,8 @@ const collabLyricsUpsertSchema = z.object({
   title: z.string().trim().min(1).max(240),
   artist: z.string().trim().max(160).optional(),
   bpm: bpmSchema,
-  lyrics: z.string().trim().min(1).max(20000),
+  // Empty lyrics intentionally clear an existing draft during CreatorHub sync.
+  lyrics: z.string().trim().max(20000),
   collaborators: z.array(z.string().trim().min(1).max(120)).max(40).optional(),
   source: z.string().trim().max(120).optional(),
   updatedAt: z.string().datetime().optional(),

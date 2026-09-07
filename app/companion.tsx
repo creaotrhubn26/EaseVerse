@@ -77,7 +77,7 @@ export default function CompanionScreen() {
 
       <View style={styles.intro}>
         <Text style={styles.introText}>
-          The companion runs on the producer's machine. It watches the Pro Tools{" "}
+          The companion runs on the producer’s machine. It watches the Pro Tools{" "}
           <Text style={styles.code}>Audio Files/</Text> folder and uploads each new vocal take to EaseVerse
           automatically, then writes back marker/keeper files Pro Tools can import.
         </Text>
@@ -136,7 +136,7 @@ export default function CompanionScreen() {
             you can import back into Pro Tools (File → Import → Session Data).
           </Text>
           <Text style={styles.step}>
-            4. Click Start watching. Every new vocal take from Pro Tools auto-uploads and shows up in EaseVerse + the vocalist's booth view.
+            4. Click Start watching. Every new vocal take from Pro Tools auto-uploads and shows up in EaseVerse + the vocalist’s booth view.
           </Text>
         </>
       )}

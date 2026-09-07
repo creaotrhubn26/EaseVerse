@@ -1,0 +1,28 @@
+[build]
+  command = "npm run netlify:build"
+  publish = "web-build"
+  functions = "netlify-functions"
+
+[build.environment]
+  NODE_VERSION = "22.23.2"
+  EXPO_PUBLIC_API_URL = "https://easeverse.netlify.app"
+  EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET = "1"
+
+[functions]
+  node_bundler = "esbuild"
+
+[functions."api-sessions-mixdown"]
+  included_files = ["node_modules/ffmpeg-static/**"]
+
+[functions."api-sessions-daw-export"]
+  included_files = ["node_modules/ffmpeg-static/**"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/api-not-found.json"
+  status = 404
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

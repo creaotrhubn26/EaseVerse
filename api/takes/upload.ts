@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
-import { isClerkConfigured, requireAuthOrPairing } from "../_lib/auth.js";
+import { isAuthConfigured, requireAuthOrPairing } from "../_lib/auth.js";
 import { getProjectMembership } from "../_lib/projects-db.js";
 import { isB2Configured, presignUpload, takeObjectKey } from "../_lib/b2-storage.js";
 
@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isB2Configured()) {
     return res.status(503).json({ error: "B2 storage is not configured (B2_APPLICATION_KEY_ID/KEY/BUCKET)." });
   }
-  if (!isClerkConfigured()) {
+  if (!isAuthConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
   }
 

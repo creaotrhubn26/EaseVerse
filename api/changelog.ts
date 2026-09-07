@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isClerkConfigured, requireAuth } from "./_lib/auth.js";
+import { isAuthConfigured, requireAuth } from "./_lib/auth.js";
 import { deleteChangelog, listChangelog, publishChangelog } from "./_lib/changelog-db.js";
 import { getUser } from "./_lib/users-db.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
-    // Public to signed-in users (admins or not) when Clerk is configured.
-    if (isClerkConfigured()) {
+    // Public to signed-in users (admins or not) when CreatorHub authentication is configured.
+    if (isAuthConfigured()) {
       const userId = await requireAuth(req, res);
       if (!userId) return;
     }
@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST" || req.method === "DELETE") {
-    if (!isClerkConfigured()) {
+    if (!isAuthConfigured()) {
       return res.status(503).json({ error: "Auth is not configured." });
     }
     const userId = await requireAuth(req, res);

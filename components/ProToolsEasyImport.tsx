@@ -1,16 +1,16 @@
 import React, { useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAuth } from "@/lib/creatorhub-auth";
 import Colors from "@/constants/colors";
 import { authedFetch } from "@/lib/authed-fetch";
 import { normalizeTrackId, parseProToolsSessionInfoText } from "@/lib/protools-parser";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 
 type Props = { horizontalMargin?: number };
 
 export function ProToolsEasyImport(props: Props) {
-  if (!CLERK_CONFIGURED) {
+  if (!AUTH_CONFIGURED) {
     return <ProToolsEasyImportAnonymous {...props} />;
   }
   return <ProToolsEasyImportAuthed {...props} />;

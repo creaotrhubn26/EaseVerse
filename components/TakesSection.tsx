@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 import {
   fetchTakeDetail,
   fetchTakes,
@@ -40,13 +40,13 @@ import { router } from "expo-router";
 type Props = { horizontalMargin?: number };
 
 export function TakesSection(props: Props) {
-  if (!CLERK_CONFIGURED) return null;
+  if (!AUTH_CONFIGURED) return null;
   return <TakesSectionAuthed {...props} />;
 }
 
 function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
-  // Lazy-load useAuth so this module doesn't blow up when Clerk isn't installed.
-  const { useAuth } = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+  // Lazy-load useAuth so this module doesn't blow up when CreatorHub authentication is unavailable.
+  const { useAuth } = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [takes, setTakes] = useState<TakeRecord[]>([]);
   const [loading, setLoading] = useState(true);

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { OnboardingChecklist, type ChecklistStep } from "./OnboardingChecklist";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 import { listProjects, type ProjectListItem, type ProjectRole } from "@/lib/projects-client";
 import { fetchTakes } from "@/lib/takes-client";
 
@@ -17,12 +17,12 @@ type Snapshot = {
 };
 
 export function StudioOnboardingChecklist() {
-  if (!CLERK_CONFIGURED) return null;
+  if (!AUTH_CONFIGURED) return null;
   return <Inner />;
 }
 
 function Inner() {
-  const { useAuth } = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+  const { useAuth } = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [snap, setSnap] = useState<Snapshot>({
     loaded: false,

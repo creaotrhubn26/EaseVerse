@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isClerkConfigured, requireAuth } from "./_lib/auth.js";
+import { isAuthConfigured, requireAuth } from "./_lib/auth.js";
 import { summarizeUserUsage } from "./_lib/usage-db.js";
 import { getUser } from "./_lib/users-db.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!isClerkConfigured()) {
+  if (!isAuthConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
   }
 

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
+import { isAuthConfigured, requireAuth } from "../_lib/auth.js";
 import { getTakeById, updateProducerFeedback, type ProducerDecision } from "../_lib/takes-db.js";
 import { getProjectMembership, getProjectWithMembers } from "../_lib/projects-db.js";
 import { pushToUsers } from "../_lib/push-send.js";
@@ -9,7 +9,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Allow", "PATCH, POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  if (!isClerkConfigured()) {
+  if (!isAuthConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
   }
   const userId = await requireAuth(req, res);

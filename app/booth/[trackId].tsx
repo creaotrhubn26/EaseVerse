@@ -18,7 +18,7 @@ import { parseProducerNote, formatTimestamp } from "@/lib/parse-timestamps";
 import { startClick, type ClickHandle } from "@/lib/click-track";
 import { currentPushEndpoint, subscribeToPush, unsubscribeFromPush } from "@/lib/push-client";
 import { castVote, clearVote, fetchVoteTally, type ConsensusVote } from "@/lib/takes-client";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
 
 type BoothRegion = {
@@ -291,8 +291,8 @@ export default function BoothScreen() {
 }
 
 function useBoothAuth(): { getToken: () => Promise<string | null> } {
-  if (CLERK_CONFIGURED) {
-    const mod = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+  if (AUTH_CONFIGURED) {
+    const mod = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
     const ctx = mod.useAuth();
     return { getToken: () => ctx.getToken() };
   }

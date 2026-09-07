@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAuth } from "@/lib/creatorhub-auth";
 import { getApiHeaders, getApiUrl } from "./query-client";
 
 export type AppUser = {
@@ -12,10 +12,8 @@ export type AppUser = {
   pilotExpiresAt: string | null;
 };
 
-export const CLERK_CONFIGURED = Boolean(process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY);
+export const AUTH_CONFIGURED = true;
 
-// Caller is responsible for only calling this when Clerk is configured (so the
-// `<ClerkProvider>` exists). When Clerk is unconfigured, render a stub instead.
 export function useAppUser(): { user: AppUser | null; loading: boolean; reload: () => Promise<void> } {
   const { getToken, isSignedIn, isLoaded } = useAuth();
   const [user, setUser] = useState<AppUser | null>(null);

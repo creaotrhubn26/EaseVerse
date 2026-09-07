@@ -12,7 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 import {
   fetchDawBundleStatus,
   fetchDebrief,
@@ -28,14 +28,14 @@ import {
 } from "@/lib/sessions-client";
 
 export default function LiveSessionReviewScreen() {
-  if (!CLERK_CONFIGURED) return null;
+  if (!AUTH_CONFIGURED) return null;
   return <Inner />;
 }
 
 function Inner() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { useAuth } = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+  const { useAuth } = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
   const { getToken } = useAuth();
 
   const [takes, setTakes] = useState<LiveSessionTake[]>([]);

@@ -7,6 +7,9 @@ import { pipeline, AutomaticSpeechRecognitionPipeline } from '@xenova/transforme
 import { readFile, writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+// `wavefile` publishes CommonJS via its `main` entry. In a Node ESM bundle,
+// the constructor therefore lives on the default export rather than on the
+// module namespace object.
 import wavefilePkg from 'wavefile';
 import { spawn } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';

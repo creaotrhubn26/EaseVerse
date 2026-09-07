@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { isClerkConfigured, requireAuth } from "./_lib/auth.js";
+import { isAuthConfigured, requireAuth } from "./_lib/auth.js";
 import { recordClaudeUsage } from "./_lib/usage-db.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   let userId: string | null = null;
-  if (isClerkConfigured()) {
+  if (isAuthConfigured()) {
     userId = await requireAuth(req, res);
     if (!userId) return;
   }

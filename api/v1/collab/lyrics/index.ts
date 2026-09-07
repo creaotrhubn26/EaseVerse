@@ -22,8 +22,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const externalTrackId = String(b?.externalTrackId || "").trim();
       const title = String(b?.title || "").trim();
       const lyrics = String(b?.lyrics || "").trim();
-      if (!externalTrackId || !title || !lyrics) {
-        return res.status(400).json({ error: "Invalid request body: externalTrackId, title and lyrics are required" });
+      if (!externalTrackId || !title) {
+        return res.status(400).json({ error: "Invalid request body: externalTrackId and title are required" });
       }
       const now = new Date().toISOString();
       const rec: CollabLyricsRecord = {

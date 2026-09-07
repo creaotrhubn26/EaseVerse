@@ -2,13 +2,13 @@ import React from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
-import { CLERK_CONFIGURED, useAppUser } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED, useAppUser } from "@/lib/use-app-user";
 import { PendingApprovalGate } from "./PendingApprovalGate";
 
 type Props = { children: React.ReactNode };
 
 export function AppGate({ children }: Props) {
-  if (!CLERK_CONFIGURED) return <>{children}</>;
+  if (!AUTH_CONFIGURED) return <>{children}</>;
   return <AppGateInner>{children}</AppGateInner>;
 }
 

@@ -3,6 +3,7 @@
  * Portet 1:1 fra server/routes.ts (Express) til Vercel, med Postgres
  * (collab_lyrics_drafts + collab_protools_sync) + EXTERNAL_API_KEY-auth.
  */
+import { timingSafeEqual } from "node:crypto";
 import { Pool } from "pg";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -29,9 +30,18 @@ export function extractApiKey(req: VercelRequest): string | undefined {
 
 /** Returnerer true hvis forespørselen er autorisert. Skriver 401 + returnerer false ellers. */
 export function requireExternalKey(req: VercelRequest, res: VercelResponse): boolean {
-  const expected = process.env.EXTERNAL_API_KEY;
-  if (!expected) return true; // ikke konfigurert → åpen (samme som Express enforceOptionalApiKey)
-  if (extractApiKey(req) !== expected) {
+  const expected = process.env.EXTERNAL_API_KEY?.trim();
+  if (!expected) {
+    res.status(503).json({ error: "External API authentication is not configured" });
+    return false;
+  }
+  const provided = extractApiKey(req);
+  const expectedBytes = Buffer.from(expected);
+  const providedBytes = Buffer.from(provided ?? "");
+  const authorized =
+    expectedBytes.length === providedBytes.length &&
+    timingSafeEqual(expectedBytes, providedBytes);
+  if (!authorized) {
     res.status(401).json({ error: "Unauthorized" });
     return false;
   }

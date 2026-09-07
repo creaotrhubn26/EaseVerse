@@ -47,6 +47,8 @@ playwright-report/
 # typescript
 *.tsbuildinfo
 .vercel
+.netlify/
+netlify-functions/
 
 .env
 
@@ -55,3 +57,6 @@ playwright-report/
 credentials.json
 ios-creds/
 package-lock.json
+
+# Local Netlify folder
+.netlify

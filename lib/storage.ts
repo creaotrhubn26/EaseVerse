@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Song, Session, UserSettings } from './types';
 import { detectInitialAccentGoal, detectInitialLanguage } from './detect-locale';
+import { generateId } from './id';
+
+export { generateId } from './id';
 
 const SONGS_KEY = '@lyricflow_songs';
 const SESSIONS_KEY = '@lyricflow_sessions';
@@ -566,10 +569,6 @@ export async function addEasePocketHistoryItem(item: EasePocketHistoryItem): Pro
   // Keep history bounded so AsyncStorage doesn't grow indefinitely.
   const capped = history.slice(0, 80);
   await AsyncStorage.setItem(EASEPOCKET_HISTORY_KEY, JSON.stringify(capped));
-}
-
-export function generateId(): string {
-  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
 
 export async function getOrCreateLearningUserId(): Promise<string> {

@@ -12,7 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import { authedFetch } from "@/lib/authed-fetch";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 
 type Props = {
   horizontalMargin?: number;
@@ -30,12 +30,12 @@ export function ProToolsPairingCard(props: Props) {
   if (props.getToken) {
     return <PairingCardInner {...props} getToken={props.getToken} />;
   }
-  if (!CLERK_CONFIGURED) return null;
+  if (!AUTH_CONFIGURED) return null;
   return <PairingCardWithAuth {...props} />;
 }
 
 function PairingCardWithAuth(props: Omit<Props, "getToken">) {
-  const { useAuth } = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+  const { useAuth } = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
   const { getToken } = useAuth();
   return <PairingCardInner {...props} getToken={getToken} />;
 }
@@ -245,7 +245,7 @@ function PairingCardInner({ horizontalMargin = 16, getToken }: Props & { getToke
             <Text style={styles.code}>Profile → Get the Companion App</Text>.
           </GuideStep>
           <GuideStep n={2} title="Generate a token above">
-            Paste it into the Companion's "Pairing token" field. Token expires after 15 min.
+            Paste it into the Companion’s “Pairing token” field. Token expires after 15 min.
           </GuideStep>
           <GuideStep n={3} title="Pick your Pro Tools Audio Files folder">
             Companion polls it for new vocal takes and uploads each one to EaseVerse automatically.
@@ -254,7 +254,7 @@ function PairingCardInner({ horizontalMargin = 16, getToken }: Props & { getToke
             Open the take, leave notes (with{` `}
             <Text style={styles.code}>@1:23</Text>{` `}timestamps), record a voice memo, draw loop-punch
             regions, set Keeper/Re-do, and let the band vote — everything streams to the
-            vocalist's booth view in seconds.
+            vocalist’s booth view in seconds.
           </GuideStep>
           <GuideStep n={5} title="Optional: import markers + keepers back into Pro Tools">
             Set{` `}
@@ -265,7 +265,7 @@ function PairingCardInner({ horizontalMargin = 16, getToken }: Props & { getToke
             <Text style={styles.code}>File → Import → Session Data</Text>.
           </GuideStep>
           <GuideStep n={6} title="Optional: comp takes inside EaseVerse">
-            Open a take in Studio takes and click "Open in comping" to pick best
+            Open a take in Studio takes and click “Open in comping” to pick best
             sections across multiple takes. The plan exports back to Pro Tools as markers.
           </GuideStep>
           <Text style={styles.guideNote}>

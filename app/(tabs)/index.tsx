@@ -30,7 +30,7 @@ import { MicPermissionRationale } from '@/components/MicPermissionRationale';
 import { OnboardingChecklist, type ChecklistStep } from '@/components/OnboardingChecklist';
 import { InlineLyricsEditor } from '@/components/InlineLyricsEditor';
 import { PostureReminder } from '@/components/PostureReminder';
-import { CLERK_CONFIGURED } from '@/lib/use-app-user';
+import { AUTH_CONFIGURED } from '@/lib/use-app-user';
 import { WhatsNewBanner } from '@/components/WhatsNewBanner';
 import { StudioOnboardingChecklist } from '@/components/StudioOnboardingChecklist';
 import { PitchOverlay } from '@/components/PitchOverlay';
@@ -905,8 +905,8 @@ export default function SingScreen() {
         onHide={() => setToast((current) => ({ ...current, visible: false }))}
       />
       <LogoHeader />
-      {CLERK_CONFIGURED ? <WhatsNewBanner /> : null}
-      {CLERK_CONFIGURED ? <StudioOnboardingChecklist /> : null}
+      {AUTH_CONFIGURED ? <WhatsNewBanner /> : null}
+      {AUTH_CONFIGURED ? <StudioOnboardingChecklist /> : null}
       {!isRecording && !isAnalyzing && onboardingFlags && !onboardingFlags.postureReminderDismissed && activeSong ? (
         <PostureReminder
           onDismiss={() => {

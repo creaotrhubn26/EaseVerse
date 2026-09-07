@@ -114,6 +114,19 @@ export async function getUser(userId: string): Promise<UserRow | null> {
   };
 }
 
+export async function findUserByEmail(email: string): Promise<UserRow | null> {
+  const p = getPool();
+  if (!p) return null;
+  await ensureSchema();
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return null;
+  const { rows } = await p.query<{ user_id: string }>(
+    `SELECT user_id FROM app_users WHERE LOWER(email) = $1 LIMIT 1`,
+    [normalized],
+  );
+  return rows[0] ? getUser(rows[0].user_id) : null;
+}
+
 export async function listUsers(): Promise<UserRow[]> {
   const p = getPool();
   if (!p) return [];

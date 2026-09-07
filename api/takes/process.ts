@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
+import { isAuthConfigured, requireAuth } from "../_lib/auth.js";
 import { getTakeWithAnalysis } from "../_lib/takes-db.js";
 import { processTake } from "../_lib/take-processor.js";
 
@@ -12,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  if (!isClerkConfigured()) {
+  if (!isAuthConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
   }
   const userId = await requireAuth(req, res);

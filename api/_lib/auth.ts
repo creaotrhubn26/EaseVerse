@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { creatorHubUrl } from "./auth-upstream.js";
 import { resolvePairingToken } from "./pairing-db.js";
+import { readCreatorHubSessionCookie } from "./auth-cookie.js";
 
 export type CreatorHubAuthUser = {
   id: string;
@@ -95,9 +96,9 @@ export async function requireAuth(
   res: VercelResponse,
 ): Promise<string | null> {
   res.setHeader("Cache-Control", "no-store");
-  const token = bearer(req);
+  const token = bearer(req) ?? readCreatorHubSessionCookie(req);
   if (!token) {
-    res.status(401).json({ error: "Missing bearer token" });
+    res.status(401).json({ error: "Missing CreatorHub session" });
     return null;
   }
   const resolution = await resolveCreatorHubSession(token);
@@ -121,9 +122,9 @@ export async function requireAuthOrPairing(
   req: VercelRequest,
   res: VercelResponse,
 ): Promise<string | null> {
-  const token = bearer(req);
+  const token = bearer(req) ?? readCreatorHubSessionCookie(req);
   if (!token) {
-    res.status(401).json({ error: "Missing bearer token" });
+    res.status(401).json({ error: "Missing CreatorHub session" });
     return null;
   }
   if (token.startsWith("pair_")) {

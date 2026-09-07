@@ -104,13 +104,14 @@ async function readStoredValue(key: string): Promise<string | null> {
   return SecureStore.getItemAsync(key).catch(() => null);
 }
 
-async function writeStoredSession(token: string, user: CreatorHubUser): Promise<void> {
+async function writeStoredSession(token: string | null, user: CreatorHubUser): Promise<void> {
   const serializedUser = JSON.stringify(user);
   if (Platform.OS === "web") {
-    globalThis.localStorage?.setItem(AUTH_TOKEN_KEY, token);
+    globalThis.localStorage?.removeItem(AUTH_TOKEN_KEY);
     globalThis.localStorage?.setItem(AUTH_USER_KEY, serializedUser);
     return;
   }
+  if (!token) throw new Error("Native authentication requires a session token.");
   await Promise.all([
     SecureStore.setItemAsync(AUTH_TOKEN_KEY, token),
     SecureStore.setItemAsync(AUTH_USER_KEY, serializedUser),
@@ -148,7 +149,7 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
   const [isSigningIn, setIsSigningIn] = useState(false);
   const tokenRef = useRef<string | null>(null);
 
-  const updateSession = useCallback(async (nextToken: string, nextUser: CreatorHubUser) => {
+  const updateSession = useCallback(async (nextToken: string | null, nextUser: CreatorHubUser) => {
     await writeStoredSession(nextToken, nextUser);
     tokenRef.current = nextToken;
     setToken(nextToken);
@@ -176,15 +177,16 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
         storedUser = null;
       }
 
-      if (storedToken && storedUser) {
+      if (Platform.OS === "web" || (storedToken && storedUser)) {
         try {
           const response = await fetch(apiUrl("/api/auth/session"), {
-            headers: getApiHeaders({ Authorization: `Bearer ${storedToken}` }),
+            credentials: "include",
+            headers: getApiHeaders(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
           });
           const payload = await readResponse(response);
           const validatedUser = normalizeUser(payload.user);
           if (validatedUser && !cancelled) {
-            await updateSession(storedToken, validatedUser);
+            await updateSession(Platform.OS === "web" ? null : storedToken, validatedUser);
           } else if (!cancelled) {
             await clearSession();
           }
@@ -203,18 +205,20 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
   }, [clearSession, updateSession]);
 
   const completeSignIn = useCallback(async (transferId: string) => {
+    const platform = Platform.OS === "web" ? "web" : "native";
     const response = await fetch(apiUrl("/api/auth/exchange"), {
       method: "POST",
+      credentials: "include",
       headers: getApiHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ transferId }),
+      body: JSON.stringify({ transferId, platform }),
     });
     const payload = await readResponse(response);
     const nextToken = stringValue(payload.token);
     const nextUser = normalizeUser(payload.user);
-    if (!nextToken || !nextUser) {
+    if (!nextUser || (platform === "native" && !nextToken)) {
       throw new Error("CreatorHub returned an incomplete session.");
     }
-    await updateSession(nextToken, nextUser);
+    await updateSession(platform === "web" ? null : nextToken, nextUser);
     return nextUser;
   }, [updateSession]);
 
@@ -225,6 +229,7 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
       const platform = Platform.OS === "web" ? "web" : "native";
       const response = await fetch(apiUrl("/api/auth/start"), {
         method: "POST",
+        credentials: "include",
         headers: getApiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ platform }),
       });
@@ -258,12 +263,11 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
   const signOut = useCallback(async () => {
     const currentToken = tokenRef.current;
     try {
-      if (currentToken) {
-        await fetch(apiUrl("/api/auth/logout"), {
-          method: "POST",
-          headers: getApiHeaders({ Authorization: `Bearer ${currentToken}` }),
-        });
-      }
+      await fetch(apiUrl("/api/auth/logout"), {
+        method: "POST",
+        credentials: "include",
+        headers: getApiHeaders(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+      });
     } finally {
       await clearSession();
     }
@@ -273,7 +277,7 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
   const value = useMemo<AuthContextValue>(() => ({
     user,
     isLoaded,
-    isSignedIn: Boolean(token && user),
+    isSignedIn: Boolean(user && (Platform.OS === "web" || token)),
     isSigningIn,
     getToken,
     signIn,

@@ -63,12 +63,16 @@ function ProToolsEasyImportAuthed({ horizontalMargin = 16 }: Props) {
       }
 
       const trackId = normalizeTrackId(parsed.sessionName || file.name.replace(/\.[^.]+$/, ""));
+      const now = new Date();
       const payload = {
+        schemaVersion: 1 as const,
+        eventId: `easeverse-import-${globalThis.crypto?.randomUUID?.() ?? now.getTime()}`,
+        revision: now.getTime(),
         externalTrackId: trackId || "pt-track-" + Date.now(),
         source: "easeverse-easy-import",
         bpm: parsed.bpm,
         markers: parsed.markers,
-        updatedAt: new Date().toISOString(),
+        updatedAt: now.toISOString(),
       };
 
       const token = isSignedIn ? await getToken() : null;

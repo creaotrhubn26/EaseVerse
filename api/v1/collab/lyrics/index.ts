@@ -25,7 +25,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!externalTrackId || !title) {
         return res.status(400).json({ error: "Invalid request body: externalTrackId and title are required" });
       }
+      const suppliedUpdatedAt = typeof b?.updatedAt === "string" ? Date.parse(b.updatedAt) : Number.NaN;
       const now = new Date().toISOString();
+      const updatedAt = Number.isFinite(suppliedUpdatedAt) ? new Date(suppliedUpdatedAt).toISOString() : now;
       const rec: CollabLyricsRecord = {
         externalTrackId: externalTrackId.slice(0, 160),
         projectId: b?.projectId ? String(b.projectId).slice(0, 160) : undefined,
@@ -35,11 +37,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         lyrics: lyrics.slice(0, 20000),
         collaborators: Array.isArray(b?.collaborators) ? b.collaborators.filter((x: unknown) => typeof x === "string").slice(0, 40) : [],
         source: b?.source ? String(b.source).slice(0, 120) : "external",
-        updatedAt: typeof b?.updatedAt === "string" ? b.updatedAt : now,
+        updatedAt,
         receivedAt: now,
       };
-      const { record, storage } = await upsertLyrics(rec);
-      return res.status(200).json({ ok: true, storage, item: record });
+      const { record, storage, applied } = await upsertLyrics(rec);
+      return res.status(200).json({ ok: true, applied, storage, item: record });
     } catch (e) {
       console.error("collab lyrics upsert error:", e);
       return res.status(500).json({ error: "Failed to upsert lyric draft" });

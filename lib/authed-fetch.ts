@@ -11,5 +11,5 @@ export async function authedFetch(
     Object.assign(headers, init.headers as Record<string, string>);
   }
   if (token) headers.Authorization = `Bearer ${token}`;
-  return fetch(`${getApiUrl()}${path}`, { ...init, headers });
+  return fetch(`${getApiUrl()}${path}`, { credentials: "include", ...init, headers });
 }

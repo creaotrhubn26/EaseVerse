@@ -15,7 +15,6 @@ import { useAuth } from "@/lib/creatorhub-auth";
 import Colors from "@/constants/colors";
 import { AUTH_CONFIGURED, useAppUser, type AppUser } from "@/lib/use-app-user";
 import { authedFetch } from "@/lib/authed-fetch";
-import { ProToolsPairingCard } from "@/components/ProToolsPairingCard";
 
 type AdminUsageRow = {
   userId: string | null;
@@ -176,7 +175,6 @@ function AdminScreenInner() {
 
       <ChangelogComposer getToken={getToken} />
 
-      <ProToolsPairingCard horizontalMargin={0} getToken={getToken} />
 
       <Text style={styles.section}>Users ({users.length})</Text>
       {users.map((u) => {

@@ -36,8 +36,10 @@ test("exchanges a one-time CreatorHub transfer and stores the shared session", a
     exchangePayload = route.request().postDataJSON();
     await route.fulfill({
       contentType: "application/json",
+      headers: {
+        "set-cookie": "easeverse_session=e2e-http-only; HttpOnly; Path=/; SameSite=Lax",
+      },
       body: JSON.stringify({
-        token: "creatorhub-session-e2e",
         user: {
           id: "workspace-user-42",
           email: "producer@example.com",
@@ -47,36 +49,86 @@ test("exchanges a one-time CreatorHub transfer and stores the shared session", a
       }),
     });
   });
-  await page.route("**/api/users/me", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        userId: "workspace-user-42",
-        email: "producer@example.com",
-        status: "approved",
-        createdAt: "2026-09-07T00:00:00.000Z",
-        approvedAt: "2026-09-07T00:00:00.000Z",
-        approvedBy: "e2e",
-        pilotExpiresAt: null,
-      }),
-    }),
-  );
 
   await page.goto(
     `/auth/callback?chGoogleStatus=success&chGoogleTransfer=${transferId}`,
   );
 
-  await expect
-    .poll(() =>
-      page.evaluate(() => localStorage.getItem("creatorhub_auth_token")),
-    )
-    .toBe("creatorhub-session-e2e");
+  await expect.poll(() =>
+    page.evaluate(() => localStorage.getItem("creatorhub_auth_token")),
+  ).toBeNull();
+  await expect.poll(async () => {
+    const cookies = await page.context().cookies();
+    return cookies.find((cookie) => cookie.name === "easeverse_session")?.httpOnly;
+  }).toBe(true);
   const storedUser = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("creatorhub_auth_user") ?? "null"),
   );
   expect(storedUser).toMatchObject({
     id: "workspace-user-42",
     email: "producer@example.com",
+    role: "music_producer",
   });
-  expect(exchangePayload).toEqual({ transferId });
+  expect(exchangePayload).toEqual({ transferId, platform: "web" });
+});
+
+test("opens the exact Workspace song as an authenticated EaseVerse project", async ({ page }) => {
+  let contextPayload: unknown = null;
+  let authorizationHeader: string | undefined;
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        user: {
+          id: "workspace-user-42",
+          email: "producer@example.com",
+          name: "Music Producer",
+        },
+      }),
+    }),
+  );
+  await page.route("**/api/integrations/creatorhub/context", async (route) => {
+    contextPayload = route.request().postDataJSON();
+    authorizationHeader = route.request().headers().authorization;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        linked: true,
+        project: { id: "ease-project-1", name: "Running Home" },
+        link: {
+          creatorhubProjectId: "workspace-7",
+          audioReviewProjectId: "550e8400-e29b-41d4-a716-446655440001",
+          externalTrackId: "550e8400-e29b-41d4-a716-446655440002",
+        },
+      }),
+    });
+  });
+  await page.route("**/api/projects/**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        project: { id: "ease-project-1", name: "Running Home" },
+        members: [],
+      }),
+    }),
+  );
+
+  const returnTo = "https://www.creatorhubn.com/workspace/workspace-7/sound-room";
+  await page.goto(`/integrations/creatorhub?${new URLSearchParams({
+    creatorhubProjectId: "workspace-7",
+    audioReviewProjectId: "550e8400-e29b-41d4-a716-446655440001",
+    externalTrackId: "550e8400-e29b-41d4-a716-446655440002",
+    projectName: "Running Home",
+    returnTo,
+  })}`);
+
+  await expect(page).toHaveURL(/\/projects\/ease-project-1/, { timeout: 15_000 });
+  expect(contextPayload).toEqual({
+    creatorhubProjectId: "workspace-7",
+    audioReviewProjectId: "550e8400-e29b-41d4-a716-446655440001",
+    externalTrackId: "550e8400-e29b-41d4-a716-446655440002",
+    projectName: "Running Home",
+    returnTo,
+  });
+  expect(authorizationHeader).toBeUndefined();
 });

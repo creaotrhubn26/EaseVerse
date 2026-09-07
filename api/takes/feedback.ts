@@ -4,6 +4,7 @@ import { getTakeById, updateProducerFeedback, type ProducerDecision } from "../_
 import { getProjectMembership, getProjectWithMembers } from "../_lib/projects-db.js";
 import { pushToUsers } from "../_lib/push-send.js";
 
+import { pushKeeperToCreatorHub } from "../_lib/creatorhub-sync.js";
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "PATCH" && req.method !== "POST") {
     res.setHeader("Allow", "PATCH, POST");
@@ -63,6 +64,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     producerDecision: decision,
   });
   if (!updated) return res.status(404).json({ error: "Take not found" });
+  const workspaceSync = decision === "keeper" && decision !== previousDecision && take.externalTrackId
+    ? await pushKeeperToCreatorHub({
+        ownerUserId: userId,
+        externalTrackId: take.externalTrackId,
+        takeId: take.id,
+        url: take.storageUrl,
+        filename: take.filename,
+        durationSec: take.durationSec,
+      })
+    : undefined;
+
 
   // Push to other project members when the decision changes (fire-and-forget).
   if (decision !== undefined && decision !== previousDecision && take.projectId) {
@@ -89,5 +101,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })();
   }
 
-  return res.status(200).json(updated);
+  return res.status(200).json({ ...updated, ...(workspaceSync ? { workspaceSync } : {}) });
 }

@@ -24,6 +24,7 @@ import {
   type ProjectRole,
 } from "@/lib/projects-client";
 import { getActiveSession, startSession } from "@/lib/sessions-client";
+import { ProToolsProjectSyncCard } from "@/components/ProToolsProjectSyncCard";
 
 const ROLE_OPTIONS: { value: ProjectRole; label: string }[] = [
   { value: "vocalist", label: "Vocalist" },
@@ -226,6 +227,8 @@ function ProjectDetailInner() {
           <Ionicons name="chevron-forward" size={14} color={activeSessionId ? "#fff" : Colors.gradientStart} />
         </Pressable>
       ) : null}
+
+      <ProToolsProjectSyncCard projectId={project.id} />
 
       <View style={styles.refCard}>
         <Text style={styles.cardLabel}>Reference track</Text>

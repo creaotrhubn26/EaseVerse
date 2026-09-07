@@ -1,59 +1,22 @@
-import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import React from "react";
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
-import { getApiUrl } from "@/lib/query-client";
 
-type Download = {
-  platform: string;
-  arch: string;
-  url: string;
-  filename: string;
-  size_mb?: number;
-};
-
-type DownloadsResponse = {
-  version: string;
-  downloads: Download[];
-  notes: string[];
-};
+const CREATORHUB_WORKSPACE_URL = `${(process.env.EXPO_PUBLIC_CREATORHUB_URL || "https://www.creatorhubn.com").replace(/\/+$/, "")}/workspace`;
 
 export default function CompanionScreen() {
   const insets = useSafeAreaInsets();
-  const [data, setData] = useState<DownloadsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const res = await fetch(`${getApiUrl()}/api/companion/downloads`);
-        if (res.ok) setData((await res.json()) as DownloadsResponse);
-      } catch {
-        /* ignore */
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  function openLink(url: string) {
-    if (Platform.OS === "web") {
-      window.open(url, "_blank");
-    } else {
-      void Linking.openURL(url);
+  const openWorkspace = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.location.assign(CREATORHUB_WORKSPACE_URL);
+      return;
     }
-  }
+    void Linking.openURL(CREATORHUB_WORKSPACE_URL);
+  };
 
   return (
     <ScrollView
@@ -66,214 +29,69 @@ export default function CompanionScreen() {
       }}
     >
       <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
+        <Pressable onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>Pro Tools companion</Text>
-          <Text style={styles.title}>Download</Text>
+          <Text style={styles.eyebrow}>CreatorHub Pro Tools Companion</Text>
+          <Text style={styles.title}>One connected studio flow</Text>
         </View>
       </View>
 
-      <View style={styles.intro}>
-        <Text style={styles.introText}>
-          The companion runs on the producer’s machine. It watches the Pro Tools{" "}
-          <Text style={styles.code}>Audio Files/</Text> folder and uploads each new vocal take to EaseVerse
-          automatically, then writes back marker/keeper files Pro Tools can import.
+      <View style={styles.hero}>
+        <Ionicons name="hardware-chip-outline" size={30} color={Colors.gradientMid} />
+        <Text style={styles.heroTitle}>Companion is managed from Sound Room</Text>
+        <Text style={styles.body}>
+          Pairing now starts in CreatorHub Workspace. The pairing code carries the exact Workspace project,
+          Sound Room and EaseVerse track into the desktop app, so you do not create a second connection here.
         </Text>
       </View>
 
-      {loading ? (
-        <ActivityIndicator color={Colors.textTertiary} />
-      ) : (
-        <>
-          <View style={styles.platforms}>
-            <PlatformCard
-              icon="logo-apple"
-              title="macOS"
-              status={data?.downloads.find((d) => d.platform === "macOS") ? "ready" : "missing"}
-              download={data?.downloads.find((d) => d.platform === "macOS")}
-              onDownload={openLink}
-              hint="Right-click → Open the first time (unsigned)."
-            />
-            <PlatformCard
-              icon="logo-windows"
-              title="Windows"
-              status={data?.downloads.find((d) => d.platform === "Windows") ? "ready" : "pending"}
-              download={data?.downloads.find((d) => d.platform === "Windows")}
-              onDownload={openLink}
-              hint="MSI installer — auto-builds on every companion-v* git tag once the CI workflow is pushed to GitHub."
-            />
-            <PlatformCard
-              icon="logo-tux"
-              title="Linux"
-              status={data?.downloads.find((d) => d.platform === "Linux") ? "ready" : "pending"}
-              download={data?.downloads.find((d) => d.platform === "Linux")}
-              onDownload={openLink}
-              hint="AppImage / .deb — same CI workflow."
-            />
+      <View style={styles.steps}>
+        {[
+          "Open the music project in CreatorHub Workspace.",
+          "Choose Sound Room → Pro Tools Companion.",
+          "Download the app and enter the six-digit one-time code.",
+          "Select Session Info and Bounced Files. Markers, tempo and mixes sync automatically.",
+        ].map((step, index) => (
+          <View key={step} style={styles.stepRow}>
+            <View style={styles.stepNumber}><Text style={styles.stepNumberText}>{index + 1}</Text></View>
+            <Text style={styles.stepText}>{step}</Text>
           </View>
-
-          {data?.notes && data.notes.length > 0 ? (
-            <View style={styles.notes}>
-              <Text style={styles.notesLabel}>Notes</Text>
-              {data.notes.map((n, i) => (
-                <Text key={i} style={styles.noteItem}>• {n}</Text>
-              ))}
-            </View>
-          ) : null}
-
-          <Text style={styles.sectionLabel}>After installing</Text>
-          <Text style={styles.step}>
-            1. Go to <Text style={styles.code}>/admin</Text> and click <Text style={styles.code}>Generate pairing code</Text>.
-          </Text>
-          <Text style={styles.step}>
-            2. Open EaseVerse Companion, paste the token, pick the Pro Tools <Text style={styles.code}>Audio Files/</Text> folder.
-          </Text>
-          <Text style={styles.step}>
-            3. (Optional) Set Export folder so the companion writes{" "}
-            <Text style={styles.code}>easeverse-markers.txt</Text> + <Text style={styles.code}>easeverse-keepers.txt</Text>{" "}
-            you can import back into Pro Tools (File → Import → Session Data).
-          </Text>
-          <Text style={styles.step}>
-            4. Click Start watching. Every new vocal take from Pro Tools auto-uploads and shows up in EaseVerse + the vocalist’s booth view.
-          </Text>
-        </>
-      )}
-    </ScrollView>
-  );
-}
-
-function PlatformCard({
-  icon,
-  title,
-  status,
-  download,
-  onDownload,
-  hint,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  status: "ready" | "pending" | "missing";
-  download?: Download;
-  onDownload: (url: string) => void;
-  hint?: string;
-}) {
-  return (
-    <View style={styles.platformCard}>
-      <View style={styles.platformHeader}>
-        <Ionicons name={icon} size={22} color={Colors.textPrimary} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.platformName}>{title}</Text>
-          {download ? (
-            <Text style={styles.platformMeta}>
-              {download.arch} · {download.filename}{download.size_mb ? ` · ${download.size_mb} MB` : ""}
-            </Text>
-          ) : (
-            <Text style={styles.platformMeta}>
-              {status === "pending" ? "Waiting for CI build" : "Not yet available"}
-            </Text>
-          )}
-        </View>
-        {download ? (
-          <Pressable
-            onPress={() => onDownload(download.url)}
-            style={styles.downloadBtn}
-            accessibilityRole="button"
-            accessibilityLabel={`Download ${title} installer`}
-          >
-            <Ionicons name="cloud-download" size={14} color="#fff" />
-            <Text style={styles.downloadBtnText}>Download</Text>
-          </Pressable>
-        ) : null}
+        ))}
       </View>
-      {hint ? <Text style={styles.platformHint}>{hint}</Text> : null}
-    </View>
+
+      <Pressable onPress={openWorkspace} style={({ pressed }) => [styles.primary, pressed && styles.pressed]} accessibilityRole="link">
+        <Ionicons name="open-outline" size={17} color="#fff" />
+        <Text style={styles.primaryText}>Open CreatorHub Workspace</Text>
+      </Pressable>
+
+      <View style={styles.note}>
+        <Ionicons name="shield-checkmark-outline" size={17} color={Colors.textTertiary} />
+        <Text style={styles.noteText}>
+          EaseVerse and Workspace use the same CreatorHub sign-in. The former standalone EaseVerse pairing flow has been retired.
+        </Text>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.background },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  eyebrow: {
-    color: Colors.textTertiary,
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  title: { color: Colors.textPrimary, fontFamily: "Inter_700Bold", fontSize: 22 },
-  intro: {
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-  },
-  introText: {
-    color: Colors.textSecondary,
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  platforms: { gap: 10 },
-  platformCard: {
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-    gap: 6,
-  },
-  platformHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  platformName: { color: Colors.textPrimary, fontFamily: "Inter_700Bold", fontSize: 15 },
-  platformMeta: { color: Colors.textTertiary, fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 2 },
-  platformHint: { color: Colors.textTertiary, fontFamily: "Inter_500Medium", fontSize: 11, fontStyle: "italic" },
-  downloadBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: Colors.gradientStart,
-  },
-  downloadBtnText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 12 },
-  notes: {
-    padding: 10,
-    borderRadius: 10,
-    backgroundColor: Colors.surfaceGlass,
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-    gap: 4,
-  },
-  notesLabel: {
-    color: Colors.textTertiary,
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 10,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  noteItem: { color: Colors.textSecondary, fontFamily: "Inter_500Medium", fontSize: 11, lineHeight: 16 },
-  sectionLabel: {
-    color: Colors.textTertiary,
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginTop: 6,
-  },
-  step: {
-    color: Colors.textPrimary,
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  code: {
-    fontFamily: "Inter_700Bold",
-    color: Colors.gradientMid,
-    backgroundColor: Colors.surfaceGlass,
-    paddingHorizontal: 4,
-    borderRadius: 4,
-  },
+  eyebrow: { color: Colors.textTertiary, fontFamily: "Inter_600SemiBold", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
+  title: { color: Colors.textPrimary, fontFamily: "Inter_700Bold", fontSize: 22, marginTop: 2 },
+  hero: { padding: 18, gap: 10, borderRadius: 16, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.borderGlass },
+  heroTitle: { color: Colors.textPrimary, fontFamily: "Inter_700Bold", fontSize: 17 },
+  body: { color: Colors.textSecondary, fontFamily: "Inter_500Medium", fontSize: 13, lineHeight: 20 },
+  steps: { gap: 10, paddingVertical: 4 },
+  stepRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  stepNumber: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: Colors.surface },
+  stepNumberText: { color: Colors.gradientMid, fontFamily: "Inter_700Bold", fontSize: 12 },
+  stepText: { flex: 1, color: Colors.textSecondary, fontFamily: "Inter_500Medium", fontSize: 13, lineHeight: 19 },
+  primary: { minHeight: 48, borderRadius: 13, backgroundColor: Colors.gradientMid, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  pressed: { opacity: 0.78 },
+  primaryText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 14 },
+  note: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 12, backgroundColor: Colors.surface },
+  noteText: { flex: 1, color: Colors.textTertiary, fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 17 },
 });

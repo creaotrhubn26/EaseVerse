@@ -8,7 +8,7 @@ import ffmpegStatic from "ffmpeg-static";
 
 const mixKey = (sessionId: string) => `easeverse/sessions/${sessionId}/mixdown.wav`;
 import ffmpeg from "fluent-ffmpeg";
-import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
+import { isAuthConfigured, requireAuth } from "../_lib/auth.js";
 import { getProjectMembership } from "../_lib/projects-db.js";
 import {
   getLiveSession,
@@ -34,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Cache-Control", "private, max-age=300");
     return res.redirect(302, url);
   }
-  if (!isClerkConfigured()) {
+  if (!isAuthConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
   }
   const userId = await requireAuth(req, res);

@@ -22,10 +22,9 @@ import Toast from '@/components/Toast';
 import LogoHeader from '@/components/LogoHeader';
 import HowToUseEaseVerse from '@/components/HowToUseEaseVerse';
 import { AccountSection } from '@/components/AccountSection';
-import { ProToolsPairingCard } from '@/components/ProToolsPairingCard';
 import { ProToolsEasyImport } from '@/components/ProToolsEasyImport';
 import { CostDashboardCard } from '@/components/CostDashboardCard';
-import { CLERK_CONFIGURED, useAppUser } from '@/lib/use-app-user';
+import { AUTH_CONFIGURED, useAppUser } from '@/lib/use-app-user';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { parseSongSections } from '@/lib/lyrics-sections';
 import { fetchLearningRecommendations } from '@/lib/learning-client';
@@ -943,12 +942,11 @@ export default function ProfileScreen() {
       >
         <View style={{ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }}>
         <AccountSection horizontalMargin={sectionPadding} />
-        {CLERK_CONFIGURED ? <AdminLinkRow sectionPadding={sectionPadding} /> : null}
-        {CLERK_CONFIGURED ? <ProjectsLinkRow sectionPadding={sectionPadding} /> : null}
+        {AUTH_CONFIGURED ? <AdminLinkRow sectionPadding={sectionPadding} /> : null}
+        {AUTH_CONFIGURED ? <ProjectsLinkRow sectionPadding={sectionPadding} /> : null}
         <CompanionLinkRow sectionPadding={sectionPadding} />
-        {CLERK_CONFIGURED ? <CostDashboardCard horizontalMargin={sectionPadding} /> : null}
+        {AUTH_CONFIGURED ? <CostDashboardCard horizontalMargin={sectionPadding} /> : null}
         <ProToolsEasyImport horizontalMargin={sectionPadding} />
-        <ProToolsPairingCard horizontalMargin={sectionPadding} />
         <View style={[styles.statsCard, { marginHorizontal: sectionPadding }]}>
           <LinearGradient
             colors={[Colors.gradientStart + '15', Colors.gradientEnd + '08']}

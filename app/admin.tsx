@@ -11,11 +11,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAuth } from "@/lib/creatorhub-auth";
 import Colors from "@/constants/colors";
-import { CLERK_CONFIGURED, useAppUser, type AppUser } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED, useAppUser, type AppUser } from "@/lib/use-app-user";
 import { authedFetch } from "@/lib/authed-fetch";
-import { ProToolsPairingCard } from "@/components/ProToolsPairingCard";
 
 type AdminUsageRow = {
   userId: string | null;
@@ -39,11 +38,11 @@ function formatTokens(n: number): string {
 }
 
 export default function AdminScreen() {
-  if (!CLERK_CONFIGURED) {
+  if (!AUTH_CONFIGURED) {
     return (
       <View style={styles.screen}>
         <Text style={styles.title}>Admin is unavailable</Text>
-        <Text style={styles.subtitle}>Clerk is not configured in this build.</Text>
+        <Text style={styles.subtitle}>CreatorHub authentication is not configured in this build.</Text>
       </View>
     );
   }
@@ -176,7 +175,6 @@ function AdminScreenInner() {
 
       <ChangelogComposer getToken={getToken} />
 
-      <ProToolsPairingCard horizontalMargin={0} getToken={getToken} />
 
       <Text style={styles.section}>Users ({users.length})</Text>
       {users.map((u) => {
@@ -314,7 +312,7 @@ function ChangelogComposer({ getToken }: { getToken: () => Promise<string | null
 
   return (
     <View style={styles.changelogCard}>
-      <Text style={styles.section}>Publish "What's new"</Text>
+      <Text style={styles.section}>Publish “What’s new”</Text>
       <TextInput
         value={title}
         onChangeText={setTitle}

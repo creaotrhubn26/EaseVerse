@@ -24,7 +24,9 @@
       "credentialsSource": "local",
       "node": "22.18.0",
       "env": {
-        "EAS_BUILD_SKIP_LOCKFILE_CHECK": "1"
+        "EAS_BUILD_SKIP_LOCKFILE_CHECK": "1",
+        "EXPO_PUBLIC_API_URL": "https://easeverse.netlify.app",
+        "EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET": "1"
       }
     }
   },

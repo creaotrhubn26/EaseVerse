@@ -12,7 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 import {
   armSession,
   endSession,
@@ -38,14 +38,14 @@ import {
 import { startMesh, type MeshHandle, type MeshSignal } from "@/lib/webrtc-mesh";
 
 export default function LiveSessionScreen() {
-  if (!CLERK_CONFIGURED) return null;
+  if (!AUTH_CONFIGURED) return null;
   return <Inner />;
 }
 
 function Inner() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { useAuth, useUser } = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+  const { useAuth, useUser } = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
   const { getToken } = useAuth();
   const { user } = useUser();
   const [session, setSession] = useState<LiveSession | null>(null);

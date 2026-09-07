@@ -28,6 +28,7 @@ test('E2E workflow: Lyrics -> Sync -> Sing -> Review -> Practice Loop', async ({
   // Seed a remote collab lyrics draft that should match our local song by title.
   const externalTrackId = `pw-track-${Date.now()}`;
   const seed = await request.post('/api/v1/collab/lyrics', {
+    headers: { 'x-api-key': process.env.EXPO_PUBLIC_API_KEY || '' },
     data: {
       externalTrackId,
       projectId: lyricsSyncProjectId,

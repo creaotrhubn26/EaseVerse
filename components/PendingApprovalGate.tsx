@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useClerk } from "@clerk/clerk-expo";
+import { useAuth } from "@/lib/creatorhub-auth";
 import Colors from "@/constants/colors";
 
 type Props = {
@@ -12,7 +12,7 @@ type Props = {
 
 export function PendingApprovalGate({ status, email, onRefresh }: Props) {
   const banned = status === "banned";
-  const { signOut } = useClerk();
+  const { signOut } = useAuth();
   return (
     <View style={styles.container}>
       <View style={[styles.card, banned && styles.cardBanned]}>

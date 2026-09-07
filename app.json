@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/easeverse_logo_App.png",
-    "scheme": "myapp",
+    "scheme": "easeverse",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/easeverse_logo.png",
@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.easeverse.app",
+      "buildNumber": "24",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -55,6 +56,14 @@
         {
           "microphonePermission": "EaseVerse uses the microphone to turn your voice into lyrics.",
           "speechRecognitionPermission": "EaseVerse uses speech recognition to transcribe your singing and speaking into lyrics."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
         }
       ]
     ],

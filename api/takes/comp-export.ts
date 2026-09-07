@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isClerkConfigured, requireAuth, requireAuthOrPairing } from "../_lib/auth.js";
+import { isAuthConfigured, requireAuth, requireAuthOrPairing } from "../_lib/auth.js";
 import { getComp, markCompDelivered, markCompExported } from "../_lib/takes-db.js";
 import { getProjectMembership } from "../_lib/projects-db.js";
 import { isB2Configured, presignUpload, presignDownload } from "../_lib/b2-storage.js";
@@ -13,7 +13,7 @@ const compKey = (compId: string, filename: string) =>
 //  POST  {compId,filename,action:'init'}      → presignert PUT
 //  POST  {compId,filename,action:'finalize'}  → markCompExported(url=proxy)
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!isClerkConfigured()) return res.status(503).json({ error: "Auth is not configured." });
+  if (!isAuthConfigured()) return res.status(503).json({ error: "Auth is not configured." });
 
   // GET = nedlastings-proxy (presignert B2 GET).
   if (req.method === "GET") {

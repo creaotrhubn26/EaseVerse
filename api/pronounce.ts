@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { z } from "zod";
 import { coachPronunciation } from "./_lib/coaching.js";
-import { isClerkConfigured, requireAuth } from "./_lib/auth.js";
+import { isAuthConfigured, requireAuth } from "./_lib/auth.js";
 
 const requestSchema = z.object({
   word: z.string().trim().min(1).max(80),
@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   let userId: string | null = null;
-  if (isClerkConfigured()) {
+  if (isAuthConfigured()) {
     userId = await requireAuth(req, res);
     if (!userId) return;
   }

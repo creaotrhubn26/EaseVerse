@@ -5,18 +5,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { ClerkProvider } from "@clerk/clerk-expo";
+import { CreatorHubAuthProvider } from "@/lib/creatorhub-auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AppProvider } from "@/lib/AppContext";
-import { clerkTokenCache } from "@/lib/clerk-token-cache";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEventListener } from "expo";
 import Colors from "@/constants/colors";
 
-const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 SplashScreen.preventAutoHideAsync();
 
@@ -296,16 +294,7 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      {clerkPublishableKey ? (
-        <ClerkProvider
-          publishableKey={clerkPublishableKey}
-          tokenCache={clerkTokenCache}
-        >
-          {tree}
-        </ClerkProvider>
-      ) : (
-        tree
-      )}
+      <CreatorHubAuthProvider>{tree}</CreatorHubAuthProvider>
     </ErrorBoundary>
   );
 }

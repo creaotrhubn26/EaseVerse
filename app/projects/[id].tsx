@@ -12,7 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 import { Platform } from "react-native";
 import {
   addMember,
@@ -24,6 +24,7 @@ import {
   type ProjectRole,
 } from "@/lib/projects-client";
 import { getActiveSession, startSession } from "@/lib/sessions-client";
+import { ProToolsProjectSyncCard } from "@/components/ProToolsProjectSyncCard";
 
 const ROLE_OPTIONS: { value: ProjectRole; label: string }[] = [
   { value: "vocalist", label: "Vocalist" },
@@ -33,14 +34,14 @@ const ROLE_OPTIONS: { value: ProjectRole; label: string }[] = [
 ];
 
 export default function ProjectDetailScreen() {
-  if (!CLERK_CONFIGURED) return null;
+  if (!AUTH_CONFIGURED) return null;
   return <ProjectDetailInner />;
 }
 
 function ProjectDetailInner() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { useAuth } = require("@clerk/clerk-expo") as typeof import("@clerk/clerk-expo");
+  const { useAuth } = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
   const { getToken } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
@@ -226,6 +227,8 @@ function ProjectDetailInner() {
           <Ionicons name="chevron-forward" size={14} color={activeSessionId ? "#fff" : Colors.gradientStart} />
         </Pressable>
       ) : null}
+
+      <ProToolsProjectSyncCard projectId={project.id} />
 
       <View style={styles.refCard}>
         <Text style={styles.cardLabel}>Reference track</Text>

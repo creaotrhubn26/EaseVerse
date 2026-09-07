@@ -1,16 +1,16 @@
 import React, { useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAuth } from "@/lib/creatorhub-auth";
 import Colors from "@/constants/colors";
 import { authedFetch } from "@/lib/authed-fetch";
 import { normalizeTrackId, parseProToolsSessionInfoText } from "@/lib/protools-parser";
-import { CLERK_CONFIGURED } from "@/lib/use-app-user";
+import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 
 type Props = { horizontalMargin?: number };
 
 export function ProToolsEasyImport(props: Props) {
-  if (!CLERK_CONFIGURED) {
+  if (!AUTH_CONFIGURED) {
     return <ProToolsEasyImportAnonymous {...props} />;
   }
   return <ProToolsEasyImportAuthed {...props} />;
@@ -63,12 +63,16 @@ function ProToolsEasyImportAuthed({ horizontalMargin = 16 }: Props) {
       }
 
       const trackId = normalizeTrackId(parsed.sessionName || file.name.replace(/\.[^.]+$/, ""));
+      const now = new Date();
       const payload = {
+        schemaVersion: 1 as const,
+        eventId: `easeverse-import-${globalThis.crypto?.randomUUID?.() ?? now.getTime()}`,
+        revision: now.getTime(),
         externalTrackId: trackId || "pt-track-" + Date.now(),
         source: "easeverse-easy-import",
         bpm: parsed.bpm,
         markers: parsed.markers,
-        updatedAt: new Date().toISOString(),
+        updatedAt: now.toISOString(),
       };
 
       const token = isSignedIn ? await getToken() : null;

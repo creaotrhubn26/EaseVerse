@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createClerkClient } from "@clerk/backend";
-import { isClerkConfigured, requireAuth } from "../_lib/auth.js";
+import { isAuthConfigured, requireAuth } from "../_lib/auth.js";
 import {
   addProjectMember,
   getProjectMembership,
@@ -9,41 +8,18 @@ import {
   upsertPendingInvite,
   type ProjectRole,
 } from "../_lib/projects-db.js";
+import { findUserByEmail } from "../_lib/users-db.js";
 
 const ROLES: ProjectRole[] = ["producer", "vocalist", "band_member", "mix_engineer", "observer"];
 
-const clerk =
-  process.env.CLERK_SECRET_KEY
-    ? createClerkClient({
-        secretKey: process.env.CLERK_SECRET_KEY,
-        publishableKey:
-          process.env.CLERK_PUBLISHABLE_KEY ||
-          process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-          process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-          "",
-      })
-    : null;
-
-function getOrigin(req: VercelRequest): string {
-  const host = req.headers["x-forwarded-host"] || req.headers.host || "easeverse.vercel.app";
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  return `${proto}://${host}`;
-}
-
 async function resolveUserIdByEmail(email: string): Promise<{ userId: string | null; email: string }> {
   const normalized = email.trim().toLowerCase();
-  if (!clerk) return { userId: null, email: normalized };
-  try {
-    const users = await clerk.users.getUserList({ emailAddress: [normalized] });
-    const user = users.data[0];
-    return { userId: user?.id ?? null, email: normalized };
-  } catch {
-    return { userId: null, email: normalized };
-  }
+  const user = await findUserByEmail(normalized);
+  return { userId: user?.userId ?? null, email: normalized };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!isClerkConfigured()) {
+  if (!isAuthConfigured()) {
     return res.status(503).json({ error: "Auth is not configured." });
   }
   const userId = await requireAuth(req, res);
@@ -59,7 +35,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    // Add member
     const viewer = await getProjectMembership(projectId, userId);
     if (!viewer || viewer.role !== "producer") {
       return res.status(403).json({ error: "Only the producer can invite members" });
@@ -81,17 +56,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         role,
         invitedByUserId: userId,
       });
-      if (clerk) {
-        try {
-          await clerk.invitations.createInvitation({
-            emailAddress: resolved.email,
-            publicMetadata: { projectId, role, pendingInviteId: pending.id },
-            redirectUrl: `${getOrigin(req)}/projects/${projectId}`,
-          });
-        } catch (err) {
-          console.warn("Clerk invitation send failed:", err);
-        }
-      }
       return res.status(202).json({ pending: { id: pending.id, email: resolved.email, role } });
     }
     const member = await addProjectMember({
@@ -109,8 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!viewer || viewer.role !== "producer") {
       return res.status(403).json({ error: "Only the producer can remove members" });
     }
-    const targetUserId =
-      typeof req.query.userId === "string" ? req.query.userId : null;
+    const targetUserId = typeof req.query.userId === "string" ? req.query.userId : null;
     if (!targetUserId) return res.status(400).json({ error: "userId query param required" });
     if (targetUserId === userId) {
       return res.status(400).json({ error: "Owner cannot remove self" });

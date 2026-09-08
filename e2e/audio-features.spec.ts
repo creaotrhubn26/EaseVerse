@@ -161,6 +161,7 @@ test.describe('Audio and Pronunciation Features', () => {
     const response = await page.request.post(`${API_BASE}/api/v1/easepocket/consonant-score`, {
       headers: {
         'Content-Type': 'application/json',
+        'x-api-key': 'easeverse-e2e-local-only',
       },
       data: {
         audioBase64: mockAudioBase64,

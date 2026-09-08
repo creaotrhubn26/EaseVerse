@@ -1,4 +1,5 @@
 import { fetch } from "expo/fetch";
+import { Platform } from "react-native";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 /**
@@ -36,6 +37,14 @@ export function getApiUrl(): string {
     } catch {
       // Fall through to runtime/default resolution.
     }
+  }
+
+  // Native builds have no browser origin. Default to the production API so a
+  // simulator without an explicit override cannot accidentally hit macOS
+  // Control Center/AirPlay on localhost:5000. Local API development must opt in
+  // through EXPO_PUBLIC_API_URL.
+  if (Platform.OS !== "web") {
+    return "https://easeverse.netlify.app/";
   }
 
   const runtimeLocation = (globalThis as { location?: { origin?: string } }).location;

@@ -30,6 +30,22 @@ test("starts sign-in with the shared CreatorHub Workspace OAuth flow", async ({ 
   expect(startPayload).toEqual({ platform: "web" });
 });
 
+test("shows CreatorHub OAuth start failures during a Workspace song handoff", async ({ page }) => {
+  await page.route("**/api/auth/start", (route) =>
+    route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Workspace access denied" }),
+    }),
+  );
+
+  await page.goto("/integrations/creatorhub?creatorhubProjectId=workspace-7");
+  await page.getByRole("button", { name: "Continue with CreatorHub" }).click();
+
+  await expect(page.getByText("Workspace access denied")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with CreatorHub" })).toBeEnabled();
+});
+
 test("exchanges a one-time CreatorHub transfer and stores the shared session", async ({ page }) => {
   let exchangePayload: unknown = null;
   await page.route("**/api/auth/exchange", async (route) => {

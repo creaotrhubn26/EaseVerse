@@ -12,9 +12,19 @@ function one(value: string | string[] | undefined): string {
 
 export default function CreatorHubIntegrationScreen() {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
-  const { getToken, isLoaded, isSignedIn, signIn } = useAuth();
+  const { getToken, isLoaded, isSignedIn, isSigningIn, signIn } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
+
+  const startSignIn = async () => {
+    if (isSigningIn) return;
+    setError(null);
+    try {
+      await signIn();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "CreatorHub login failed.");
+    }
+  };
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || linking) return;
@@ -58,8 +68,17 @@ export default function CreatorHubIntegrationScreen() {
         </Text>
         {!isLoaded || linking ? <ActivityIndicator color={Colors.gradientStart} /> : null}
         {isLoaded && !isSignedIn ? (
-          <Pressable style={styles.button} onPress={() => void signIn()} accessibilityRole="button">
-            <Text style={styles.buttonText}>Continue with CreatorHub</Text>
+          <Pressable
+            style={[styles.button, isSigningIn && styles.buttonDisabled]}
+            onPress={startSignIn}
+            disabled={isSigningIn}
+            accessibilityRole="button"
+          >
+            {isSigningIn ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Continue with CreatorHub</Text>
+            )}
           </Pressable>
         ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -77,6 +96,7 @@ const styles = StyleSheet.create({
   title: { color: Colors.textPrimary, fontFamily: "Inter_700Bold", fontSize: 20 },
   body: { color: Colors.textSecondary, fontFamily: "Inter_500Medium", fontSize: 13, lineHeight: 19, textAlign: "center" },
   button: { minHeight: 44, borderRadius: 10, paddingHorizontal: 18, alignItems: "center", justifyContent: "center", backgroundColor: Colors.gradientStart },
+  buttonDisabled: { opacity: 0.65 },
   buttonText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 13 },
   error: { color: Colors.dangerUnderline, fontFamily: "Inter_500Medium", fontSize: 12, textAlign: "center" },
 });

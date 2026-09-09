@@ -23,7 +23,8 @@ test("PWA manifest uses root scope and legacy /app routes redirect correctly", a
   const swResponse = await request.get("/sw.js");
   expect(swResponse.ok()).toBeTruthy();
   const swText = await swResponse.text();
-  expect(swText).toContain("easeverse-static-v1");
+  expect(swText).toContain('const CACHE_VERSION = "v2"');
+  expect(swText).toContain("codeDestination ? networkFetch : cachedResponse || networkFetch");
 
   await page.goto("/app/", { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/\/$/);

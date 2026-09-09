@@ -1,5 +1,9 @@
-const STATIC_CACHE = "easeverse-static-v1";
-const RUNTIME_CACHE = "easeverse-runtime-v1";
+// Bump the cache generation when the service-worker policy changes. This also
+// removes the first production cache, which could keep an old Expo route
+// bundle active after a deploy until the user manually cleared site data.
+const CACHE_VERSION = "v2";
+const STATIC_CACHE = `easeverse-static-${CACHE_VERSION}`;
+const RUNTIME_CACHE = `easeverse-runtime-${CACHE_VERSION}`;
 const PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -91,7 +95,11 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(() => cachedResponse);
 
-      return cachedResponse || networkFetch;
+      // Route and application code must be network-first so a new Netlify
+      // deploy becomes active on the next load. Immutable visual assets stay
+      // cache-first and still work offline.
+      const codeDestination = ["style", "script", "worker"].includes(request.destination);
+      return codeDestination ? networkFetch : cachedResponse || networkFetch;
     })
   );
 });

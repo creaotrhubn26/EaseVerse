@@ -1,58 +1,28 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-const MAC_DMG_URL =
-  process.env.COMPANION_DOWNLOAD_MAC_DMG ||
-  "https://mzwnzsczjuvu1w1a.public.blob.vercel-storage.com/downloads/easeverse-companion-0.1.0-mac-x64.dmg";
-const MAC_ARM_DMG_URL = process.env.COMPANION_DOWNLOAD_MAC_ARM_DMG || null;
-const WINDOWS_MSI_URL = process.env.COMPANION_DOWNLOAD_WIN_MSI || null;
-const LINUX_APPIMAGE_URL = process.env.COMPANION_DOWNLOAD_LINUX || null;
+const CREATORHUB_API = (process.env.CREATORHUB_API_URL || "https://creatorhub-backend-rtbl.onrender.com").replace(/\/+$/, "");
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  return res.status(200).json({
-    version: "0.1.0",
-    downloads: [
-      MAC_ARM_DMG_URL
-        ? {
-            platform: "macOS",
-            arch: "Apple Silicon (arm64)",
-            url: MAC_ARM_DMG_URL,
-            filename: "easeverse-companion-0.1.0-mac-arm64.dmg",
-          }
-        : null,
-      MAC_DMG_URL
-        ? {
-            platform: "macOS",
-            arch: "Intel (x64)",
-            url: MAC_DMG_URL,
-            filename: "easeverse-companion-0.1.0-mac-x64.dmg",
-            size_mb: 3.4,
-          }
-        : null,
-      WINDOWS_MSI_URL
-        ? {
-            platform: "Windows",
-            arch: "x64",
-            url: WINDOWS_MSI_URL,
-            filename: "easeverse-companion-0.1.0-win-x64.msi",
-          }
-        : null,
-      LINUX_APPIMAGE_URL
-        ? {
-            platform: "Linux",
-            arch: "x64",
-            url: LINUX_APPIMAGE_URL,
-            filename: "easeverse-companion-0.1.0-linux-x86_64.AppImage",
-          }
-        : null,
-    ].filter(Boolean),
-    repo: "https://github.com/creaotrhubn26/EaseVerse",
-    notes: [
-      "Mac build is unsigned — right-click the .app and choose Open the first time to bypass Gatekeeper.",
-      "Windows / Linux installers ship via GitHub Actions when the companion-v* tag is pushed.",
-    ],
-  });
+  try {
+    const upstream = await fetch(`${CREATORHUB_API}/api/protools/companion/release`, {
+      headers: { Accept: "application/json", "User-Agent": "EaseVerse/companion-directory" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!upstream.ok) throw new Error(`upstream_${upstream.status}`);
+    const payload = await upstream.json() as Record<string, unknown>;
+    res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
+    return res.status(200).json({
+      ...payload,
+      product: "CreatorHub Pro Tools Companion",
+      repo: "https://github.com/creaotrhubn26/Creatorhubn-monorepo",
+      managedFrom: "CreatorHub Workspace → Sound Room",
+    });
+  } catch {
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(502).json({ error: "canonical_companion_release_unavailable" });
+  }
 }

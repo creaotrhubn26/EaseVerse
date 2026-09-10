@@ -12,6 +12,7 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import { getApiHeaders, getApiUrl } from "./query-client";
+import { onInvalidCreatorHubSession } from "./auth-session-events";
 
 const AUTH_TOKEN_KEY = "creatorhub_auth_token";
 const AUTH_USER_KEY = "creatorhub_auth_user";
@@ -162,6 +163,10 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
     setToken(null);
     setUser(null);
   }, []);
+
+  useEffect(() => onInvalidCreatorHubSession(async () => {
+    await clearSession();
+  }), [clearSession]);
 
   useEffect(() => {
     let cancelled = false;

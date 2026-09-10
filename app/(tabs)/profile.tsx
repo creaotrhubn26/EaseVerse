@@ -22,7 +22,6 @@ import Toast from '@/components/Toast';
 import LogoHeader from '@/components/LogoHeader';
 import HowToUseEaseVerse from '@/components/HowToUseEaseVerse';
 import { AccountSection } from '@/components/AccountSection';
-import { ProToolsEasyImport } from '@/components/ProToolsEasyImport';
 import { CostDashboardCard } from '@/components/CostDashboardCard';
 import { AUTH_CONFIGURED, useAppUser } from '@/lib/use-app-user';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
@@ -946,7 +945,6 @@ export default function ProfileScreen() {
         {AUTH_CONFIGURED ? <ProjectsLinkRow sectionPadding={sectionPadding} /> : null}
         <CompanionLinkRow sectionPadding={sectionPadding} />
         {AUTH_CONFIGURED ? <CostDashboardCard horizontalMargin={sectionPadding} /> : null}
-        <ProToolsEasyImport horizontalMargin={sectionPadding} />
         <View style={[styles.statsCard, { marginHorizontal: sectionPadding }]}>
           <LinearGradient
             colors={[Colors.gradientStart + '15', Colors.gradientEnd + '08']}

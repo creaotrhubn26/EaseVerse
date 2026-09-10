@@ -1,4 +1,5 @@
 import { getApiHeaders, getApiUrl } from "./query-client";
+import { inspectCreatorHubAuthResponse } from "./auth-session-events";
 
 export async function authedFetch(
   path: string,
@@ -11,5 +12,7 @@ export async function authedFetch(
     Object.assign(headers, init.headers as Record<string, string>);
   }
   if (token) headers.Authorization = `Bearer ${token}`;
-  return fetch(`${getApiUrl()}${path}`, { credentials: "include", ...init, headers });
+  const response = await fetch(`${getApiUrl()}${path}`, { credentials: "include", ...init, headers });
+  await inspectCreatorHubAuthResponse(response);
+  return response;
 }

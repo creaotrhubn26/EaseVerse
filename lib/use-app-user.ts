@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/creatorhub-auth";
-import { getApiHeaders, getApiUrl } from "./query-client";
+import { getApiHeaders } from "./query-client";
+import { authedFetch } from "./authed-fetch";
 
 export type AppUser = {
   userId: string;
@@ -31,10 +32,9 @@ export function useAppUser(): { user: AppUser | null; loading: boolean; reload: 
         setUser(null);
         return;
       }
-      const response = await fetch(`${getApiUrl()}/api/users/me`, {
+      const response = await authedFetch("/api/users/me", token, {
         headers: getApiHeaders({
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         }),
       });
       if (!response.ok) {

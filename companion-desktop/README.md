@@ -1,64 +1,9 @@
-# EaseVerse Studio Companion (Desktop)
+# Retired EaseVerse desktop source
 
-Cross-platform Tauri 2.x app for Mac, Windows, and Linux. Watches the Pro
-Tools `Audio Files/` folder, debounces unstable writes, and uploads each
-new WAV/AIFF to EaseVerse via direct-blob-upload using a short-lived
-pairing token from `/admin`.
+This directory is a temporary read-only source archive and cannot be built.
+Its package, Cargo manifest, CI release workflow and pairing API have been
+removed or retired.
 
-## What this replaces
-
-The CLI in `companion/` did the same thing but required `git clone &&
-npm install`. This Tauri app ships as a native installer (~10 MB) so
-non-technical studio users can double-click and go.
-
-## Local dev (requires Rust toolchain)
-
-```bash
-# Install Rust if you don't have it: https://rustup.rs
-cd companion-desktop
-npm install
-npm run dev
-```
-
-## Build production installers
-
-CI builds for all three platforms automatically on tag push — see
-`.github/workflows/companion-desktop.yml`. To build locally:
-
-```bash
-npm run build
-# Output lands in src-tauri/target/release/bundle/
-```
-
-## One-click "Import to Pro Tools"
-
-The app ships with two helper scripts that automate Pro Tools' "Import
-Session Data" dialog so a producer can click one button instead of
-walking the File menu by hand. Works in Pro Tools 12 / 2018 / 2023 —
-no Avid Developer, AAX, VST3, or Scripting SDK access required.
-
-**Windows:** install AutoHotkey 1.1 or 2.0 (https://www.autohotkey.com).
-Companion calls `AutoHotkey.exe scripts/easeverse-import.ahk
-<markers.txt>` for you.
-
-**macOS:** grant Accessibility permission on first run
-(System Settings → Privacy & Security → Accessibility → add
-EaseVerse Companion). Companion calls
-`osascript scripts/easeverse-import.applescript <markers.txt>`.
-
-The button is disabled until you set an Export folder; it imports the
-latest `easeverse-markers.txt` from that folder.
-
-## How a studio uses the app
-
-1. Producer opens `https://easeverse.vercel.app/admin`, clicks
-   **Generate pairing code**, copies the `pair_…` token.
-2. Producer launches **EaseVerse Companion**, pastes the token, picks
-   the Pro Tools `Audio Files/` folder, clicks **Start watching**.
-3. Every new stable WAV is uploaded to EaseVerse and shows up in the
-   booth view at `https://easeverse.vercel.app/booth/<trackId>` for the
-   vocalist.
-
-Pairing tokens expire after 15 minutes. Generate a new one any time —
-the companion just needs a fresh token; folder/track settings are
-remembered between launches.
+The canonical cross-platform product is **CreatorHub Pro Tools Companion** in
+`creaotrhubn26/Creatorhubn-monorepo`, managed from CreatorHub Workspace →
+Sound Room. New macOS and Windows releases must be built there.

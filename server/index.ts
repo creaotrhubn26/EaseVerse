@@ -309,7 +309,10 @@ function configureExpoAndLanding(app: express.Application) {
 
     if (req.path === "/") {
       if (hasWebBuild) {
-        return res.sendFile(webIndexPath);
+        // `send` treats hidden segments anywhere in an absolute path as a
+        // dotfile. Allow this one explicit file so local git worktrees such as
+        // `.worktrees/android-release` can serve the SPA during E2E runs.
+        return res.sendFile(webIndexPath, { dotfiles: "allow" });
       }
       return serveLandingPage({
         req,
@@ -339,7 +342,7 @@ function configureExpoAndLanding(app: express.Application) {
       if (platform && (platform === "ios" || platform === "android")) {
         return next();
       }
-      return res.sendFile(webIndexPath);
+      return res.sendFile(webIndexPath, { dotfiles: "allow" });
     });
 
     log('PWA web app available at "/"');

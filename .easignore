@@ -1,5 +1,17 @@
 node_modules/
+android/
+ios/
+.expo/
+.netlify/
+web-build/
+server_dist/
+netlify-functions/
+test-results/
+playwright-report/
 ios-creds/
 credentials.json
+.env
+.env.*
+!.env.example
 .git/
 companion-desktop/

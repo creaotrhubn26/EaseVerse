@@ -24,9 +24,23 @@
       "credentialsSource": "local",
       "node": "22.18.0",
       "env": {
-        "EAS_BUILD_SKIP_LOCKFILE_CHECK": "1",
         "EXPO_PUBLIC_API_URL": "https://easeverse.netlify.app",
         "EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET": "1"
+      }
+    },
+    "production-android": {
+      "extends": "production",
+      "credentialsSource": "remote",
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "android-preview": {
+      "extends": "production-android",
+      "autoIncrement": false,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
       }
     }
   },
@@ -38,6 +52,12 @@
         "appleTeamId": "9TAUZCPK95",
         "ascApiKeyPath": "./ios-creds/asc-key.p8",
         "ascAppId": "6780806167"
+      }
+    },
+    "production-android": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
       }
     }
   }

@@ -28,6 +28,10 @@ import { formatTimestamp, parseProducerNote } from "@/lib/parse-timestamps";
 import { listProjects, type ProjectListItem } from "@/lib/projects-client";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
 import {
+  UniversalAudioPlayer,
+  type UniversalAudioPlayerHandle,
+} from "@/components/UniversalAudioPlayer";
+import {
   createRegion,
   deleteRegion,
   listRegions,
@@ -272,8 +276,8 @@ function TakeRow({
   const [noteDirty, setNoteDirty] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [decisionUpdating, setDecisionUpdating] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<TakeWaveformHandle | null>(null);
+  const nativePlayerRef = useRef<UniversalAudioPlayerHandle | null>(null);
   const currentTimeRef = useRef<number>(0);
   const noteSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const memoRecorderRef = useRef<MediaRecorder | null>(null);
@@ -460,7 +464,7 @@ function TakeRow({
   }
 
   function insertTimestampAtCursor() {
-    const seconds = currentTimeRef.current || audioRef.current?.currentTime || 0;
+    const seconds = currentTimeRef.current || nativePlayerRef.current?.getCurrentTime() || 0;
     const stamp = `@${formatTimestamp(seconds)} `;
     const { start, end } = noteSelectionRef.current;
     const next = noteDraft.slice(0, start) + stamp + noteDraft.slice(end);
@@ -693,13 +697,8 @@ function TakeRow({
             </Pressable>
           ) : null}
         </View>
-        {take.producerMemoUrl && !memoRecording && Platform.OS === "web" ? (
-          <audio
-            controls
-            preload="none"
-            src={take.producerMemoUrl}
-            style={{ width: "100%", height: 28, marginTop: 2 }}
-          />
+        {take.producerMemoUrl && !memoRecording ? (
+          <UniversalAudioPlayer url={take.producerMemoUrl} label="Producer memo" />
         ) : null}
         {Platform.OS === "web" && take.storageUrl && take.status === "done" ? (
           <TakeWaveform
@@ -722,6 +721,8 @@ function TakeRow({
               currentTimeRef.current = s;
             }}
           />
+        ) : take.storageUrl && take.status === "done" ? (
+          <UniversalAudioPlayer ref={nativePlayerRef} url={take.storageUrl} label={take.filename} />
         ) : null}
         {pendingRegion ? (
           <View style={styles.regionPrompt}>
@@ -761,13 +762,16 @@ function TakeRow({
                   {r.label || "(no label)"} · {formatTimestamp(r.startSec)}–{formatTimestamp(r.endSec)}
                 </Text>
                 <Pressable
-                  onPress={() => waveformRef.current?.loopRegion(r.startSec, r.endSec)}
+                  onPress={() => {
+                    if (Platform.OS === "web") waveformRef.current?.loopRegion(r.startSec, r.endSec);
+                    else void nativePlayerRef.current?.seekTo(r.startSec);
+                  }}
                   style={styles.regionBtn}
                   accessibilityRole="button"
                   accessibilityLabel="Loop region"
                 >
-                  <Ionicons name="repeat" size={11} color={Colors.gradientStart} />
-                  <Text style={styles.regionBtnText}>Loop</Text>
+                  <Ionicons name={Platform.OS === "web" ? "repeat" : "play"} size={11} color={Colors.gradientStart} />
+                  <Text style={styles.regionBtnText}>{Platform.OS === "web" ? "Loop" : "Play"}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => removeRegion(r.id)}
@@ -779,14 +783,14 @@ function TakeRow({
                 </Pressable>
               </View>
             ))}
-            <Pressable
+            {Platform.OS === "web" ? <Pressable
               onPress={() => waveformRef.current?.clearLoop()}
               style={[styles.regionBtn, { alignSelf: "flex-start" }]}
               accessibilityRole="button"
               accessibilityLabel="Stop looping"
             >
               <Text style={[styles.regionBtnText, { color: Colors.textSecondary }]}>Stop loop</Text>
-            </Pressable>
+            </Pressable> : null}
           </View>
         ) : null}
         <TextInput

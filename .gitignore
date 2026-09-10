@@ -56,7 +56,6 @@ netlify-functions/
 .claude/
 credentials.json
 ios-creds/
-package-lock.json
 
 # Local Netlify folder
 .netlify

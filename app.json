@@ -4,7 +4,7 @@
     "slug": "easeverse",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/easeverse_logo_App.png",
+    "icon": "./assets/images/web/easeverse_logo_App.png",
     "scheme": "easeverse",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -24,7 +24,7 @@
       "package": "com.easeverse.app",
       "adaptiveIcon": {
         "backgroundColor": "#0E0F14",
-        "foregroundImage": "./assets/images/easeverse_logo_App.png",
+        "foregroundImage": "./assets/images/web/easeverse_logo_App.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },

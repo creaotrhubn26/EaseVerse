@@ -25,6 +25,7 @@ import {
 } from "@/lib/projects-client";
 import { getActiveSession, startSession } from "@/lib/sessions-client";
 import { ProToolsProjectSyncCard } from "@/components/ProToolsProjectSyncCard";
+import { UniversalAudioPlayer } from "@/components/UniversalAudioPlayer";
 
 const ROLE_OPTIONS: { value: ProjectRole; label: string }[] = [
   { value: "vocalist", label: "Vocalist" },
@@ -240,14 +241,7 @@ function ProjectDetailInner() {
                 ? ` · ${project.referenceTrackDurationSec.toFixed(1)}s`
                 : ""}
             </Text>
-            {Platform.OS === "web" ? (
-              <audio
-                controls
-                preload="none"
-                src={project.referenceTrackUrl}
-                style={{ width: "100%", height: 32 }}
-              />
-            ) : null}
+            <UniversalAudioPlayer url={project.referenceTrackUrl} label={project.referenceTrackName || "Reference track"} />
           </View>
         ) : (
           <Text style={styles.cardHint}>

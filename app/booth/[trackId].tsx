@@ -20,6 +20,10 @@ import { currentPushEndpoint, subscribeToPush, unsubscribeFromPush } from "@/lib
 import { castVote, clearVote, fetchVoteTally, type ConsensusVote } from "@/lib/takes-client";
 import { AUTH_CONFIGURED } from "@/lib/use-app-user";
 import { TakeWaveform, type TakeWaveformHandle } from "@/components/TakeWaveform";
+import {
+  UniversalAudioPlayer,
+  type UniversalAudioPlayerHandle,
+} from "@/components/UniversalAudioPlayer";
 
 type BoothRegion = {
   id: string;
@@ -263,18 +267,10 @@ export default function BoothScreen() {
             </Text>
           </View>
 
-          {data?.referenceTrack && Platform.OS === "web" ? (
+          {data?.referenceTrack ? (
             <View style={styles.refCard}>
               <Text style={styles.sectionLabel}>Reference</Text>
-              <Text style={styles.refName} numberOfLines={1}>
-                {data.referenceTrack.name || "Reference track"}
-              </Text>
-              <audio
-                controls
-                preload="none"
-                src={data.referenceTrack.url}
-                style={{ width: "100%", height: 32, marginTop: 4 }}
-              />
+              <UniversalAudioPlayer url={data.referenceTrack.url} label={data.referenceTrack.name || "Reference track"} />
             </View>
           ) : null}
 
@@ -300,8 +296,8 @@ function useBoothAuth(): { getToken: () => Promise<string | null> } {
 }
 
 function TakeCard({ take }: { take: BoothTake }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<TakeWaveformHandle | null>(null);
+  const nativePlayerRef = useRef<UniversalAudioPlayerHandle | null>(null);
   const noteSegments = parseProducerNote(take.producerNote);
   const noteMarkers = noteSegments
     .filter((s): s is { kind: "timestamp"; raw: string; seconds: number } => s.kind === "timestamp")
@@ -366,10 +362,10 @@ function TakeCard({ take }: { take: BoothTake }) {
       waveformRef.current.play();
       return;
     }
-    const el = audioRef.current;
-    if (!el) return;
-    el.currentTime = seconds;
-    void el.play().catch(() => undefined);
+    if (nativePlayerRef.current) {
+      void nativePlayerRef.current.seekTo(seconds);
+      return;
+    }
   }
 
   return (
@@ -398,8 +394,10 @@ function TakeCard({ take }: { take: BoothTake }) {
             }))}
             height={48}
           />
+        ) : take.audioUrl ? (
+          <UniversalAudioPlayer ref={nativePlayerRef} url={take.audioUrl} label={take.filename} />
         ) : null}
-        {take.regions.length > 0 && Platform.OS === "web" ? (
+        {take.regions.length > 0 ? (
           <View style={styles.regionList}>
             <Text style={styles.regionsHeader}>Producer asks for:</Text>
             {take.regions.map((r) => (
@@ -408,32 +406,33 @@ function TakeCard({ take }: { take: BoothTake }) {
                   {r.label || "Section"} · {formatTimestamp(r.startSec)}–{formatTimestamp(r.endSec)}
                 </Text>
                 <Pressable
-                  onPress={() => waveformRef.current?.loopRegion(r.startSec, r.endSec)}
+                  onPress={() => {
+                    if (Platform.OS === "web") waveformRef.current?.loopRegion(r.startSec, r.endSec);
+                    else void nativePlayerRef.current?.seekTo(r.startSec);
+                  }}
                   style={styles.loopBtn}
                   accessibilityRole="button"
                   accessibilityLabel={`Loop ${r.label || "section"}`}
                 >
-                  <Ionicons name="repeat" size={11} color={Colors.gradientStart} />
-                  <Text style={styles.loopBtnText}>Loop</Text>
+                  <Ionicons name={Platform.OS === "web" ? "repeat" : "play"} size={11} color={Colors.gradientStart} />
+                  <Text style={styles.loopBtnText}>{Platform.OS === "web" ? "Loop" : "Play"}</Text>
                 </Pressable>
               </View>
             ))}
-            <Pressable
+            {Platform.OS === "web" ? <Pressable
               onPress={() => waveformRef.current?.clearLoop()}
               style={[styles.loopBtn, { alignSelf: "flex-start" }]}
             >
               <Text style={[styles.loopBtnText, { color: Colors.textSecondary }]}>Stop loop</Text>
-            </Pressable>
+            </Pressable> : null}
           </View>
         ) : null}
-        {take.producerMemoUrl && Platform.OS === "web" ? (
+        {take.producerMemoUrl ? (
           <View style={styles.memoBlock}>
             <Ionicons name="mic" size={14} color={Colors.gradientMid} />
-            <audio
-              controls
-              src={take.producerMemoUrl}
-              style={{ flex: 1, height: 32 }}
-            />
+            <View style={{ flex: 1 }}>
+              <UniversalAudioPlayer url={take.producerMemoUrl} label="Producer memo" />
+            </View>
             {take.producerMemoDurationSec ? (
               <Text style={styles.memoDuration}>
                 {Math.round(take.producerMemoDurationSec)}s

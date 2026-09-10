@@ -83,8 +83,8 @@ for (const sourceFile of sourceFiles) {
   );
 }
 
-const cronSource =
-  `import sourceHandler from "../api/cron/process-queued-takes.js";\n` +
+function scheduledSource(sourcePath, schedule) {
+  return `import sourceHandler from ${JSON.stringify(sourcePath)};\n` +
   `import { adaptVercelHandler } from "../netlify/vercel-adapter.js";\n\n` +
   `const handler = adaptVercelHandler(sourceHandler);\n\n` +
   `export default function scheduled(request, context) {\n` +
@@ -94,11 +94,15 @@ const cronSource =
   `  headers.set("Authorization", \`Bearer \${secret}\`);\n` +
   `  return handler(new Request(request, { headers }), context);\n` +
   `}\n\n` +
-  `export const config = { schedule: "*/5 * * * *" };\n`;
-await fs.writeFile(
-  path.join(outputRoot, "process-queued-takes-scheduled.mts"),
-  cronSource,
-  "utf8",
-);
+  `export const config = { schedule: ${JSON.stringify(schedule)} };\n`;
+}
 
-console.log(`Generated ${sourceFiles.length} HTTP functions and 1 scheduled function.`);
+const scheduledFunctions = [
+  ["process-queued-takes-scheduled.mts", "../api/cron/process-queued-takes.js", "*/5 * * * *"],
+  ["process-creatorhub-outbox-scheduled.mts", "../api/cron/process-creatorhub-outbox.js", "*/2 * * * *"],
+];
+for (const [filename, sourcePath, schedule] of scheduledFunctions) {
+  await fs.writeFile(path.join(outputRoot, filename), scheduledSource(sourcePath, schedule), "utf8");
+}
+
+console.log(`Generated ${sourceFiles.length} HTTP functions and ${scheduledFunctions.length} scheduled functions.`);

@@ -38,18 +38,16 @@ Database:
 - `npm run db:push` — apply Drizzle schema to Postgres (requires `DATABASE_URL`)
 - Schema lives in `shared/schema.ts`; SQL migrations in `migrations/`
 
-Pro Tools companion (separate process, same repo):
-- `npm run companion:dev` — start the bridge (`companion/src/index.ts`)
-- `npm run companion:typecheck` — uses `companion/tsconfig.json`
-- `npm run companion:demo` — parse the bundled sample and push to the API
-- `npm run companion:healthcheck` / `:ci` — deterministic end-to-end verification
+Pro Tools integration is owned by CreatorHub Workspace → Sound Room and the
+`apps/creatorhub-protools-companion` package in Creatorhubn-monorepo. The old
+EaseVerse companion folders are read-only source archives.
 
 ## Architecture
 
 ### Two TypeScript projects in one repo
 
 - The Expo app uses the root `tsconfig.json` (extends `expo/tsconfig.base`, paths `@/*` → repo root, `@shared/*` → `./shared/*`). `EaseVerse/**` is excluded — do not create files under that path.
-- The companion is a separate project under `companion/` with its own `tsconfig.json`. The root typecheck does not cover it; run `npm run companion:typecheck` separately.
+- The canonical Companion lives in Creatorhubn-monorepo and is verified/released from there.
 - `shared/` is intentionally shared by frontend, backend, and companion (types, Zod schemas, scoring helpers). Treat it as a contract surface.
 
 ### Frontend (Expo Router, file-based)

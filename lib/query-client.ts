@@ -1,6 +1,7 @@
 import { fetch } from "expo/fetch";
 import { Platform } from "react-native";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { inspectCreatorHubAuthResponse } from "./auth-session-events";
 
 /**
  * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
@@ -110,6 +111,8 @@ export async function apiRequest(
     credentials: "include",
   });
 
+  await inspectCreatorHubAuthResponse(res);
+
   await throwIfResNotOk(res);
   return res;
 }
@@ -127,6 +130,8 @@ export const getQueryFn: <T>(options: {
       headers: getApiHeaders(),
       credentials: "include",
     });
+
+    await inspectCreatorHubAuthResponse(res);
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;

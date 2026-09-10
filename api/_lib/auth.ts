@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { creatorHubUrl } from "./auth-upstream.js";
-import { resolvePairingToken } from "./pairing-db.js";
 import { readCreatorHubSessionCookie } from "./auth-cookie.js";
 
 export type CreatorHubAuthUser = {
@@ -128,12 +127,10 @@ export async function requireAuthOrPairing(
     return null;
   }
   if (token.startsWith("pair_")) {
-    const record = await resolvePairingToken(token);
-    if (!record) {
-      res.status(401).json({ error: "Invalid or expired pairing token" });
-      return null;
-    }
-    return record.userId;
+    res.status(401).json({
+      error: "Legacy EaseVerse Companion tokens are retired. Pair CreatorHub Pro Tools Companion from Workspace Sound Room.",
+    });
+    return null;
   }
   return requireAuth(req, res);
 }

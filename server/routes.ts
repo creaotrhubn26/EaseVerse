@@ -36,7 +36,6 @@ import {
 } from "./whisper-stt";
 import { isGeminiAvailable } from "./gemini-coach";
 import { isClaudeAvailable } from "./claude-coach";
-import { createPairingToken, isPairingTokenValid } from "./pairing-tokens";
 import {
   coachPronunciationWithFallback,
   type PronounceResult,
@@ -1028,11 +1027,6 @@ function enforceOptionalApiKey(
   const expectedKey = process.env[envVarName];
   const providedKey = extractApiKey(req);
 
-  // Companion pairing tokens are accepted in place of EXTERNAL_API_KEY only.
-  if (envVarName === "EXTERNAL_API_KEY" && providedKey && isPairingTokenValid(providedKey)) {
-    return true;
-  }
-
   if (!expectedKey) {
     if (options?.required) {
       res
@@ -1996,12 +1990,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/v1/collab/protools", handleCollabProToolsSyncUpsert);
 
   app.post("/api/v1/companion/pairing", (_req: Request, res: Response) => {
-    const entry = createPairingToken();
-    res.json({
-      token: entry.token,
-      expiresAt: new Date(entry.expiresAt).toISOString(),
-      ttlSeconds: Math.round((entry.expiresAt - Date.now()) / 1000),
-      usage: 'export EASEVERSE_API_KEY=$TOKEN && npm run companion:dev',
+    res.status(410).json({
+      error: "Legacy EaseVerse Companion pairing is retired.",
+      product: "CreatorHub Pro Tools Companion",
+      managedFrom: "CreatorHub Workspace → Sound Room",
     });
   });
   app.post("/api/v1/learning/session", handleLearningSessionIngest);

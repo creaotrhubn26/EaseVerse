@@ -12,6 +12,7 @@ import {
   normalizeTitle,
   parseCollabItem,
   resolveLyricsSyncConfig,
+  shouldUseLyricsRealtimeSocket,
 } from './collab-lyrics';
 
 interface AppContextValue {
@@ -364,14 +365,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [runAutoLyricsSync]);
 
   useEffect(() => {
-    if (isLoading || typeof WebSocket === 'undefined') {
+    if (isLoading) {
       return;
     }
 
     runAutoLyricsSync();
 
-    if (process.env.EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET === '1') {
-      return;
+    if (
+      typeof WebSocket === 'undefined' ||
+      !shouldUseLyricsRealtimeSocket(apiBaseUrl)
+    ) {
+      const pollTimer = setInterval(() => {
+        runAutoLyricsSyncRef.current();
+      }, AUTO_LYRICS_SYNC_THROTTLE_MS);
+      return () => clearInterval(pollTimer);
     }
 
     const wsUrl = buildLyricsRealtimeSocketUrl(apiBaseUrl, lyricsSyncConfig);

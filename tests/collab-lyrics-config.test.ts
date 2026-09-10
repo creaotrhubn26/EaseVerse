@@ -4,12 +4,14 @@ import {
   buildLyricsRealtimeSocketUrl,
   buildLyricsSyncRoute,
   resolveLyricsSyncConfig,
+  shouldUseLyricsRealtimeSocket,
 } from "../lib/collab-lyrics";
 
 const ORIGINAL_ENV = {
   source: process.env.EXPO_PUBLIC_LYRICS_SYNC_SOURCE,
   projectId: process.env.EXPO_PUBLIC_LYRICS_SYNC_PROJECT_ID,
   apiKey: process.env.EXPO_PUBLIC_API_KEY,
+  disableSocket: process.env.EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET,
 };
 
 function clearRuntimeOverrides() {
@@ -35,6 +37,12 @@ function resetEnv() {
     delete process.env.EXPO_PUBLIC_API_KEY;
   } else {
     process.env.EXPO_PUBLIC_API_KEY = ORIGINAL_ENV.apiKey;
+  }
+
+  if (ORIGINAL_ENV.disableSocket === undefined) {
+    delete process.env.EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET;
+  } else {
+    process.env.EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET = ORIGINAL_ENV.disableSocket;
   }
 }
 
@@ -111,4 +119,28 @@ test("explicit config is applied to sync route and websocket URL", () => {
     socketUrl,
     "wss://easeverse.test/api/v1/ws?source=explicit-source&projectId=explicit-project&apiKey=explicit-key"
   );
+});
+
+test("Netlify uses HTTP polling because Functions cannot host WebSockets", () => {
+  delete process.env.EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET;
+
+  assert.equal(
+    shouldUseLyricsRealtimeSocket("https://easeverse.netlify.app"),
+    false
+  );
+  assert.equal(
+    shouldUseLyricsRealtimeSocket("https://api.easeverse.example"),
+    true
+  );
+});
+
+test("the explicit socket disable flag takes precedence on any host", () => {
+  assert.equal(
+    shouldUseLyricsRealtimeSocket("https://api.easeverse.example", "1"),
+    false
+  );
+});
+
+test("an invalid API base falls back safely without a WebSocket", () => {
+  assert.equal(shouldUseLyricsRealtimeSocket("not a URL"), false);
 });

@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import { NATIVE_CALLBACK_URL, useAuth } from "@/lib/creatorhub-auth";
+import { safeCreatorHubAuthNextPath } from "@/lib/auth-return";
 
 function valueOf(value: string | string[] | undefined): string | null {
   return Array.isArray(value) ? value[0] ?? null : value ?? null;
@@ -15,6 +16,7 @@ export default function AuthCallbackScreen() {
     chGoogleStatus?: string;
     chGoogleTransfer?: string;
     chGoogleMessage?: string;
+    next?: string;
   }>();
   const { completeSignIn, isLoaded } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -24,12 +26,14 @@ export default function AuthCallbackScreen() {
     const status = valueOf(params.chGoogleStatus);
     const transferId = valueOf(params.chGoogleTransfer);
     const message = valueOf(params.chGoogleMessage);
+    const next = safeCreatorHubAuthNextPath(valueOf(params.next));
 
     if (Platform.OS === "web" && native && typeof window !== "undefined") {
       const callback = new URL(NATIVE_CALLBACK_URL);
       if (status) callback.searchParams.set("chGoogleStatus", status);
       if (transferId) callback.searchParams.set("chGoogleTransfer", transferId);
       if (message) callback.searchParams.set("chGoogleMessage", message);
+      if (next) callback.searchParams.set("next", next);
       window.location.replace(callback.toString());
       return;
     }
@@ -47,7 +51,7 @@ export default function AuthCallbackScreen() {
     let cancelled = false;
     void completeSignIn(transferId)
       .then(() => {
-        if (!cancelled) router.replace("/(tabs)");
+        if (!cancelled) router.replace((next || "/(tabs)") as never);
       })
       .catch((reason) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "Login failed.");
@@ -55,7 +59,7 @@ export default function AuthCallbackScreen() {
     return () => {
       cancelled = true;
     };
-  }, [completeSignIn, isLoaded, params.chGoogleMessage, params.chGoogleStatus, params.chGoogleTransfer, params.native]);
+  }, [completeSignIn, isLoaded, params.chGoogleMessage, params.chGoogleStatus, params.chGoogleTransfer, params.native, params.next]);
 
   return (
     <View style={styles.container}>

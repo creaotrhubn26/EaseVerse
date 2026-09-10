@@ -88,6 +88,63 @@ test("exchanges a one-time CreatorHub transfer and stores the shared session", a
   expect(exchangePayload).toEqual({ transferId, platform: "web" });
 });
 
+test("resumes the exact Workspace project after a one-time SSO handoff", async ({ page }) => {
+  let contextPayload: unknown = null;
+  await page.route("**/api/auth/exchange", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      headers: {
+        "set-cookie": "easeverse_session=e2e-http-only; HttpOnly; Path=/; SameSite=Lax",
+      },
+      body: JSON.stringify({
+        user: {
+          id: "workspace-user-42",
+          email: "producer@example.com",
+          name: "Music Producer",
+          role: "music_producer",
+        },
+      }),
+    }),
+  );
+  await page.route("**/api/integrations/creatorhub/context", async (route) => {
+    contextPayload = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        linked: true,
+        project: { id: "ease-project-sso", name: "CreatorHub Sound Room E2E" },
+      }),
+    });
+  });
+  await page.route("**/api/projects/**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        project: { id: "ease-project-sso", name: "CreatorHub Sound Room E2E" },
+        members: [],
+      }),
+    }),
+  );
+
+  const next = `/integrations/creatorhub?${new URLSearchParams({
+    creatorhubProjectId: "workspace-7",
+    audioReviewProjectId: "550e8400-e29b-41d4-a716-446655440001",
+    projectName: "CreatorHub Sound Room E2E",
+  })}`;
+  await page.goto(`/auth/callback?${new URLSearchParams({
+    chGoogleStatus: "success",
+    chGoogleTransfer: transferId,
+    next,
+  })}`);
+
+  await expect(page).toHaveURL(/\/projects\/ease-project-sso/, { timeout: 15_000 });
+  expect(contextPayload).toEqual({
+    creatorhubProjectId: "workspace-7",
+    audioReviewProjectId: "550e8400-e29b-41d4-a716-446655440001",
+    projectName: "CreatorHub Sound Room E2E",
+  });
+});
+
 test("opens the exact Workspace song as an authenticated EaseVerse project", async ({ page }) => {
   let contextPayload: unknown = null;
   let authorizationHeader: string | undefined;

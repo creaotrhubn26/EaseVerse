@@ -189,3 +189,20 @@ export function buildLyricsRealtimeSocketUrl(
     return null;
   }
 }
+
+export function shouldUseLyricsRealtimeSocket(
+  apiBaseUrl: string,
+  disabledFlag = process.env.EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET
+): boolean {
+  if (disabledFlag === "1") {
+    return false;
+  }
+
+  try {
+    // Netlify Functions do not accept persistent WebSocket upgrades. Keep the
+    // HTTP sync path active there instead of retrying a guaranteed 404 forever.
+    return !new URL(apiBaseUrl).hostname.toLowerCase().endsWith(".netlify.app");
+  } catch {
+    return false;
+  }
+}

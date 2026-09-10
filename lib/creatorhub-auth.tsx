@@ -13,6 +13,7 @@ import React, {
 import { Platform } from "react-native";
 import { getApiHeaders, getApiUrl } from "./query-client";
 import { onInvalidCreatorHubSession } from "./auth-session-events";
+import { safeCreatorHubAuthNextPath } from "./auth-return";
 
 const AUTH_TOKEN_KEY = "creatorhub_auth_token";
 const AUTH_USER_KEY = "creatorhub_auth_user";
@@ -232,11 +233,15 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
     setIsSigningIn(true);
     try {
       const platform = Platform.OS === "web" ? "web" : "native";
+      const runtimeLocation = (globalThis as { location?: { pathname?: string; search?: string } }).location;
+      const next = Platform.OS === "web"
+        ? safeCreatorHubAuthNextPath(`${runtimeLocation?.pathname ?? ""}${runtimeLocation?.search ?? ""}`)
+        : null;
       const response = await fetch(apiUrl("/api/auth/start"), {
         method: "POST",
         credentials: "include",
         headers: getApiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ platform }),
+        body: JSON.stringify({ platform, ...(next ? { next } : {}) }),
       });
       const payload = await readResponse(response);
       const authorizationUrl = stringValue(payload.authorizationUrl);

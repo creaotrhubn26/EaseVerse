@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { creatorHubUrl, easeVersePublicOrigin, readJson } from "../_lib/auth-upstream.js";
+import { safeCreatorHubAuthNextPath } from "../../lib/auth-return.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Cache-Control", "no-store");
@@ -12,6 +13,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!upstreamUrl) return res.status(503).json({ error: "CreatorHub auth is not configured" });
   const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
   const platform = body.platform === "native" ? "native" : "web";
+  const next = safeCreatorHubAuthNextPath(body.next);
+  const callback = new URL("/auth/callback", easeVersePublicOrigin(req));
+  if (platform === "native") callback.searchParams.set("native", "1");
+  if (next) callback.searchParams.set("next", next);
 
   try {
     const response = await fetch(upstreamUrl, {
@@ -20,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         mode: "login",
         browserOrigin: easeVersePublicOrigin(req),
-        returnPath: platform === "native" ? "/auth/callback?native=1" : "/auth/callback",
+        returnPath: `${callback.pathname}${callback.search}`,
       }),
       signal: AbortSignal.timeout(12_000),
     });

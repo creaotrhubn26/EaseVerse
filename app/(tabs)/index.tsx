@@ -863,6 +863,20 @@ export default function SingScreen() {
   const transportButtonSize = tierValue(responsive.tier, [50, 54, 58, 66, 78, 94, 112]);
   const noSongStateIconSize = tierValue(responsive.tier, [120, 140, 164, 196, 240, 290, 340]);
   const recordButtonSize = tierValue(responsive.tier, [88, 96, 104, 116, 136, 164, 196]);
+  // Recording adds three more controls to the transport. Keep all five actions
+  // inside the viewport on compact phones while retaining larger tablet targets.
+  const activeTransportImageSize = isRecording
+    ? tierValue(responsive.tier, [30, 32, 36, 42, 52, 64, 78])
+    : transportImageSize;
+  const activeTransportButtonSize = isRecording
+    ? tierValue(responsive.tier, [44, 48, 52, 60, 72, 88, 104])
+    : transportButtonSize;
+  const activeRecordButtonSize = isRecording
+    ? tierValue(responsive.tier, [72, 80, 88, 104, 124, 152, 184])
+    : recordButtonSize;
+  const activeTransportGap = isRecording
+    ? tierValue(responsive.tier, [6, 8, 10, 16, 24, 32, 40])
+    : tierValue(responsive.tier, [20, 24, 28, 32, 36, 40, 40]);
   const scaledIcon = useMemo(
     () => (size: number) => scaledIconSize(size, responsive),
     [responsive]
@@ -1208,14 +1222,14 @@ export default function SingScreen() {
           </View>
         )}
 
-        <View style={styles.transportRow}>
+        <View style={[styles.transportRow, { gap: activeTransportGap }]}>
           <Pressable
             style={({ pressed }) => [
               styles.transportBtn,
               {
-                width: transportButtonSize,
-                height: transportButtonSize,
-                borderRadius: Math.round(transportButtonSize * 0.32),
+                width: activeTransportButtonSize,
+                height: activeTransportButtonSize,
+                borderRadius: Math.round(activeTransportButtonSize * 0.32),
               },
               pressed && styles.transportBtnPressed,
             ]}
@@ -1228,7 +1242,7 @@ export default function SingScreen() {
           >
             <AnimatedTransportIcon
               source={markerControlIconSource}
-              size={transportImageSize}
+              size={activeTransportImageSize}
               active={isRecording}
               dimmed={!isRecording}
             />
@@ -1238,7 +1252,7 @@ export default function SingScreen() {
             isRecording={isRecording}
             isPaused={isPaused}
             onPress={handleRecordPress}
-            size={recordButtonSize}
+            size={activeRecordButtonSize}
             iconSource={recordControlIconSource}
           />
 
@@ -1248,9 +1262,9 @@ export default function SingScreen() {
                 style={({ pressed }) => [
                   styles.transportBtn,
                   {
-                    width: transportButtonSize,
-                    height: transportButtonSize,
-                    borderRadius: Math.round(transportButtonSize * 0.32),
+                    width: activeTransportButtonSize,
+                    height: activeTransportButtonSize,
+                    borderRadius: Math.round(activeTransportButtonSize * 0.32),
                   },
                   pressed && styles.transportBtnPressed,
                 ]}
@@ -1260,15 +1274,15 @@ export default function SingScreen() {
                 accessibilityLabel="Restart take"
                 accessibilityHint="Discards the current take and starts a new one"
               >
-                <Ionicons name="refresh" size={Math.round(transportImageSize * 0.55)} color="#fff" />
+                <Ionicons name="refresh" size={Math.round(activeTransportImageSize * 0.55)} color="#fff" />
               </Pressable>
               <Pressable
                 style={({ pressed }) => [
                   styles.transportBtn,
                   {
-                    width: transportButtonSize,
-                    height: transportButtonSize,
-                    borderRadius: Math.round(transportButtonSize * 0.32),
+                    width: activeTransportButtonSize,
+                    height: activeTransportButtonSize,
+                    borderRadius: Math.round(activeTransportButtonSize * 0.32),
                   },
                   pressed && styles.transportBtnPressed,
                 ]}
@@ -1282,15 +1296,15 @@ export default function SingScreen() {
                 accessibilityLabel="Practice this part"
                 accessibilityHint="Stops recording and opens practice loop for the new session"
               >
-                <Ionicons name="repeat" size={Math.round(transportImageSize * 0.55)} color="#fff" />
+                <Ionicons name="repeat" size={Math.round(activeTransportImageSize * 0.55)} color="#fff" />
               </Pressable>
               <Pressable
                 style={({ pressed }) => [
                   styles.transportBtn,
                   {
-                    width: transportButtonSize,
-                    height: transportButtonSize,
-                    borderRadius: Math.round(transportButtonSize * 0.32),
+                    width: activeTransportButtonSize,
+                    height: activeTransportButtonSize,
+                    borderRadius: Math.round(activeTransportButtonSize * 0.32),
                   },
                   pressed && styles.transportBtnPressed,
                 ]}
@@ -1305,7 +1319,7 @@ export default function SingScreen() {
               >
                 <AnimatedTransportIcon
                   source={stopControlIconSource}
-                  size={transportImageSize}
+                  size={activeTransportImageSize}
                   active
                 />
               </Pressable>
@@ -1315,9 +1329,9 @@ export default function SingScreen() {
               style={({ pressed }) => [
                 styles.transportBtn,
                 {
-                  width: transportButtonSize,
-                  height: transportButtonSize,
-                  borderRadius: Math.round(transportButtonSize * 0.32),
+                  width: activeTransportButtonSize,
+                  height: activeTransportButtonSize,
+                  borderRadius: Math.round(activeTransportButtonSize * 0.32),
                 },
                 pressed && styles.transportBtnPressed,
               ]}
@@ -1348,7 +1362,7 @@ export default function SingScreen() {
             >
               <AnimatedTransportIcon
                 source={metronomeControlIconSource}
-                size={transportImageSize}
+                size={activeTransportImageSize}
                 active={settings.metronomeEnabled}
                 dimmed={!settings.metronomeEnabled}
               />
@@ -1769,7 +1783,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 40,
   },
   transportBtn: {
     alignItems: 'center',

@@ -578,6 +578,14 @@ export default function ProfileScreen() {
     void openUrl(url);
   }, [apiBaseUrl, openUrl]);
 
+  const handleOpenPrivacy = useCallback(() => {
+    router.push('/privacy');
+  }, []);
+
+  const handleOpenAccountDeletion = useCallback(() => {
+    router.push('/account-deletion');
+  }, []);
+
   const totalDuration = sessions.reduce((acc, s) => acc + s.duration, 0);
   const avgAccuracy = sessions.length > 0
     ? Math.round(sessions.reduce((acc, s) => acc + s.insights.textAccuracy, 0) / sessions.length)
@@ -1607,7 +1615,21 @@ export default function ProfileScreen() {
 	              accessibilityHint="Opens the OpenAPI JSON spec in your browser"
 	            />
 	            <View style={styles.divider} />
-	            <SettingRow icon="shield" label="Privacy" value="Local + optional Postgres" />
+	            <SettingRow
+	              icon="shield"
+	              label="Privacy Policy"
+	              value="Open"
+	              onPress={handleOpenPrivacy}
+	              accessibilityHint="Opens the EaseVerse privacy policy"
+	            />
+	            <View style={styles.divider} />
+	            <SettingRow
+	              icon="trash-2"
+	              label="Delete account & data"
+	              value="Request"
+	              onPress={handleOpenAccountDeletion}
+	              accessibilityHint="Opens the permanent account deletion request page"
+	            />
 	          </View>
 	        </View>
         </View>

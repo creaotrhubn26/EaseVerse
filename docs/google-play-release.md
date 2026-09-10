@@ -19,6 +19,15 @@ Google Play organisation verification may require a D-U-N-S number. A Norwegian 
 
 ## Store listing draft
 
+Prepared assets are versioned in `store-assets/google-play/`:
+
+- `feature-graphic-1024x500.png`: Play feature graphic, exactly 1024×500.
+- `app-icon-512.png`: Play listing icon, exactly 512×512 and 174 KB.
+- `01-workspace-companion-1080x2160.png`: real Android screen showing the Workspace/Pro Tools Companion setup.
+- `02-recording-ready-1080x2160.png`: real Android recording screen, exactly 2:1.
+
+The screenshots come from the release APK on the API 36 emulator. They have not been composited or given simulated UI. The feature graphic was generated from the committed EaseVerse app icon with the built-in image-generation workflow and then resized without changing its content.
+
 ### Short description
 
 Record, practise and review vocals with lyrics, coaching and CreatorHub projects.

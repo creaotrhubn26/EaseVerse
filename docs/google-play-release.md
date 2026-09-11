@@ -7,6 +7,7 @@ This is the operational release record for `com.easeverse.app`. It is a code-aud
 - App name: EaseVerse
 - Developer: CREATORHUB AS
 - Organisation number: 937 518 684
+- D-U-N-S number: 348432540
 - Category: Music & Audio
 - Package: `com.easeverse.app`
 - Android target: API 36
@@ -15,7 +16,26 @@ This is the operational release record for `com.easeverse.app`. It is a code-aud
 - Privacy policy: `https://easeverse.netlify.app/privacy`
 - Account deletion: `https://easeverse.netlify.app/account-deletion`
 
-Google Play organisation verification may require a D-U-N-S number. A Norwegian organisation number is not a replacement for D-U-N-S in that form.
+The D-U-N-S number was submitted for Google Play organisation verification on 11 September 2026. Google approval is pending. The Norwegian organisation number and D-U-N-S number are separate identifiers.
+
+## Current release candidate
+
+- Preview APK: EAS build 2 (`3fc160b7-19c0-4729-bf0e-d71ac298404e`), SHA-256 `d50198a3b34662964d63da9c32bdbe60fdeb4a3505107e0efcb01544a8824b10`.
+- Production AAB: EAS build 3 (`c75a5a17-ddb2-4b48-b0c5-96cbd8745e06`), SHA-256 `2e7c44bed25a8325810b2ade35219869ea44482f14d6111808f3ebe44f9c602a`.
+- Package: `com.easeverse.app`; version `1.0.0`; production `versionCode` 3.
+- The AAB passed `bundletool` 1.18.3 validation and targets Android API 36.
+
+### Release-device verification — 11 September 2026
+
+The exact EAS preview APK was installed into an ephemeral API 36 Play Store emulator session so the existing local test profile remained untouched.
+
+- First launch and the in-app microphone rationale rendered correctly.
+- Android microphone permission was requested only after the user started recording and was granted successfully.
+- A real 26-second microphone take reached Session Review and played back with an advancing waveform.
+- The recording remained in Sessions after a force-stop and cold app restart.
+- The shared CreatorHub sign-in opened the real Google account chooser for `creatorhubn.com` and returned to EaseVerse successfully.
+- The authenticated CreatorHub identity remained available after another force-stop and restart.
+- No authentication 403, fatal Android exception or React Native runtime error was observed.
 
 ## Store listing draft
 
@@ -25,6 +45,8 @@ Prepared assets are versioned in `store-assets/google-play/`:
 - `app-icon-512.png`: Play listing icon, exactly 512×512 and 174 KB.
 - `01-workspace-companion-1080x2160.png`: real Android screen showing the Workspace/Pro Tools Companion setup.
 - `02-recording-ready-1080x2160.png`: real Android recording screen, exactly 2:1.
+- `listing-en-US.md`: reviewed English store copy.
+- `listing-nb-NO.md`: reviewed Norwegian Bokmål store copy.
 
 The screenshots come from the release APK on the API 36 emulator. They have not been composited or given simulated UI. The feature graphic was generated from the committed EaseVerse app icon with the built-in image-generation workflow and then resized without changing its content.
 
@@ -104,13 +126,19 @@ Do not declare that voice/audio stays only on the device: audio selected for sco
 
 ## Required Play Console work
 
-1. Complete developer identity and organisation verification, including D-U-N-S if Google requests it.
+1. Wait for Google to approve the submitted developer identity and organisation verification.
 2. Create the app with package `com.easeverse.app`, default language English and app type App.
 3. Complete App content: privacy policy, data safety, ads, target audience, content rating and app access.
 4. Upload the feature graphic, app icon and at least two representative phone screenshots.
 5. Create an internal-testing release with the signed AAB and add internal testers.
 6. Run the exact installed Play build through recording, playback, persistence, OAuth handoff and privacy/deletion checks.
 7. Promote only after pre-launch reports, policy checks and reviewer access pass.
+
+Prepared console worksheets and runbooks:
+
+- `docs/google-play-app-content.md`
+- `docs/google-play-reviewer-access.md`
+- `docs/google-play-internal-release.md`
 
 ## Build and submit
 

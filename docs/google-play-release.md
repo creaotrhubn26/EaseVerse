@@ -45,6 +45,8 @@ Prepared assets are versioned in `store-assets/google-play/`:
 - `app-icon-512.png`: Play listing icon, exactly 512×512 and 174 KB.
 - `01-workspace-companion-1080x2160.png`: real Android screen showing the Workspace/Pro Tools Companion setup.
 - `02-recording-ready-1080x2160.png`: real Android recording screen, exactly 2:1.
+- `listing-en-US.md`: reviewed English store copy.
+- `listing-nb-NO.md`: reviewed Norwegian Bokmål store copy.
 
 The screenshots come from the release APK on the API 36 emulator. They have not been composited or given simulated UI. The feature graphic was generated from the committed EaseVerse app icon with the built-in image-generation workflow and then resized without changing its content.
 
@@ -131,6 +133,12 @@ Do not declare that voice/audio stays only on the device: audio selected for sco
 5. Create an internal-testing release with the signed AAB and add internal testers.
 6. Run the exact installed Play build through recording, playback, persistence, OAuth handoff and privacy/deletion checks.
 7. Promote only after pre-launch reports, policy checks and reviewer access pass.
+
+Prepared console worksheets and runbooks:
+
+- `docs/google-play-app-content.md`
+- `docs/google-play-reviewer-access.md`
+- `docs/google-play-internal-release.md`
 
 ## Build and submit
 

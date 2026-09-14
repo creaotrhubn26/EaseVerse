@@ -9,6 +9,8 @@ import {
   type ProjectRole,
 } from "../_lib/projects-db.js";
 import { findUserByEmail } from "../_lib/users-db.js";
+import { getCreatorHubProjectLink } from "../_lib/creatorhub-project-links.js";
+import { fetchCreatorHubReferencePlayback } from "../_lib/creatorhub-reference-playback.js";
 
 const ROLES: ProjectRole[] = ["producer", "vocalist", "band_member", "mix_engineer", "observer"];
 
@@ -31,7 +33,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     const data = await getProjectWithMembers(projectId, userId);
     if (!data) return res.status(404).json({ error: "Project not found or not yours" });
-    return res.status(200).json(data);
+    const link = await getCreatorHubProjectLink(projectId, userId);
+    if (!link?.audioReviewProjectId) return res.status(200).json(data);
+
+    const playback = await fetchCreatorHubReferencePlayback({
+      ownerUserId: link.ownerUserId,
+      audioReviewProjectId: link.audioReviewProjectId,
+    });
+    // Linked Sound Room references are private. Never return the stored legacy
+    // URL when fresh resolution fails; it may be expired or expose old storage.
+    const reference = playback.reference;
+    return res.status(200).json({
+      ...data,
+      project: {
+        ...data.project,
+        referenceTrackUrl: reference?.url ?? null,
+        referenceTrackName: reference?.fileName ?? data.project.referenceTrackName,
+        referenceTrackDurationSec: reference?.durationSec ?? data.project.referenceTrackDurationSec,
+      },
+    });
   }
 
   if (req.method === "POST") {

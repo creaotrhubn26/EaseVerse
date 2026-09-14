@@ -42,10 +42,29 @@ Workspace, Sound Room og Pro Tools Companion.
 - Play accepted the artifact with one non-blocking missing-deobfuscation-file
   warning and no bundle error.
 
-The account used on this Mac has no Android device registered in Google Play.
-Install through the opt-in URL on a clean Android device or Play-signed-in
-emulator, then run the acceptance checklist below. Do not promote the artifact
-if any item fails or if Play replaces the uploaded artifact/version code.
+The API 36 Google Play emulator is now signed in with the enrolled tester
+account, and the browser opt-in page confirms tester status. The Play listing
+still returned `Item not found` during the initial release propagation window.
+After the Play Store cache was reset, Google displayed its Terms of Service;
+the account owner must accept those terms directly before the next install
+attempt. Then install through the opt-in URL and run the acceptance checklist
+below. Do not promote the artifact if any item fails or if Play replaces the
+uploaded artifact/version code.
+
+## Store setup completed on 14 September 2026
+
+- English store description, icon, feature graphic and two real phone
+  screenshots uploaded.
+- Category saved as **Music & Audio**.
+- Public contact details published with the CreatorHub support address and the
+  EaseVerse website.
+- Privacy-policy URL verified publicly over HTTP 200 and saved for review.
+- No-ads declaration saved after the release dependency/source audit.
+- Play Console's outstanding App content count decreased from 11 to 9.
+
+These prepared changes have not been sent for review. Content rating, target
+audience, Data Safety and other legally binding declarations still require the
+account owner's final check.
 
 ## Installed-Play-build acceptance
 

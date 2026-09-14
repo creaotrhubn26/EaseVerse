@@ -37,9 +37,11 @@ The D-U-N-S number was submitted for Google Play organisation verification on 11
 - Google reported one non-blocking warning: no R8/ProGuard deobfuscation file is
   associated with version code 3. No upload, compatibility or policy error was
   reported for the bundle.
-- The current Google account has no registered Android device. Installation and
-  the exact Play-delivered acceptance run therefore remain required on a clean
-  Android device or a Play-signed-in emulator before promotion.
+- A clean API 36 Google Play emulator is signed in with the same tester account,
+  and the browser opt-in page confirms that the account is enrolled. Google Play
+  still returned `Item not found` when the private listing was opened during the
+  initial propagation window. The exact Play-delivered acceptance run therefore
+  remains required before promotion.
 
 ### Release-device verification — 11 September 2026
 
@@ -65,6 +67,22 @@ Prepared assets are versioned in `store-assets/google-play/`:
 - `listing-nb-NO.md`: reviewed Norwegian Bokmål store copy.
 
 The screenshots come from the release APK on the API 36 emulator. They have not been composited or given simulated UI. The feature graphic was generated from the committed EaseVerse app icon with the built-in image-generation workflow and then resized without changing its content.
+
+### Play Console listing state — 14 September 2026
+
+- The English short and full descriptions are saved in Play Console.
+- The 512 x 512 icon, 1024 x 500 feature graphic and both real phone
+  screenshots are uploaded.
+- The store category is saved as **Music & Audio**.
+- Public listing contact details are published with
+  `support@creatorhubn.com` and `https://easeverse.netlify.app`.
+- The feature graphic is declared as AI-generated; the two real emulator
+  screenshots are not.
+- The privacy-policy URL is saved and returned HTTP 200 without authentication.
+- The declaration that the app contains no ads is saved after the source and
+  dependency audit found no advertising SDK or rendered ad inventory.
+- The listing, category, privacy-policy and ads changes have not been sent for
+  review yet.
 
 ### Short description
 
@@ -150,15 +168,19 @@ Completed:
 3. Signed version-code 3 AAB uploaded and published to Internal testing.
 4. Controlled `Creatorhub AS` tester list attached; the active account accepted
    the opt-in invitation.
+5. Default English store copy, icon, feature graphic and two phone screenshots
+   uploaded; category and public support contact configured.
+6. Privacy-policy URL and no-ads declaration saved for review.
 
 Remaining before production promotion:
 
-1. Complete App content: privacy policy, data safety, ads, target audience,
-   content rating and app access.
-2. Upload the feature graphic, app icon and representative phone screenshots.
-3. Install the exact Play-delivered build and run recording, playback,
+1. Complete App content: data safety, target audience, content rating, app
+   access and the remaining product declarations.
+2. Install the exact Play-delivered build and run recording, playback,
    persistence, OAuth handoff and privacy/deletion checks.
-4. Resolve any blocking pre-launch, policy or reviewer-access result.
+3. Resolve any blocking pre-launch, policy or reviewer-access result.
+4. Submit the prepared listing and policy changes for review only after the
+   owner has checked the legally binding declarations.
 5. Configure a least-privilege Google Play service account in EAS for future
    automated submissions. The first release was submitted manually.
 

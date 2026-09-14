@@ -16,7 +16,7 @@ This is the operational release record for `com.easeverse.app`. It is a code-aud
 - Privacy policy: `https://easeverse.netlify.app/privacy`
 - Account deletion: `https://easeverse.netlify.app/account-deletion`
 
-The D-U-N-S number was submitted for Google Play organisation verification on 11 September 2026. Google approval is pending. The Norwegian organisation number and D-U-N-S number are separate identifiers.
+The D-U-N-S number was submitted for Google Play organisation verification on 11 September 2026. Google confirmed successful identity verification on 14 September 2026. The Norwegian organisation number and D-U-N-S number are separate identifiers.
 
 ## Current release candidate
 
@@ -24,6 +24,22 @@ The D-U-N-S number was submitted for Google Play organisation verification on 11
 - Production AAB: EAS build 3 (`c75a5a17-ddb2-4b48-b0c5-96cbd8745e06`), SHA-256 `2e7c44bed25a8325810b2ade35219869ea44482f14d6111808f3ebe44f9c602a`.
 - Package: `com.easeverse.app`; version `1.0.0`; production `versionCode` 3.
 - The AAB passed `bundletool` 1.18.3 validation and targets Android API 36.
+
+### Google Play internal release — 14 September 2026
+
+- Play Console app ID: `4972870716164733237`.
+- Internal-testing track ID: `4701344165098069914`.
+- Release: `EaseVerse 1.0.0 (3) - internal verification`.
+- Status: active and available to the controlled `Creatorhub AS` tester list.
+- Tester opt-in: `https://play.google.com/apps/internaltest/4701344165098069914`.
+- The active CreatorHub Google account accepted the invitation and reached the
+  Google Play install page for `com.easeverse.app`.
+- Google reported one non-blocking warning: no R8/ProGuard deobfuscation file is
+  associated with version code 3. No upload, compatibility or policy error was
+  reported for the bundle.
+- The current Google account has no registered Android device. Installation and
+  the exact Play-delivered acceptance run therefore remain required on a clean
+  Android device or a Play-signed-in emulator before promotion.
 
 ### Release-device verification — 11 September 2026
 
@@ -124,15 +140,27 @@ Operational statements to verify before submission:
 
 Do not declare that voice/audio stays only on the device: audio selected for scoring, analysis, synchronisation or sharing is sent to the EaseVerse service.
 
-## Required Play Console work
+## Play Console status and remaining work
 
-1. Wait for Google to approve the submitted developer identity and organisation verification.
-2. Create the app with package `com.easeverse.app`, default language English and app type App.
-3. Complete App content: privacy policy, data safety, ads, target audience, content rating and app access.
-4. Upload the feature graphic, app icon and at least two representative phone screenshots.
-5. Create an internal-testing release with the signed AAB and add internal testers.
-6. Run the exact installed Play build through recording, playback, persistence, OAuth handoff and privacy/deletion checks.
-7. Promote only after pre-launch reports, policy checks and reviewer access pass.
+Completed:
+
+1. Google developer identity and organisation verification approved.
+2. App created with package `com.easeverse.app`, default language English and
+   app type App.
+3. Signed version-code 3 AAB uploaded and published to Internal testing.
+4. Controlled `Creatorhub AS` tester list attached; the active account accepted
+   the opt-in invitation.
+
+Remaining before production promotion:
+
+1. Complete App content: privacy policy, data safety, ads, target audience,
+   content rating and app access.
+2. Upload the feature graphic, app icon and representative phone screenshots.
+3. Install the exact Play-delivered build and run recording, playback,
+   persistence, OAuth handoff and privacy/deletion checks.
+4. Resolve any blocking pre-launch, policy or reviewer-access result.
+5. Configure a least-privilege Google Play service account in EAS for future
+   automated submissions. The first release was submitted manually.
 
 Prepared console worksheets and runbooks:
 

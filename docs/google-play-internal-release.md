@@ -14,7 +14,7 @@
 
 ## Release name
 
-`EaseVerse 1.0.0 (3) — internal verification`
+`EaseVerse 1.0.0 (3) - internal verification`
 
 ## Release notes (en-US)
 
@@ -28,20 +28,24 @@ Første Android-testversjon med lokalt vokalopptak og avspilling, låter og
 sangtekster, øvingsverktøy, lagrede økter og valgfri kobling til CreatorHub
 Workspace, Sound Room og Pro Tools Companion.
 
-## Console sequence after organisation approval
+## Internal-track publication — 14 September 2026
 
-1. Create the app in Play Console with default language English (United States),
-   app type App, free pricing and package `com.easeverse.app`.
-2. Complete every item in App content using
-   `docs/google-play-app-content.md` and paste the reviewer text from
-   `docs/google-play-reviewer-access.md`.
-3. Upload the icon, feature graphic and at least the two committed phone
-   screenshots from `store-assets/google-play/`.
-4. Create an Internal testing release and upload the verified AAB above.
-5. Add only controlled internal testers and publish to the internal track.
-6. Install through the Play opt-in link on a clean Android device/profile.
-7. Run the acceptance checklist below. Do not promote the artifact if any item
-   fails or if Play replaces the uploaded artifact/version code.
+- Google developer identity verification: approved.
+- Play Console app ID: `4972870716164733237`.
+- Internal-testing track ID: `4701344165098069914`.
+- Tester list: `Creatorhub AS` (controlled list, two configured users).
+- Release state: active and available to internal testers.
+- Opt-in URL:
+  `https://play.google.com/apps/internaltest/4701344165098069914`
+- The active CreatorHub Google account accepted the invitation and reached the
+  package install page.
+- Play accepted the artifact with one non-blocking missing-deobfuscation-file
+  warning and no bundle error.
+
+The account used on this Mac has no Android device registered in Google Play.
+Install through the opt-in URL on a clean Android device or Play-signed-in
+emulator, then run the acceptance checklist below. Do not promote the artifact
+if any item fails or if Play replaces the uploaded artifact/version code.
 
 ## Installed-Play-build acceptance
 
@@ -62,11 +66,14 @@ Workspace, Sound Room og Pro Tools Companion.
 
 Production promotion remains blocked until:
 
-- Google organisation/developer verification is approved;
 - App content and Data Safety have owner sign-off;
 - the internal Play-installed build passes the acceptance checklist;
 - any required reviewer-only CreatorHub membership has been tested and scoped;
 - the current privacy/deletion URLs return HTTP 200 publicly.
+
+Future `eas submit` automation also requires a least-privilege Google Play
+service-account JSON to be configured securely in EAS. No Play submission
+service account was attached when version code 3 was published manually.
 
 Google release reference:
 <https://support.google.com/googleplay/android-developer/answer/9859348?hl=en>

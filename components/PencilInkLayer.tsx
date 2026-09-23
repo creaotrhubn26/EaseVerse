@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
-import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import Colors from '@/constants/colors';
 import * as Storage from '@/lib/storage';
@@ -405,7 +404,6 @@ export default function PencilInkLayer({
     setTool(nextTool);
     setSelectedIds([]);
     setLassoPath(null);
-    Haptics.selectionAsync();
   }, []);
 
   const beginStroke = useCallback(
@@ -621,7 +619,6 @@ export default function PencilInkLayer({
               style={[styles.toolbarPrimary, enabled && styles.toolbarPrimaryActive]}
               onPress={() => {
                 setEnabled((current) => !current);
-                Haptics.selectionAsync();
               }}
               accessibilityRole="switch"
               accessibilityLabel="Toggle pencil ink layer"

@@ -2,7 +2,7 @@
 
 ## Overview
 
-EaseVerse uses Xenova's Whisper.js (@xenova/transformers) for local, free speech-to-text transcription as an alternative to OpenAI's Whisper API.
+EaseVerse uses Hugging Face Transformers.js (`@huggingface/transformers`) for local, free speech-to-text transcription as an alternative to OpenAI's Whisper API.
 
 ## Model
 
@@ -53,7 +53,7 @@ Test samples are available in the `samples/` directory. Use the test script:
 
 ## Dependencies
 
-- `@xenova/transformers`: ^2.17.2 - Whisper model
+- `@huggingface/transformers`: ^4.3.0 - Whisper model
 - `ffmpeg-static`: For audio format conversion
 - `wavefile`: For WAV file parsing
 

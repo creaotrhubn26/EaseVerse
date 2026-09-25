@@ -4,7 +4,7 @@
 
 **✅ FREE & WORKING (No API costs):**
 
-- **Whisper STT** (@xenova/transformers) - Local speech-to-text, runs in Node.js, ~140MB model
+- **Whisper STT** (@huggingface/transformers) - Local speech-to-text, runs in Node.js, ~140MB model
 - **Gemini 2.5 Flash** (Google) - FREE tier pronunciation coaching, 15 req/min
 - **ElevenLabs TTS** (paid) - Production ready for pronunciation audio playback
 

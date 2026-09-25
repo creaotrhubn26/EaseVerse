@@ -1,9 +1,9 @@
 /**
  * Whisper Speech-to-Text Integration (Free, Open Source)
- * Uses @xenova/transformers to run Whisper locally in Node.js
+ * Uses @huggingface/transformers to run Whisper locally in Node.js
  */
 
-import { pipeline, AutomaticSpeechRecognitionPipeline } from '@xenova/transformers';
+import { pipeline, AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
 import { readFile, writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -24,6 +24,7 @@ let transcriber: AutomaticSpeechRecognitionPipeline | null = null;
 let isInitializing = false;
 let initPromise: Promise<void> | null = null;
 const AI_DEBUG_LOGS = process.env.AI_DEBUG_LOGS === 'true';
+const whisperModelName = process.env.WHISPER_MODEL || 'Xenova/whisper-base.en';
 let whisperStatus: {
   state: 'idle' | 'loading' | 'ready' | 'error';
   lastError: string | null;
@@ -66,16 +67,18 @@ async function initializeWhisper(): Promise<void> {
       debugLog('Initializing Whisper model (this may take a moment on first run)...');
       
       // Use base.en for better accuracy (tiny.en may silently fail on some audio)
-      const modelName = process.env.WHISPER_MODEL || 'Xenova/whisper-base.en';
-      
-      debugLog(`Loading Whisper model: ${modelName}`);
+      debugLog(`Loading Whisper model: ${whisperModelName}`);
       
       transcriber = await pipeline(
         'automatic-speech-recognition',
-        modelName,
+        whisperModelName,
         {
           // Cache models to avoid re-downloading
           cache_dir: process.env.WHISPER_CACHE_DIR,
+          // Transformers.js v3+ otherwise selects full-precision weights on
+          // Node. q8 keeps cold starts and memory use close to the previous
+          // Xenova runtime without materially changing speech accuracy.
+          dtype: 'q8',
         }
       ) as AutomaticSpeechRecognitionPipeline;
       
@@ -192,12 +195,18 @@ export async function transcribeWithWhisper(
     debugLog('Whisper: Decoded', audioSamples.length, 'samples');
 
     // Pass raw audio samples to Whisper
-    const result: any = await transcriber(audioSamples, {
-      language: options?.language,
-      task: options?.task || 'transcribe',
+    const generationOptions: Record<string, unknown> = {
       return_timestamps: false,
       chunk_length_s: 30, // Process in 30-second chunks
-    });
+    };
+    // Newer Transformers.js versions reject language/task when the selected
+    // Whisper model is already English-only (for example whisper-base.en).
+    if (!whisperModelName.toLowerCase().endsWith('.en')) {
+      generationOptions.language = options?.language;
+      generationOptions.task = options?.task || 'transcribe';
+    }
+
+    const result: any = await transcriber(audioSamples, generationOptions);
 
     if (AI_DEBUG_LOGS) {
       console.log('Whisper: Full result:', JSON.stringify(result, null, 2));

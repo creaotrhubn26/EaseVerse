@@ -1,5 +1,5 @@
 // Direct Whisper test - bypasses server to isolate issue
-import { pipeline } from '@xenova/transformers';
+import { pipeline } from '@huggingface/transformers';
 import { readFile, writeFile, unlink } from 'fs/promises';
 import { spawn } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';

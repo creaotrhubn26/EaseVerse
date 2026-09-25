@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { genreList, getGenreProfile, type GenreId } from '@/constants/genres';
@@ -608,7 +607,6 @@ export default function LyricsScreen() {
       setSaveIndicatorState('unsaved');
       setActiveTab('write');
       setToast({ visible: true, message: 'Restored snapshot. Save when ready.' });
-      Haptics.selectionAsync();
     },
     [lyricsVersions]
   );
@@ -735,7 +733,6 @@ export default function LyricsScreen() {
       return true;
     }
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const sections = parseSongSections(editText);
     const parsedBpm = tempoBpmText.trim()
       ? Math.max(30, Math.min(300, parseInt(tempoBpmText, 10)))
@@ -843,7 +840,6 @@ export default function LyricsScreen() {
       updateEditorContent(nextText, { start: cursor, end: cursor });
       setSaveIndicatorState('unsaved');
       setActiveTab('write');
-      Haptics.selectionAsync();
     },
     [editText, editorSelection, updateEditorContent]
   );
@@ -855,7 +851,6 @@ export default function LyricsScreen() {
       findCursorRef.current = cursor;
       setActiveTab('write');
       editorRef.current?.focus();
-      Haptics.selectionAsync();
     },
     [editText]
   );
@@ -961,7 +956,6 @@ export default function LyricsScreen() {
 
   const handleImport = useCallback(() => {
     if (!importText.trim()) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     updateEditorContent(importText, { start: importText.length, end: importText.length });
     setActiveTab('write');
     setImportText('');
@@ -985,7 +979,6 @@ export default function LyricsScreen() {
       const nextCursor = before.length + snippet.length;
 
       updateEditorContent(nextText, { start: nextCursor, end: nextCursor });
-      Haptics.selectionAsync();
     },
     [editText, editorSelection, updateEditorContent]
   );
@@ -997,7 +990,6 @@ export default function LyricsScreen() {
     const updated = { ...activeSong, sections, updatedAt: Date.now() };
     updateSong(updated);
     setActiveSong(updated);
-    Haptics.selectionAsync();
   };
 
   const moveSectionDown = (idx: number) => {
@@ -1007,7 +999,6 @@ export default function LyricsScreen() {
     const updated = { ...activeSong, sections, updatedAt: Date.now() };
     updateSong(updated);
     setActiveSong(updated);
-    Haptics.selectionAsync();
   };
 
   const handleTapTempo = useCallback(() => {
@@ -1034,8 +1025,6 @@ export default function LyricsScreen() {
         setTempoBpmText(String(clamped));
       }
     }
-
-    Haptics.selectionAsync();
   }, []);
 
   const jumpToSectionAnchor = useCallback(
@@ -1045,7 +1034,6 @@ export default function LyricsScreen() {
       setEditorSelection(nextSelection);
       findCursorRef.current = cursor;
       editorRef.current?.focus();
-      Haptics.selectionAsync();
     },
     [editText.length]
   );
@@ -1410,7 +1398,6 @@ export default function LyricsScreen() {
 
     setActiveSong(song);
     setActiveTab('write');
-    Haptics.selectionAsync();
   }, [persistCurrentDraftBeforeSwitch, setActiveSong]);
 
   const tabs: { key: TabKey; label: string; icon: ComponentProps<typeof Feather>['name'] }[] = [
@@ -1444,7 +1431,6 @@ export default function LyricsScreen() {
           ]}
           onPress={() => {
             setSelectedGenre(genre.id);
-            Haptics.selectionAsync();
           }}
           accessibilityRole="button"
           accessibilityLabel={`Select ${genre.label} genre`}
@@ -1793,7 +1779,6 @@ export default function LyricsScreen() {
             style={[styles.mobileFocusToggle, mobileLyricsFocus && styles.mobileFocusToggleActive]}
             onPress={() => {
               setMobileLyricsFocus((value) => !value);
-              Haptics.selectionAsync();
             }}
             accessibilityRole="switch"
             accessibilityLabel="Toggle mobile lyrics focus mode"
@@ -1962,7 +1947,6 @@ export default function LyricsScreen() {
               style={[styles.tab, activeTab === tab.key && styles.tabActive]}
               onPress={() => {
                 setActiveTab(tab.key);
-                Haptics.selectionAsync();
               }}
               accessibilityRole="tab"
               accessibilityLabel={`${tab.label} tab`}
@@ -2175,7 +2159,6 @@ export default function LyricsScreen() {
                       style={[styles.ipadPaperToggle, paperModeEnabled && styles.ipadPaperToggleActive]}
                       onPress={() => {
                         setPaperModeEnabled((value) => !value);
-                        Haptics.selectionAsync();
                       }}
                       accessibilityRole="switch"
                       accessibilityLabel="Toggle paper writing mode"

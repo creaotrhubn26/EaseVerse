@@ -15,9 +15,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.easeverse.app",
-      "buildNumber": "30",
+      "buildNumber": "32",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Allow EaseVerse to load photos you choose from your photo library."
       }
     },
     "android": {

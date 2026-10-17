@@ -9,7 +9,12 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 let pool: Pool | null = null;
 function getPool(): Pool | null {
-  if (!process.env.DATABASE_URL) return null;
+  if (!process.env.DATABASE_URL) {
+    // Serverless memory is neither durable nor shared between app instances.
+    // A production sync must never acknowledge data that was not persisted.
+    if (process.env.NODE_ENV === 'production') throw new Error('Collaboration database is not configured');
+    return null;
+  }
   if (!pool) pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
   return pool;
 }

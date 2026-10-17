@@ -12,7 +12,7 @@ test('production collaboration never acknowledges a non-durable memory write', a
     await assert.rejects(getLyrics('qa-database-check'), /database is not configured/);
   } finally {
     if (originalUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalUrl;
-    if (originalMode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = originalMode;
+    if (originalMode === undefined) Reflect.deleteProperty(process.env, 'NODE_ENV'); else process.env.NODE_ENV = originalMode;
   }
 });
 

@@ -44,6 +44,7 @@ function ProjectDetailInner() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { useAuth } = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
   const { getToken } = useAuth();
+  const [linkedTrackId, setLinkedTrackId] = useState<string | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [viewerRole, setViewerRole] = useState<ProjectRole>("observer");
@@ -79,7 +80,7 @@ function ProjectDetailInner() {
     setStartingSession(true);
     try {
       const token = await getToken();
-      const sess = await startSession(token, { projectId: String(id) });
+      const sess = await startSession(token, { projectId: String(id), externalTrackId: linkedTrackId || undefined });
       setActiveSessionId(sess.id);
       router.push({ pathname: "/session/live/[id]", params: { id: sess.id } });
     } catch (err) {
@@ -95,6 +96,7 @@ function ProjectDetailInner() {
       const token = await getToken();
       const data = await getProject(token, String(id));
       setProject(data.project);
+      setLinkedTrackId(data.creatorhubLink?.externalTrackId || null);
       setMembers(data.members);
       setViewerRole(data.viewerRole);
       setError(null);
@@ -229,7 +231,8 @@ function ProjectDetailInner() {
         </Pressable>
       ) : null}
 
-      <ProToolsProjectSyncCard projectId={project.id} />
+      {linkedTrackId ? <Pressable accessibilityRole="button" accessibilityLabel="Open lyrics, audio and producer feedback" style={styles.primaryBtn} onPress={() => router.push({ pathname: '/booth/[trackId]', params: { trackId: linkedTrackId, projectId: String(id) } })}><Text style={styles.primaryBtnText}>Lyrics & producer feedback</Text></Pressable> : null}
+        <ProToolsProjectSyncCard projectId={project.id} />
 
       <View style={styles.refCard}>
         <Text style={styles.cardLabel}>Reference track</Text>
@@ -245,10 +248,10 @@ function ProjectDetailInner() {
           </View>
         ) : (
           <Text style={styles.cardHint}>
-            No reference yet. The producer can upload a demo or final mix so the band hears the target.
+            {linkedTrackId ? "Share an approved reference mix from Sound Room so everyone hears the same version." : "No reference yet. The producer can upload a demo or final mix so the band hears the target."}
           </Text>
         )}
-        {isProducer && Platform.OS === "web" ? (
+        {isProducer && Platform.OS === "web" && !linkedTrackId ? (
           <View style={{ flexDirection: "row", gap: 8, alignItems: "center", marginTop: 6 }}>
             <input
               type="file"

@@ -1,27 +1,44 @@
+import uploadAsset from "./asset-upload.js";
+import playAsset from "./asset-audio.js";
+import { getPublicBase } from "../_lib/public-base.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isAuthConfigured, requireAuth, requireAuthOrPairing } from "../_lib/auth.js";
-import { getComp, markCompDelivered, markCompExported } from "../_lib/takes-db.js";
-import { getProjectMembership } from "../_lib/projects-db.js";
-import { isB2Configured, presignUpload, presignDownload } from "../_lib/b2-storage.js";
+import { isAuthConfigured, requireAuthOrPairing } from "../_lib/auth.js";
+import { getComp, markCompDelivered } from "../_lib/takes-db.js";
+import { isB2Configured, presignDownload } from "../_lib/b2-storage.js";
 
 const compKey = (compId: string, filename: string) =>
   `easeverse/comps/${compId}/${(filename || "export.wav").replace(/[^A-Za-z0-9._-]/g, "_").slice(-120)}`;
 
-// Comp-eksport til Backblaze B2 (samme sted som takes — ikke Vercel Blob).
-//  GET   ?id=<compId>      → 302 til presignert B2 GET (nedlasting/avspilling)
-//  PATCH ?id=<compId>      → companion bekrefter levering
-//  POST  {compId,filename,action:'init'}      → presignert PUT
-//  POST  {compId,filename,action:'finalize'}  → markCompExported(url=proxy)
+// S3 comp exports require project membership; old B2 exports remain readable.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!isAuthConfigured()) return res.status(503).json({ error: "Auth is not configured." });
+  if (!isAuthConfigured())
+    return res.status(503).json({ error: "Auth is not configured." });
 
   // GET = nedlastings-proxy (presignert B2 GET).
   if (req.method === "GET") {
-    if (!isB2Configured()) return res.status(503).json({ error: "B2 storage is not configured." });
     const compId = typeof req.query.id === "string" ? req.query.id : null;
-    if (!compId) return res.status(400).json({ error: "id query param required" });
+    if (!compId)
+      return res.status(400).json({ error: "id query param required" });
     const comp = await getComp(compId);
-    if (!comp || !comp.exportedFilename) return res.status(404).json({ error: "Comp export not found" });
+    if (!comp || !comp.exportedFilename)
+      return res.status(404).json({ error: "Comp export not found" });
+    if (
+      comp.exportedWavUrl?.startsWith(
+        `${getPublicBase()}/api/takes/asset-audio?`,
+      )
+    ) {
+      const asset = new URL(comp.exportedWavUrl);
+      req.query = {
+        ...req.query,
+        projectId: asset.searchParams.get("projectId") || "",
+        objectId: asset.searchParams.get("objectId") || "",
+      };
+      return playAsset(req, res);
+    }
+    if (!isB2Configured())
+      return res
+        .status(503)
+        .json({ error: "Legacy audio storage is unavailable." });
     const url = await presignDownload(compKey(compId, comp.exportedFilename));
     res.setHeader("Cache-Control", "private, max-age=300");
     return res.redirect(302, url);
@@ -32,7 +49,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = await requireAuthOrPairing(req, res);
     if (!userId) return;
     const compId = typeof req.query.id === "string" ? req.query.id : null;
-    if (!compId) return res.status(400).json({ error: "id query param required" });
+    if (!compId)
+      return res.status(400).json({ error: "id query param required" });
     const comp = await getComp(compId);
     if (!comp || comp.createdByUserId !== userId) {
       return res.status(403).json({ error: "Not your comp" });
@@ -45,41 +63,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Allow", "GET, POST, PATCH");
     return res.status(405).json({ error: "Method not allowed" });
   }
-  if (!isB2Configured()) return res.status(503).json({ error: "B2 storage is not configured." });
-
-  const userId = await requireAuth(req, res);
-  if (!userId) return;
-
-  try {
-    const b = ((typeof req.body === "object" && req.body) || {}) as Record<string, unknown>;
-    const compId = String(b.compId || "");
-    if (!compId) return res.status(400).json({ error: "compId required" });
-    const filename = String(b.filename || `${compId}.wav`);
-
-    const comp = await getComp(compId);
-    if (!comp) return res.status(404).json({ error: "Comp not found" });
-    if (comp.projectId) {
-      const m = await getProjectMembership(comp.projectId, userId);
-      if (!m || m.role === "observer") return res.status(403).json({ error: "Observers can't export comps" });
-    } else if (comp.createdByUserId !== userId) {
-      return res.status(403).json({ error: "Not your comp" });
-    }
-
-    if (b.action === "finalize") {
-      const host = String(req.headers["x-forwarded-host"] || req.headers.host || "easeverse.vercel.app");
-      const proto = String(req.headers["x-forwarded-proto"] || "https");
-      await markCompExported({
-        compId,
-        url: `${proto}://${host}/api/takes/comp-export?id=${encodeURIComponent(compId)}`,
-        filename,
-      });
-      return res.status(200).json({ ok: true });
-    }
-
-    const uploadUrl = await presignUpload(compKey(compId, filename), "audio/wav");
-    return res.status(200).json({ uploadUrl, key: compKey(compId, filename) });
-  } catch (error) {
-    console.error("[comp-export] error:", error);
-    return res.status(500).json({ error: (error as Error).message || "Comp export failed" });
-  }
+  const body = typeof req.body === "object" && req.body ? req.body : {};
+  if (body.action !== "finalize" && !body.checksumSha256)
+    return res
+      .status(409)
+      .json({ error: "Update EaseVerse to share a verified comp export." });
+  req.body = { ...body, purpose: "comp", takeId: body.objectId };
+  return uploadAsset(req, res);
 }

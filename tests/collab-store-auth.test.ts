@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requireExternalKey } from "../api/_lib/collab-store";
+import { getLyrics, requireExternalKey, upsertLyrics } from "../api/_lib/collab-store";
+
+test('production collaboration never acknowledges a non-durable memory write', async () => {
+  const originalUrl = process.env.DATABASE_URL;
+  const originalMode = process.env.NODE_ENV;
+  delete process.env.DATABASE_URL;
+  process.env.NODE_ENV = 'production';
+  try {
+    await assert.rejects(upsertLyrics({ externalTrackId: 'qa-database-check', title: 'QA', lyrics: '', collaborators: [], source: 'test', updatedAt: new Date().toISOString(), receivedAt: new Date().toISOString() }), /database is not configured/);
+    await assert.rejects(getLyrics('qa-database-check'), /database is not configured/);
+  } finally {
+    if (originalUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalUrl;
+    if (originalMode === undefined) Reflect.deleteProperty(process.env, 'NODE_ENV'); else process.env.NODE_ENV = originalMode;
+  }
+});
 
 function responseRecorder() {
   let statusCode = 200;

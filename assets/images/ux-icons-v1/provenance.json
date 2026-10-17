@@ -1,0 +1,50 @@
+{
+  "generator": "image_gen",
+  "purpose": "EaseVerse native navigation icons",
+  "createdAt": "2026-10-17",
+  "treatment": "Original transparent PNGs; native tint applied at render; no raster edits",
+  "assets": [
+    {
+      "name": "lyrics",
+      "path": "lyrics.png",
+      "sha256": "3a97eee1ebe0f6ae7e9530226bd500d09ec81be07662a4fbe8a63f9a22aea661"
+    },
+    {
+      "name": "profile",
+      "path": "profile.png",
+      "sha256": "8cc9cb90987e82c7a708d33188b172e126e06622b3bee31f082c2e6cbd9ac768"
+    },
+    {
+      "name": "sessions",
+      "path": "sessions.png",
+      "sha256": "41a248570f6994ef7930006cd090587f54abeabaf243c9fab988d59193a2a08a"
+    },
+    {
+      "name": "sing",
+      "path": "sing.png",
+      "sha256": "fc3d87d31f39921654693a64b9b984a9799543531af3cf900de68914d7deb4ca"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "sing",
+      "prompt": "Use case: logo-brand. Asset type: production navigation icon for EaseVerse, a professional mobile songwriting and vocal-recording app. Create ONE icon only: a single upright studio vocal microphone on a short U-shaped mount and a clean minimal curved voice wave beside it. A refined flat solid ivory-white line glyph, optically balanced, exceptionally crisp and legible at 26 to 30 pixels. Uniform medium rounded strokes and generous negative space; simple front-facing geometry. All visible strokes pure warm ivory #F4F2ED, with genuinely transparent negative spaces and transparent background. Single centered glyph occupies about 70% of a square canvas; generous even margins. Cohesive premium audio-software icon family, understated and human. No surrounding tile, no enclosing badge, no background, no text, no letters, no logo, no 3D, no gradients, no shadows, no glow, no decorative details. Transparent PNG output.",
+      "asset": "sing.png"
+    },
+    {
+      "name": "lyrics",
+      "prompt": "Use case: logo-brand. Asset type: production navigation icon for EaseVerse, a professional mobile songwriting and vocal-recording app. Create ONE icon only: a single neatly proportioned lyric sheet with three generous horizontal lines and one small writing pen at its lower right. A refined flat solid ivory-white line glyph, optically balanced, exceptionally crisp and legible at 26 to 30 pixels. Uniform medium rounded strokes and generous negative space; simple front-facing geometry. All visible strokes pure warm ivory #F4F2ED, with genuinely transparent negative spaces and transparent background. Single centered glyph occupies about 70% of a square canvas; generous even margins. Cohesive premium audio-software icon family, understated and human. No surrounding tile, no enclosing badge, no background, no text, no letters, no logo, no 3D, no gradients, no shadows, no glow, no decorative details. Transparent PNG output.",
+      "asset": "lyrics.png"
+    },
+    {
+      "name": "sessions",
+      "prompt": "Use case: logo-brand. Asset type: production navigation icon for EaseVerse, a professional mobile songwriting and vocal-recording app. Create ONE icon only: a single compact audio-take stack: two offset rounded rectangular recording cards, the front card containing one simple unmistakable audio waveform. A refined flat solid ivory-white line glyph, optically balanced, exceptionally crisp and legible at 26 to 30 pixels. Uniform medium rounded strokes and generous negative space; simple front-facing geometry. All visible strokes pure warm ivory #F4F2ED, with genuinely transparent negative spaces and transparent background. Single centered glyph occupies about 70% of a square canvas; generous even margins. Cohesive premium audio-software icon family, understated and human. No surrounding tile, no enclosing badge, no background, no text, no letters, no logo, no 3D, no gradients, no shadows, no glow, no decorative details. Transparent PNG output.",
+      "asset": "sessions.png"
+    },
+    {
+      "name": "profile",
+      "prompt": "Use case: logo-brand. Asset type: production navigation icon for EaseVerse, a professional mobile songwriting and vocal-recording app. Create ONE icon only: a single calm human profile/avatar: round head and gently curved shoulders, with a small precise circular cutout suggesting a personal profile. A refined flat solid ivory-white line glyph, optically balanced, exceptionally crisp and legible at 26 to 30 pixels. Uniform medium rounded strokes and generous negative space; simple front-facing geometry. All visible strokes pure warm ivory #F4F2ED, with genuinely transparent negative spaces and transparent background. Single centered glyph occupies about 70% of a square canvas; generous even margins. Cohesive premium audio-software icon family, understated and human. No surrounding tile, no enclosing badge, no background, no text, no letters, no logo, no 3D, no gradients, no shadows, no glow, no decorative details. Transparent PNG output.",
+      "asset": "profile.png"
+    }
+  ]
+}

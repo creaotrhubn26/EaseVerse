@@ -12,7 +12,7 @@ export async function authedFetch(
     Object.assign(headers, init.headers as Record<string, string>);
   }
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(`${getApiUrl()}${path}`, { credentials: "include", ...init, headers });
+  const response = await fetch(new URL(path, getApiUrl()).href, { credentials: "include", ...init, headers });
   await inspectCreatorHubAuthResponse(response);
   return response;
 }

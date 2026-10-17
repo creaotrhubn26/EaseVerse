@@ -4,6 +4,7 @@ import { getTakeById, updateProducerFeedback, type ProducerDecision } from "../_
 import { getProjectMembership, getProjectWithMembers } from "../_lib/projects-db.js";
 import { pushToUsers } from "../_lib/push-send.js";
 
+import { getCreatorHubProjectLink } from "../_lib/creatorhub-project-links.js";
 import { enqueueKeeperToCreatorHub } from "../_lib/creatorhub-sync-outbox.js";
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "PATCH" && req.method !== "POST") {
@@ -64,9 +65,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     producerDecision: decision,
   });
   if (!updated) return res.status(404).json({ error: "Take not found" });
+  const link = take.projectId ? await getCreatorHubProjectLink(take.projectId, userId) : null;
   const workspaceSync = decision === "keeper" && decision !== previousDecision && take.externalTrackId
     ? await enqueueKeeperToCreatorHub({
-        ownerUserId: userId,
+        ownerUserId: link?.ownerUserId || userId,
+        audioReviewProjectId: link?.audioReviewProjectId || undefined,
         externalTrackId: take.externalTrackId,
         takeId: take.id,
         url: take.storageUrl,

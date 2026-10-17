@@ -11,6 +11,7 @@ export async function pushKeeperToCreatorHub(
   payload: {
     ownerUserId: string;
     externalTrackId: string;
+    audioReviewProjectId?: string;
     takeId: string;
     url: string;
     filename?: string | null;
@@ -27,6 +28,7 @@ export async function pushKeeperToCreatorHub(
   try {
     const response = await (options.fetchImpl ?? fetch)(`${apiUrl}/api/audio-showcases/easeverse/keeper`, {
       method: "POST",
+      redirect: "error",
       headers: { "content-type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify({ schemaVersion: 1, ...payload }),
       signal: controller.signal,

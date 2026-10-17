@@ -14,22 +14,10 @@ import { useResponsiveLayout } from "@/lib/responsive";
 import { AppGate } from "@/components/AppGate";
 
 const tabIconSources = {
-  sing:
-    Platform.OS === "web"
-      ? require("@/assets/images/icon-set/Singing.nav.webp")
-      : require("@/assets/images/icon-set/Singing.png"),
-  lyrics:
-    Platform.OS === "web"
-      ? require("@/assets/images/icon-set/Lyrics.nav.webp")
-      : require("@/assets/images/icon-set/Lyrics.png"),
-  sessions:
-    Platform.OS === "web"
-      ? require("@/assets/images/icon-set/sessions.nav.webp")
-      : require("@/assets/images/icon-set/sessions.png"),
-  profile:
-    Platform.OS === "web"
-      ? require("@/assets/images/icon-set/Profile.nav.webp")
-      : require("@/assets/images/icon-set/Profile.png"),
+  sing: require('@/assets/images/ux-icons-v1/sing.png'),
+  lyrics: require('@/assets/images/ux-icons-v1/lyrics.png'),
+  sessions: require('@/assets/images/ux-icons-v1/sessions.png'),
+  profile: require('@/assets/images/ux-icons-v1/profile.png'),
 } as const;
 
 function AnimatedTabIcon({
@@ -92,7 +80,8 @@ function AnimatedTabIcon({
           {
             width: size,
             height: size,
-            opacity: focused ? 1 : 0.6,
+            opacity: focused ? 1 : 0.8,
+            tintColor: focused ? Colors.gradientMid : Colors.textSecondary,
           },
         ]}
         resizeMode="contain"
@@ -112,7 +101,7 @@ function ClassicTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
         tabBarActiveTintColor: Colors.tabActive,
         tabBarInactiveTintColor: Colors.tabInactive,
         sceneStyle: { backgroundColor: Colors.background },

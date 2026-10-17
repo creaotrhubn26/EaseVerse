@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import crypto from "node:crypto";
+import { ensureTakesSchema } from "./takes-db.js";
 
 let pool: Pool | null = null;
 let ensured = false;
@@ -25,6 +26,7 @@ async function ensureSchema(): Promise<void> {
   if (ensured) return;
   const p = getPool();
   if (!p) return;
+  await ensureTakesSchema();
   await p.query(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
@@ -65,6 +67,8 @@ async function ensureSchema(): Promise<void> {
   `);
   ensured = true;
 }
+
+export { ensureSchema as ensureProjectsSchema };
 
 export type ProjectRow = {
   id: string;

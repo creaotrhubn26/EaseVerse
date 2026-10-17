@@ -1,3 +1,4 @@
+import { soundRoomContext, soundRoomStorage } from "./creatorhub-storage.js";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { analyzeWavBuffer } from "./audio-analysis.js";
@@ -148,7 +149,15 @@ async function generateClaudeNotes(args: {
 export async function processTake(take: TakeRow): Promise<void> {
   await markTakeProcessing(take.id);
   try {
-    const response = await fetch(take.storageUrl);
+    let audioUrl = take.storageUrl;
+    if (/^[a-f0-9-]{36}$/i.test(take.id)) {
+      const context = await soundRoomContext(take.projectId, take.userId, true);
+      if (!context) throw new Error('Linked Sound Room access unavailable');
+      const playback = await soundRoomStorage(`${take.id}/playback`, context);
+      if (typeof playback.url !== 'string' || !playback.url.startsWith('https://')) throw new Error('Invalid audio playback');
+      audioUrl = playback.url;
+    }
+    const response = await fetch(audioUrl);
     if (!response.ok) throw new Error(`Blob download failed: ${response.status}`);
     const arrayBuffer = await response.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);

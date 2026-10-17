@@ -1,5 +1,9 @@
-// All take-lagring (takes, produsent-memo, comp-eksport) går nå til Backblaze B2
-// via presignerte URL-er — ingen Vercel Blob / Web Crypto (RN-trygt).
+import { uploadSoundRoomTake, type SoundRoomTakeUpload } from "./sound-room-upload";
+import { File as LocalFile } from "expo-file-system";
+import { fetch as expoFetch } from "expo/fetch";
+import * as Crypto from "expo-crypto";
+// New project takes use verified private CreatorHub S3 uploads.
+// Existing B2 objects remain readable; new takes, memos and comp exports use S3.
 import { authedFetch } from "./authed-fetch";
 import { getApiUrl } from "./query-client";
 
@@ -50,59 +54,13 @@ export type TakeAnalysis = {
   processedAt: string | null;
 };
 
-// Backblaze B2-opplasting i to steg (RN-trygt — ingen @vercel/blob / Web Crypto):
-//  1) be backend om en presignert PUT-URL,  2) PUT fila direkte til B2,
-//  3) finaliser (oppretter take-rad + starter prosessering).
-async function uploadTakeToB2(args: {
-  blob: Blob;
-  filename: string;
-  contentType: string;
-  token: string;
-  externalTrackId?: string;
-  sourcePath?: string;
-  projectId?: string;
-  lyricsSnapshot?: string;
-  liveSessionId?: string;
-}): Promise<{ url: string; pathname: string }> {
-  const initRes = await authedFetch("/api/takes/upload", args.token, {
-    method: "POST",
-    body: JSON.stringify({
-      filename: args.filename,
-      contentType: args.contentType,
-      projectId: args.projectId ?? null,
-      byteSize: args.blob.size,
-    }),
+// A linked project, checksum and server-issued ticket bind the take to Sound Room.
+async function uploadTakeToCreatorHub(args: SoundRoomTakeUpload): Promise<{ url: string; pathname: string }> {
+  return uploadSoundRoomTake(args, {
+    checksum: async blob => Array.from(new Uint8Array(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, await blob.arrayBuffer()))).map(byte => byte.toString(16).padStart(2, '0')).join(''),
+    request: (path, init) => authedFetch(path, args.token, init),
+    put: (url, init) => expoFetch(url, init),
   });
-  if (!initRes.ok) throw new Error(`Upload init failed: ${initRes.status}`);
-  const { takeId, uploadUrl, key } = (await initRes.json()) as {
-    takeId: string;
-    uploadUrl: string;
-    key: string;
-  };
-
-  const putRes = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": args.contentType },
-    body: args.blob,
-  });
-  if (!putRes.ok) throw new Error(`B2 upload failed: ${putRes.status}`);
-
-  const finRes = await authedFetch("/api/takes/finalize", args.token, {
-    method: "POST",
-    body: JSON.stringify({
-      takeId,
-      filename: args.filename,
-      externalTrackId: args.externalTrackId ?? null,
-      sourcePath: args.sourcePath ?? null,
-      projectId: args.projectId ?? null,
-      lyricsSnapshot: args.lyricsSnapshot ?? null,
-      liveSessionId: args.liveSessionId ?? null,
-      byteSize: args.blob.size,
-    }),
-  });
-  if (!finRes.ok) throw new Error(`Finalize failed: ${finRes.status}`);
-  const data = (await finRes.json()) as { take?: { storageUrl?: string } };
-  return { url: data?.take?.storageUrl ?? "", pathname: key };
 }
 
 export async function uploadTake(args: {
@@ -114,7 +72,7 @@ export async function uploadTake(args: {
   lyricsSnapshot?: string;
   liveSessionId?: string;
 }): Promise<{ url: string; pathname: string }> {
-  return uploadTakeToB2({
+  return uploadTakeToCreatorHub({
     blob: args.file,
     filename: args.file.name,
     contentType: args.file.type || "application/octet-stream",
@@ -128,7 +86,7 @@ export async function uploadTake(args: {
 }
 
 // React Native upload — materialize the local file:// URI as a Blob, then PUT
-// it directly to B2 via the presigned URL.
+// it directly to private CreatorHub S3 using the verified upload ticket.
 export async function uploadTakeFromUri(args: {
   uri: string;
   filename: string;
@@ -140,11 +98,9 @@ export async function uploadTakeFromUri(args: {
   lyricsSnapshot?: string;
   liveSessionId?: string;
 }): Promise<{ url: string; pathname: string }> {
-  const res = await fetch(args.uri);
-  const blob = await res.blob();
-  const contentType = blob.type && blob.type !== "" ? blob.type : args.contentType || "audio/m4a";
-  const typed = blob.type ? blob : new Blob([blob], { type: contentType });
-  return uploadTakeToB2({
+  const typed = new LocalFile(args.uri);
+  const contentType = args.contentType || typed.type || "audio/m4a";
+  return uploadTakeToCreatorHub({
     blob: typed,
     filename: args.filename,
     contentType,
@@ -176,26 +132,7 @@ export async function uploadProducerMemo(args: {
   durationSec: number;
   token: string;
 }): Promise<{ url: string; pathname: string }> {
-  const contentType = args.blob.type || "audio/webm";
-  const initRes = await authedFetch("/api/takes/memo-upload", args.token, {
-    method: "POST",
-    body: JSON.stringify({ takeId: args.takeId, contentType }),
-  });
-  if (!initRes.ok) throw new Error(`Memo init failed: ${initRes.status}`);
-  const { uploadUrl, key } = (await initRes.json()) as { uploadUrl: string; key: string };
-  const putRes = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": contentType },
-    body: args.blob,
-  });
-  if (!putRes.ok) throw new Error(`Memo upload failed: ${putRes.status}`);
-  const finRes = await authedFetch("/api/takes/memo-upload", args.token, {
-    method: "POST",
-    body: JSON.stringify({ takeId: args.takeId, action: "finalize", durationSec: args.durationSec }),
-  });
-  if (!finRes.ok) throw new Error(`Memo finalize failed: ${finRes.status}`);
-  const data = (await finRes.json()) as { url?: string };
-  return { url: data?.url ?? "", pathname: key };
+  return uploadTakeToCreatorHub({ blob: args.blob, filename: 'Producer memo.webm', contentType: args.blob.type || 'audio/webm', token: args.token, target: { purpose: 'memo', parentTakeId: args.takeId, durationSec: args.durationSec } });
 }
 
 export async function castVote(
@@ -405,24 +342,7 @@ export async function uploadCompExport(args: {
   blob: Blob;
   token: string;
 }): Promise<{ url: string; pathname: string }> {
-  const initRes = await authedFetch("/api/takes/comp-export", args.token, {
-    method: "POST",
-    body: JSON.stringify({ compId: args.compId, filename: args.filename }),
-  });
-  if (!initRes.ok) throw new Error(`Comp export init failed: ${initRes.status}`);
-  const { uploadUrl, key } = (await initRes.json()) as { uploadUrl: string; key: string };
-  const putRes = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": "audio/wav" },
-    body: args.blob,
-  });
-  if (!putRes.ok) throw new Error(`Comp upload failed: ${putRes.status}`);
-  const finRes = await authedFetch("/api/takes/comp-export", args.token, {
-    method: "POST",
-    body: JSON.stringify({ compId: args.compId, filename: args.filename, action: "finalize" }),
-  });
-  if (!finRes.ok) throw new Error(`Comp finalize failed: ${finRes.status}`);
-  return { url: `${getApiUrl()}/api/takes/comp-export?id=${encodeURIComponent(args.compId)}`, pathname: key };
+  return uploadTakeToCreatorHub({ blob: args.blob, filename: args.filename, contentType: 'audio/wav', token: args.token, target: { purpose: 'comp', compId: args.compId } });
 }
 
 export async function deleteComp(token: string | null, compId: string): Promise<void> {

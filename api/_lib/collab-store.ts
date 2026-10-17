@@ -133,17 +133,19 @@ export async function listLyrics(f: { projectId?: string; source?: string }): Pr
 }
 
 /* ── Takes (keeper vocal recordings) ───────────────────────────────────── */
-export async function getKeeperTakes(externalTrackId: string): Promise<{ takes: any[]; storage: string }> {
+export async function getKeeperTakes(externalTrackId: string, ownerUserId: string): Promise<{ takes: any[]; storage: string }> {
   const p = getPool();
   if (!p) return { takes: [], storage: "memory" };
   try {
     const r = await p.query(
-      `SELECT id, filename, storage_url, producer_decision, decision_locked_at, created_at
-         FROM takes WHERE external_track_id = $1 AND producer_decision = 'keeper'
-        ORDER BY decision_locked_at DESC NULLS LAST, created_at DESC LIMIT 50`, [externalTrackId]);
+      `SELECT t.id, t.filename, t.storage_url, t.producer_decision, t.decision_locked_at, t.uploaded_at
+         FROM takes t WHERE t.external_track_id = $1 AND t.producer_decision = 'keeper'
+          AND (t.user_id=$2 OR EXISTS (SELECT 1 FROM creatorhub_project_links link
+            WHERE link.owner_user_id=$2 AND link.external_track_id=$1 AND link.easeverse_project_id=t.project_id))
+        ORDER BY t.decision_locked_at DESC NULLS LAST, t.uploaded_at DESC LIMIT 50`, [externalTrackId, ownerUserId]);
     const takes = r.rows.map((row) => ({
       id: String(row.id), filename: row.filename || "take.wav", url: row.storage_url,
-      decision: "keeper", decisionLockedAt: row.decision_locked_at || null, createdAt: row.created_at || null,
+      decision: "keeper", decisionLockedAt: row.decision_locked_at || null, createdAt: row.uploaded_at || null,
     }));
     return { takes, storage: "postgres" };
   } catch (e) {

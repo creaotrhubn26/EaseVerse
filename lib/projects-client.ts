@@ -76,14 +76,14 @@ export async function createProject(token: string | null, name: string): Promise
 export async function getProject(
   token: string | null,
   projectId: string,
-): Promise<{ project: Project; members: ProjectMember[]; viewerRole: ProjectRole }> {
+): Promise<{ project: Project; members: ProjectMember[]; viewerRole: ProjectRole; creatorhubLink?: { externalTrackId: string | null } }> {
   const res = await authedFetch(
     `/api/projects/detail?id=${encodeURIComponent(projectId)}`,
     token,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(`Get project failed: ${res.status}`);
-  return (await res.json()) as { project: Project; members: ProjectMember[]; viewerRole: ProjectRole };
+  return (await res.json()) as { project: Project; members: ProjectMember[]; viewerRole: ProjectRole; creatorhubLink?: { externalTrackId: string | null } };
 }
 
 export type AddMemberResult =

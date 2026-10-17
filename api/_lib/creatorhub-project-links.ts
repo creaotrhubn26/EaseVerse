@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Pool } from "pg";
-import { createProject, getProjectMembership, getProjectWithMembers, updateProjectReferenceTrack } from "./projects-db.js";
+import { createProject, ensureProjectsSchema, getProjectMembership, getProjectWithMembers, updateProjectReferenceTrack } from "./projects-db.js";
 
 let pool: Pool | null = null;
 let ready: Promise<void> | null = null;
@@ -14,6 +14,7 @@ function getPool(): Pool | null {
 async function ensureSchema(): Promise<void> {
   const p = getPool();
   if (!p) return;
+  await ensureProjectsSchema();
   if (!ready) ready = p.query(`
     CREATE TABLE IF NOT EXISTS creatorhub_project_links (
       id TEXT PRIMARY KEY,
@@ -175,3 +176,5 @@ export async function updateCreatorHubReferenceMix(args: {
   }
   return updated;
 }
+
+export { ensureSchema as ensureCreatorHubProjectLinksSchema };

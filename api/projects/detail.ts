@@ -45,6 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const reference = playback.reference;
     return res.status(200).json({
       ...data,
+      creatorhubLink: { externalTrackId: link.externalTrackId },
       project: {
         ...data.project,
         referenceTrackUrl: reference?.url ?? null,

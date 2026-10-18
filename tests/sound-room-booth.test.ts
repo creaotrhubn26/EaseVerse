@@ -115,6 +115,7 @@ test("current Sound Room comments arrive on the exact take with real timecodes a
       referencePlayback: async () => reference,
       regions: async () => new Map(),
       storage: async (operation, verified) => {
+        if(operation==='collaboration')return {requests:[],takeContexts:[]};
         calls++;
         assert.equal(operation, "reviews");
         assert.deepEqual(verified, context);
@@ -289,6 +290,7 @@ test("reference mix feedback is scoped to its approved version even before a voc
     referencePlayback: async () => reference,
     regions: async () => new Map(),
     storage: async (operation, verified, input) => {
+      if(operation==='collaboration')return {requests:[],takeContexts:[]};
       assert.equal(operation, "reviews"); assert.deepEqual(verified, context);
       assert.deepEqual(input, { referenceVersionId: "mix-3" });
       return { comments: [
@@ -300,4 +302,12 @@ test("reference mix feedback is scoped to its approved version even before a voc
   });
   assert.deepEqual(payload?.referenceTrack?.producerComments, [{ id: "current", body: "Hold den tonen.", seconds: 10, endSeconds: 11, author: "Producer", status: "unresolved" }]);
   assert.deepEqual(payload?.takes, []);
+});
+
+test('recording requests and frozen take context use the same verified project membership',async()=>{
+ const sample={id,filename:'Response.wav',status:'done',regions:[]};const request={id:'request-1',title:'Chorus',context:{startSeconds:5}};
+ const payload=await buildLinkedBoothPayload(db([sample]) as any,'artist','track-1','project-1',{
+  referencePlayback:async()=>reference,regions:async()=>new Map(),storage:async(op,verified)=>{assert.deepEqual(verified,context);return op==='collaboration'?{requests:[request],takeContexts:[{id,context:{requestId:'request-1',startSeconds:5,referenceVersionId:'mix-2'}}]}:{comments:[]};}
+ });
+ assert.deepEqual(payload?.recordingRequests,[request]);assert.deepEqual(payload?.takes[0].recordingContext,{requestId:'request-1',startSeconds:5,referenceVersionId:'mix-2'});
 });

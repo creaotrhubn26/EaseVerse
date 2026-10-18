@@ -39,6 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             "Choose a linked Sound Room project before sharing this recording.",
         });
     const ticket = await soundRoomStorage("initiate", context, {
+      recordingRequestId: body.recordingRequestId,
+      acknowledgeOlderReference: body.acknowledgeOlderReference === true,
       fileName: String(body.filename || "take.wav").slice(0, 200),
       contentType: String(body.contentType || "audio/wav"),
       sizeBytes: size,

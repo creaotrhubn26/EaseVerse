@@ -135,7 +135,6 @@ function ProjectDetailInner() {
     setRefUploading(true);
     try {
       const token = await getToken();
-      if (!token) throw new Error("Missing auth token");
       let durationSec: number | undefined;
       try {
         const url = URL.createObjectURL(file);

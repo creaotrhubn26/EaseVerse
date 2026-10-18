@@ -67,7 +67,7 @@ export async function uploadTake(args: {
   file: File;
   externalTrackId?: string;
   sourcePath?: string;
-  token: string;
+  token: string | null;
   projectId?: string;
   lyricsSnapshot?: string;
   liveSessionId?: string;
@@ -93,7 +93,7 @@ export async function uploadTakeFromUri(args: {
   contentType?: string;
   externalTrackId?: string;
   sourcePath?: string;
-  token: string;
+  token: string | null;
   projectId?: string;
   lyricsSnapshot?: string;
   liveSessionId?: string;
@@ -130,7 +130,7 @@ export async function uploadProducerMemo(args: {
   takeId: string;
   blob: Blob;
   durationSec: number;
-  token: string;
+  token: string | null;
 }): Promise<{ url: string; pathname: string }> {
   return uploadTakeToCreatorHub({ blob: args.blob, filename: 'Producer memo.webm', contentType: args.blob.type || 'audio/webm', token: args.token, target: { purpose: 'memo', parentTakeId: args.takeId, durationSec: args.durationSec } });
 }
@@ -340,7 +340,7 @@ export async function uploadCompExport(args: {
   compId: string;
   filename: string;
   blob: Blob;
-  token: string;
+  token: string | null;
 }): Promise<{ url: string; pathname: string }> {
   return uploadTakeToCreatorHub({ blob: args.blob, filename: args.filename, contentType: 'audio/wav', token: args.token, target: { purpose: 'comp', compId: args.compId } });
 }

@@ -132,7 +132,6 @@ function CompInner() {
       const safeName = (comp.name || "comp").replace(/[^a-zA-Z0-9-_]+/g, "_").slice(0, 60);
       const filename = `${safeName}-comp.wav`;
       const token = await getToken();
-      if (!token) throw new Error("missing auth token");
       await uploadCompExport({ compId: comp.id, filename, blob: wav, token });
       setCompanionStatus(
         "Sent — the companion will drop it into your Pro Tools Audio Files folder within a few seconds.",

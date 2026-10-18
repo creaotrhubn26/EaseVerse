@@ -28,10 +28,6 @@ export function useAppUser(): { user: AppUser | null; loading: boolean; reload: 
     }
     try {
       const token = await getToken();
-      if (!token) {
-        setUser(null);
-        return;
-      }
       const response = await authedFetch("/api/users/me", token, {
         headers: getApiHeaders({
           "Content-Type": "application/json",

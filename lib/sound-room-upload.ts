@@ -3,7 +3,7 @@ export type SoundRoomTakeUpload = {
   blob: Blob;
   filename: string;
   contentType: string;
-  token: string;
+  token: string | null;
   externalTrackId?: string;
   sourcePath?: string;
   projectId?: string;

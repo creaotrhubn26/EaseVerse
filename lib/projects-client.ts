@@ -17,7 +17,7 @@ export async function uploadReferenceTrack(args: {
   projectId: string;
   file: File;
   durationSec?: number;
-  token: string;
+  token: string | null;
 }): Promise<{ url: string; pathname: string }> {
   const contentType = args.file.type || "application/octet-stream";
   const initRes = await authedFetch("/api/projects/reference-upload", args.token, {

@@ -70,7 +70,7 @@ test("a project member gets the approved reference and lyrics before the first t
         return reference;
       },
       storage: async () => {
-        throw new Error("No takes: no object calls expected");
+        return { comments: [] };
       },
       regions: async () => new Map(),
     },
@@ -280,4 +280,24 @@ test("existing unlinked personal takes remain available only through an owner-sc
   assert.match(statements[1].sql, /t.user_id=\$2/);
   assert.deepEqual(statements[1].values, ["legacy-track", "artist", null]);
   assert.deepEqual(statements[3].values, ["legacy-track", null, "artist"]);
+});
+
+
+test("reference mix feedback is scoped to its approved version even before a vocal take", async () => {
+  const pool = db();
+  const payload = await buildLinkedBoothPayload(pool as any, "artist", "track-1", "project-1", {
+    referencePlayback: async () => reference,
+    regions: async () => new Map(),
+    storage: async (operation, verified, input) => {
+      assert.equal(operation, "reviews"); assert.deepEqual(verified, context);
+      assert.deepEqual(input, { referenceVersionId: "mix-3" });
+      return { comments: [
+        { id: "current", version_id: "mix-3", body: "Hold den tonen.", author: "Producer", timecode_seconds: 10, end_time_seconds: 11 },
+        { id: "old", version_id: "mix-2", body: "Old mix comment", timecode_seconds: 2 },
+        { id: "take", storage_object_id: id, body: "Take comment", timecode_seconds: 1 },
+      ] };
+    },
+  });
+  assert.deepEqual(payload?.referenceTrack?.producerComments, [{ id: "current", body: "Hold den tonen.", seconds: 10, endSeconds: 11, author: "Producer", status: "unresolved" }]);
+  assert.deepEqual(payload?.takes, []);
 });

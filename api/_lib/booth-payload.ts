@@ -154,8 +154,8 @@ export async function buildLinkedBoothPayload(
     externalTrackId: trackId,
   };
   const review =
-    !legacy && takeRows.some((t) => UUID.test(t.id))
-      ? await storage("reviews", context)
+    !legacy && (referenceTrack || takeRows.some((t) => UUID.test(t.id)))
+      ? await storage("reviews", context, referenceTrack?.versionId ? { referenceVersionId: referenceTrack.versionId } : {})
       : { comments: [] };
   const comments = Array.isArray(review.comments) ? review.comments : [];
   const linked = takeRows.map((t) => {
@@ -193,7 +193,15 @@ export async function buildLinkedBoothPayload(
   return {
     trackId: trackId,
     lyrics,
-    referenceTrack,
+    referenceTrack: referenceTrack ? {
+      ...referenceTrack,
+      producerComments: comments.filter((comment: any) => referenceTrack.versionId && comment.version_id === referenceTrack.versionId).map((comment: any) => ({
+        id: String(comment.id), body: String(comment.body || ''),
+        seconds: Math.max(0, Number(comment.timecode_seconds) || 0),
+        endSeconds: comment.end_time_seconds == null ? null : Math.max(0, Number(comment.end_time_seconds) || 0),
+        author: String(comment.author || 'Producer'), status: String(comment.status || 'unresolved'),
+      })),
+    } : null,
     projectId: link.easeverse_project_id,
     takes: linked.map(({ take: t, audioUrl, extraRegions }) => ({
       id: t.id,

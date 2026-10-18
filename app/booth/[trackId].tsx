@@ -65,11 +65,13 @@ type BoothTake = {
   energyAvgDb: number | null;
 };
 
+type ReferenceComment = { id: string; body: string; seconds: number; endSeconds: number | null; author: string; status: string };
+
 type BoothPayload = {
   trackId: string;
   projectId?: string;
   lyrics: { title: string | null; lyrics: string | null; bpm: number | null; updatedAt: string } | null;
-  referenceTrack: { url: string; name: string | null; durationSec: number | null; versionId?: string; expiresAt?: number } | null;
+  referenceTrack: { url: string; name: string | null; durationSec: number | null; versionId?: string; expiresAt?: number; producerComments?: ReferenceComment[] } | null;
   takes: BoothTake[];
 };
 
@@ -202,9 +204,12 @@ export default function BoothScreen() {
       : selectedTake?.audioUrl
         ? { id: selectedTake.id, url: selectedTake.audioUrl, name: selectedTake.filename }
         : data?.referenceTrack ? { id: 'reference', url: data.referenceTrack.url, name: data.referenceTrack.name || 'Reference mix' } : null;
-  const hasFeedback = Boolean(selectedTake?.producerNote || selectedTake?.producerMemoUrl || selectedTake?.regions.length);
-  const feedbackKey = JSON.stringify([data?.projectId, data?.trackId, selectedTake?.id, selectedTake?.producerNote, selectedTake?.producerMemoUrl, selectedTake?.regions]);
+  const isReference = activeAudio?.id === 'reference';
+  const referenceComments = data?.referenceTrack?.producerComments || [];
+  const hasFeedback = isReference ? referenceComments.length > 0 : Boolean(selectedTake?.producerNote || selectedTake?.producerMemoUrl || selectedTake?.regions.length);
+  const feedbackKey = isReference ? JSON.stringify([data?.projectId, data?.referenceTrack?.versionId, referenceComments]) : JSON.stringify([data?.projectId, data?.trackId, selectedTake?.id, selectedTake?.producerNote, selectedTake?.producerMemoUrl, selectedTake?.regions]);
   const noteTimes = parseProducerNote(selectedTake?.producerNote).filter(segment => segment.kind === 'timestamp').map(segment => segment.seconds);
+  const referenceMoment = (comment: ReferenceComment) => { setAudioChoice('reference'); setJump({ id: ++jumpSerial.current, seconds: comment.seconds, ...(comment.endSeconds != null && comment.endSeconds > comment.seconds ? { loopEnd: comment.endSeconds } : {}) }); };
   const chooseAudio = (choice: 'reference' | 'take' | 'memo') => { setJump(null); setAudioChoice(choice); };
   const playMoment = (seconds: number, loopEnd?: number) => {
     setAudioChoice('take'); setJump({ id: ++jumpSerial.current, seconds, loopEnd });
@@ -239,9 +244,16 @@ export default function BoothScreen() {
           </View>
           {hasFeedback ? <DismissibleFeedbackPreview key={feedbackKey} hidden={hiddenFeedback.has(feedbackKey)} onDismiss={() => setHiddenFeedback(previous => new Set(previous).add(feedbackKey))} onUndo={() => setHiddenFeedback(previous => { const next = new Set(previous); next.delete(feedbackKey); return next; })}><Pressable onPress={() => setPanel('feedback')} style={styles.feedbackPreview} accessibilityRole="button" accessibilityLabel="Read producer feedback">
             <View style={styles.feedbackPreviewTitle}><Ionicons name="chatbubble-ellipses-outline" size={20} color={Colors.gradientMid} /><Text style={styles.feedbackTitle}>Producer feedback</Text><Ionicons name="chevron-forward" size={17} color={Colors.textSecondary} /></View>
-            <Text numberOfLines={2} style={styles.previewText}>{selectedTake?.producerNote || 'Listen to the producer’s voice note and marked sections.'}</Text>
+            <Text numberOfLines={2} style={styles.previewText}>{isReference ? referenceComments[0]?.body : selectedTake?.producerNote || 'Listen to the producer’s voice note and marked sections.'}</Text>
           </Pressable></DismissibleFeedbackPreview> : null}
-        </> : panel === 'feedback' ? selectedTake ? <TakeCard take={selectedTake} onSeek={seconds => playMoment(seconds)} onLoop={(start, end) => playMoment(start, end)} onPlayMemo={() => chooseAudio('memo')} /> : <Text style={styles.empty}>Feedback appears here when a take is shared.</Text> : <>
+        </> : panel === 'feedback' ? isReference ? <>
+          <Text style={styles.sectionLabel}>Feedback on reference mix</Text>
+          <Text style={styles.takeMeta}>{data?.referenceTrack?.name}</Text>
+          {!referenceComments.length ? <Text style={styles.empty}>No producer feedback on this reference mix yet.</Text> : referenceComments.map(comment => <View key={comment.id} style={styles.lyricsCard}>
+            <View style={styles.feedbackPreviewTitle}><Text style={styles.takeMeta}>{comment.author}</Text><Pressable accessibilityRole="button" accessibilityLabel={`Play reference feedback at ${formatTimestamp(comment.seconds)}`} onPress={() => referenceMoment(comment)} style={styles.headerButton}><Ionicons name="play-circle-outline" size={20} color={Colors.gradientMid} /><Text style={styles.timestampLink}>{formatTimestamp(comment.seconds)}{comment.endSeconds != null && comment.endSeconds > comment.seconds ? `–${formatTimestamp(comment.endSeconds)}` : ''}</Text></Pressable></View>
+            <Text style={styles.producerNoteText}>{comment.body}</Text>
+          </View>)}
+        </> : selectedTake ? <TakeCard take={selectedTake} onSeek={seconds => playMoment(seconds)} onLoop={(start, end) => playMoment(start, end)} onPlayMemo={() => chooseAudio('memo')} /> : <Text style={styles.empty}>Feedback appears here when a take is shared.</Text> : <>
           <Text style={styles.sectionLabel}>Choose a take to listen and review</Text>
           {!data?.takes.length ? <Text style={styles.empty}>No takes have been shared yet.</Text> : data.takes.map((take, index) => <Pressable key={take.id} onPress={() => { setSelectedTakeId(take.id); chooseAudio('take'); setPanel('feedback'); }} style={[styles.takeChoice, selectedTake?.id === take.id && styles.takeChoiceSelected]} accessibilityRole="button" accessibilityState={{ selected: selectedTake?.id === take.id }} aria-pressed={selectedTake?.id === take.id} accessibilityLabel={`Open ${take.filename}`}>
             <View style={styles.takeNumber}><Text style={styles.panelTabLabel}>{index + 1}</Text></View><View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={1} style={styles.takeName}>{take.filename}</Text><Text style={styles.takeMeta}>{take.durationSec ? formatTimestamp(take.durationSec) + ' · ' : ''}{new Date(take.uploadedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</Text></View><Ionicons name={selectedTake?.id === take.id ? 'checkmark-circle' : 'chevron-forward'} size={22} color={selectedTake?.id === take.id ? Colors.gradientMid : Colors.textSecondary} />
@@ -253,7 +265,7 @@ export default function BoothScreen() {
           {data?.referenceTrack ? <Pressable onPress={() => chooseAudio('reference')} accessibilityRole="button" accessibilityState={{ selected: activeAudio.id === 'reference' }} aria-pressed={activeAudio.id === 'reference'} style={[styles.sourceTab, activeAudio.id === 'reference' && styles.sourceTabActive]}><Text style={[styles.sourceLabel, activeAudio.id === 'reference' && styles.panelTabLabelActive]}>Reference mix</Text></Pressable> : null}
           {selectedTake?.audioUrl ? <Pressable onPress={() => chooseAudio('take')} accessibilityRole="button" accessibilityState={{ selected: activeAudio.id === selectedTake.id }} aria-pressed={activeAudio.id === selectedTake.id} style={[styles.sourceTab, activeAudio.id === selectedTake.id && styles.sourceTabActive]}><Text style={[styles.sourceLabel, activeAudio.id === selectedTake.id && styles.panelTabLabelActive]}>Vocal take</Text></Pressable> : null}
         </View>
-        <UniversalAudioPlayer key={activeAudio.id} url={activeAudio.url} label={activeAudio.name} jump={jump} markers={activeAudio.id === selectedTake?.id ? noteTimes : []} />
+        <UniversalAudioPlayer key={activeAudio.id} url={activeAudio.url} label={activeAudio.name} jump={jump} markers={isReference ? referenceComments.map(comment => comment.seconds) : activeAudio.id === selectedTake?.id ? noteTimes : []} />
       </View> : null}
     </>}
   </View>;

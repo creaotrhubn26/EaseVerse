@@ -202,7 +202,7 @@ export async function createTake(args: {
   const { rows } = await p.query<TakeRowDb>(
     `INSERT INTO takes
       (id, user_id, external_track_id, source_path, filename, byte_size, storage_url, project_id, lyrics_snapshot, lyrics_snapshot_at, live_session_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $9 IS NULL THEN NULL ELSE NOW() END, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text, CASE WHEN $9::text IS NULL THEN NULL ELSE NOW() END, $10)
      RETURNING *`,
     [
       args.id,

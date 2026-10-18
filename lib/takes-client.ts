@@ -71,6 +71,8 @@ export async function uploadTake(args: {
   projectId?: string;
   lyricsSnapshot?: string;
   liveSessionId?: string;
+  recordingRequestId?: string;
+  acknowledgeOlderReference?: boolean;
 }): Promise<{ url: string; pathname: string }> {
   return uploadTakeToCreatorHub({
     blob: args.file,
@@ -82,6 +84,8 @@ export async function uploadTake(args: {
     projectId: args.projectId,
     lyricsSnapshot: args.lyricsSnapshot,
     liveSessionId: args.liveSessionId,
+    recordingRequestId: args.recordingRequestId,
+    acknowledgeOlderReference: args.acknowledgeOlderReference,
   });
 }
 
@@ -97,6 +101,8 @@ export async function uploadTakeFromUri(args: {
   projectId?: string;
   lyricsSnapshot?: string;
   liveSessionId?: string;
+  recordingRequestId?: string;
+  acknowledgeOlderReference?: boolean;
 }): Promise<{ url: string; pathname: string }> {
   const typed = new LocalFile(args.uri);
   const contentType = args.contentType || typed.type || "audio/m4a";
@@ -110,6 +116,8 @@ export async function uploadTakeFromUri(args: {
     projectId: args.projectId,
     lyricsSnapshot: args.lyricsSnapshot,
     liveSessionId: args.liveSessionId,
+    recordingRequestId: args.recordingRequestId,
+    acknowledgeOlderReference: args.acknowledgeOlderReference,
   });
 }
 

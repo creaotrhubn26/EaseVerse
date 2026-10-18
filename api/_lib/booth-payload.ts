@@ -157,6 +157,8 @@ export async function buildLinkedBoothPayload(
     !legacy && (referenceTrack || takeRows.some((t) => UUID.test(t.id)))
       ? await storage("reviews", context, referenceTrack?.versionId ? { referenceVersionId: referenceTrack.versionId } : {})
       : { comments: [] };
+  const collaboration = !legacy ? await storage('collaboration',context).catch(()=>({requests:[],takeContexts:[],unavailable:true})) : { requests: [],takeContexts:[] };
+  const takeContext = new Map((Array.isArray(collaboration.takeContexts)?collaboration.takeContexts:[]).map((r:any)=>[r.id,r.context]));
   const comments = Array.isArray(review.comments) ? review.comments : [];
   const linked = takeRows.map((t) => {
     if (legacy || !UUID.test(t.id))
@@ -202,9 +204,12 @@ export async function buildLinkedBoothPayload(
         author: String(comment.author || 'Producer'), status: String(comment.status || 'unresolved'),
       })),
     } : null,
+    collaborationUnavailable: collaboration.unavailable === true,
+    recordingRequests: collaboration.requests || [],
     projectId: link.easeverse_project_id,
     takes: linked.map(({ take: t, audioUrl, extraRegions }) => ({
       id: t.id,
+      recordingContext: takeContext.get(t.id) || null,
       filename: t.filename,
       uploadedAt: t.uploaded_at,
       durationSec: t.duration_sec,

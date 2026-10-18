@@ -9,6 +9,8 @@ export type SoundRoomTakeUpload = {
   projectId?: string;
   lyricsSnapshot?: string;
   liveSessionId?: string;
+  recordingRequestId?: string;
+  acknowledgeOlderReference?: boolean;
   target?: {
     purpose: "memo" | "comp";
     parentTakeId?: string;
@@ -38,6 +40,8 @@ export async function uploadSoundRoomTake(
       method: "POST",
       body: JSON.stringify({
         ...args.target,
+        recordingRequestId: args.recordingRequestId,
+        acknowledgeOlderReference: args.acknowledgeOlderReference === true,
         filename: args.filename,
         contentType,
         projectId: args.projectId ?? null,

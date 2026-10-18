@@ -234,3 +234,12 @@ test("producer memos and comp exports use the S3 asset endpoint and retain their
     assert.match(result.url, /asset-audio/);
   }
 });
+
+test('request identity is frozen at upload initiation without sending service credentials to S3',async()=>{
+ let init:any;
+ await uploadSoundRoomTake({...args,recordingRequestId:ID,acknowledgeOlderReference:true},{checksum,request:async(path,request)=>{
+  const body=JSON.parse(String(request.body));if(path.endsWith('/upload')){init=body;return Response.json({takeId:ID,key:ID,strategy:'single',uploadUrl:'https://s3.example.test/file'});}
+  return Response.json({take:{storageUrl:'/private/take'}});
+ },put:async(_url,request)=>{assert.equal(new Headers(request.headers).get('authorization'),null);return new Response(null,{status:200});}});
+ assert.equal(init.recordingRequestId,ID);assert.equal(init.acknowledgeOlderReference,true);assert.equal(init.projectId,args.projectId);
+});

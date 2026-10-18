@@ -1,3 +1,4 @@
+import { RecordingRequests, type RecordingRequest } from '@/components/RecordingRequests';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -59,6 +60,7 @@ type BoothTake = {
   regions: BoothRegion[];
   lyricsSnapshot: string | null;
   lyricsSnapshotAt: string | null;
+  recordingContext?:{requestId?:string;referenceVersionId?:string;referenceVersionNumber?:number;startSeconds:number;targetTrackName?:string}|null;
   transcript: string | null;
   aiNotes: string | null;
   pitchMeanHz: number | null;
@@ -72,6 +74,8 @@ type BoothPayload = {
   projectId?: string;
   lyrics: { title: string | null; lyrics: string | null; bpm: number | null; updatedAt: string } | null;
   referenceTrack: { url: string; name: string | null; durationSec: number | null; versionId?: string; expiresAt?: number; producerComments?: ReferenceComment[] } | null;
+  collaborationUnavailable?:boolean;
+  recordingRequests?: RecordingRequest[];
   takes: BoothTake[];
 };
 
@@ -80,11 +84,12 @@ const BOOTH_TIP_KEY = "@easeverse_booth_intro_dismissed_v1";
 export default function BoothScreen() {
   const insets = useSafeAreaInsets();
   const { trackId, projectId } = useLocalSearchParams<{ trackId: string; projectId?: string }>();
+  const [requestPending,setRequestPending]=useState(false);
   const [data, setData] = useState<BoothPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [introVisible, setIntroVisible] = useState(false);
-  const [panel, setPanel] = useState<'lyrics' | 'feedback' | 'takes'>('lyrics');
+  const [panel, setPanel] = useState<'lyrics' | 'feedback' | 'takes' | 'requests'>('lyrics');
   const [selectedTakeId, setSelectedTakeId] = useState<string | null>(null);
   const [audioChoice, setAudioChoice] = useState<'reference' | 'take' | 'memo'>('take');
   const [jump, setJump] = useState<PlaybackJump | null>(null);
@@ -217,7 +222,7 @@ export default function BoothScreen() {
 
   return <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
     <View style={styles.headerRow}>
-      <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.headerButton} accessibilityRole="button" accessibilityLabel="Leave booth view">
+      <Pressable disabled={requestPending} onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.headerButton} accessibilityRole="button" accessibilityLabel="Leave booth view">
         <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
       </Pressable>
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -229,16 +234,17 @@ export default function BoothScreen() {
       {Platform.OS === 'web' && typeof Notification !== 'undefined' ? <Pressable onPress={togglePush} disabled={pushBusy} style={styles.headerButton} accessibilityRole="button" accessibilityLabel={pushOn ? 'Disable push notifications' : 'Enable push notifications'}><Ionicons name={pushOn ? 'notifications' : 'notifications-outline'} size={20} color={Colors.textSecondary} /></Pressable> : null}
     </View>
     <View style={styles.panelTabs} accessibilityRole="tablist">
-      {(['lyrics', 'feedback', 'takes'] as const).map(item => <Pressable key={item} onPress={() => setPanel(item)} accessibilityRole="tab" accessibilityState={{ selected: panel === item }} aria-selected={panel === item} accessibilityLabel={item === 'lyrics' ? 'Lyrics' : item === 'feedback' ? 'Producer feedback' : 'Takes'} style={[styles.panelTab, panel === item && styles.panelTabActive]}>
-        <Text style={[styles.panelTabLabel, panel === item && styles.panelTabLabelActive]}>{item === 'lyrics' ? 'Lyrics' : item === 'feedback' ? 'Feedback' : 'Takes'}</Text>
-        {item === 'feedback' && hasFeedback ? <View style={styles.feedbackDot} /> : item === 'takes' ? <Text style={styles.tabCount}>{data?.takes.length ?? 0}</Text> : null}
+      {(['lyrics', 'feedback', 'takes', 'requests'] as const).map(item => <Pressable key={item} disabled={requestPending && item!=='requests'} onPress={() => setPanel(item)} accessibilityRole="tab" accessibilityState={{ selected: panel === item }} aria-selected={panel === item} accessibilityLabel={item === 'lyrics' ? 'Lyrics' : item === 'feedback' ? 'Producer feedback' : item === 'requests' ? 'Recording requests' : 'Takes'} style={[styles.panelTab, panel === item && styles.panelTabActive]}>
+        <Text style={[styles.panelTabLabel, panel === item && styles.panelTabLabelActive]}>{item === 'lyrics' ? 'Lyrics' : item === 'feedback' ? 'Feedback' : item === 'requests' ? 'Requests' : 'Takes'}</Text>
+        {item === 'feedback' && hasFeedback ? <View style={styles.feedbackDot} /> : item === 'takes' ? <Text style={styles.tabCount}>{data?.takes.length ?? 0}</Text> : item==='requests' ? <Text style={styles.tabCount}>{data?.recordingRequests?.filter(r=>r.status==='open').length||0}</Text> : null}
       </Pressable>)}
     </View>
     {loading && !data ? <ActivityIndicator accessibilityLabel="Loading vocal booth" color={Colors.gradientMid} style={{ marginTop: 32 }} /> : error && !data ? <View style={styles.stateCard}><Text style={styles.error}>{error}</Text><Pressable onPress={() => void (!auth.user && auth.signIn ? auth.signIn().then(load) : load())} style={styles.headerButton} accessibilityRole="button" accessibilityLabel={!auth.user ? "Sign in to open song" : "Retry loading song"}><Text style={styles.panelTabLabelActive}>{!auth.user ? "Continue with CreatorHub" : "Try again"}</Text></Pressable></View> : <>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll}>
         {error && data ? <Pressable accessibilityRole="button" accessibilityLabel="Retry song updates" onPress={() => void load()} style={styles.hintRow}><Text accessibilityLiveRegion="polite" aria-live="polite" style={styles.hintText}>Could not refresh. Retrying automatically. Tap to retry now.</Text></Pressable> : null}
         {introVisible ? <View style={styles.hintRow}><Text style={styles.hintText}>Tap a timecode to hear feedback in context.</Text><Pressable onPress={dismissIntro} style={styles.headerButton} accessibilityRole="button" accessibilityLabel="Dismiss booth tip"><Ionicons name="close" size={18} color={Colors.textSecondary} /></Pressable></View> : null}
-        {panel === 'lyrics' ? <>
+        {panel!=='requests' && data?.recordingRequests?.some(r=>r.status==='open') ? <Pressable accessibilityRole="button" accessibilityLabel="Open recording requests" onPress={()=>{chooseAudio('reference');setPanel('requests');}} style={styles.hintRow}><Text style={styles.hintText}>Your producer has requested a new recording. Open requests →</Text></Pressable>:null}
+        {panel === 'requests' ? data?.collaborationUnavailable ? <Text accessibilityRole="alert" style={styles.error}>Recording requests are temporarily unavailable. Your song and recordings are still available.</Text> : <RecordingRequests requests={data?.recordingRequests||[]} projectId={data?.projectId||''} refresh={()=>void load()} onPendingChange={setRequestPending}/> : panel === 'lyrics' ? <>
           <View style={styles.lyricsCard}>
             {data?.lyrics?.lyrics ? data.lyrics.lyrics.split('\n').map((line, index) => <Text key={index} style={/^\[.+\]$/.test(line.trim()) ? styles.lyricSection : styles.lyricsText}>{line || ' '}</Text>) : <Text style={styles.empty}>Lyrics will appear here when they are shared with you.</Text>}
           </View>
@@ -256,11 +262,11 @@ export default function BoothScreen() {
         </> : selectedTake ? <TakeCard take={selectedTake} onSeek={seconds => playMoment(seconds)} onLoop={(start, end) => playMoment(start, end)} onPlayMemo={() => chooseAudio('memo')} /> : <Text style={styles.empty}>Feedback appears here when a take is shared.</Text> : <>
           <Text style={styles.sectionLabel}>Choose a take to listen and review</Text>
           {!data?.takes.length ? <Text style={styles.empty}>No takes have been shared yet.</Text> : data.takes.map((take, index) => <Pressable key={take.id} onPress={() => { setSelectedTakeId(take.id); chooseAudio('take'); setPanel('feedback'); }} style={[styles.takeChoice, selectedTake?.id === take.id && styles.takeChoiceSelected]} accessibilityRole="button" accessibilityState={{ selected: selectedTake?.id === take.id }} aria-pressed={selectedTake?.id === take.id} accessibilityLabel={`Open ${take.filename}`}>
-            <View style={styles.takeNumber}><Text style={styles.panelTabLabel}>{index + 1}</Text></View><View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={1} style={styles.takeName}>{take.filename}</Text><Text style={styles.takeMeta}>{take.durationSec ? formatTimestamp(take.durationSec) + ' · ' : ''}{new Date(take.uploadedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</Text></View><Ionicons name={selectedTake?.id === take.id ? 'checkmark-circle' : 'chevron-forward'} size={22} color={selectedTake?.id === take.id ? Colors.gradientMid : Colors.textSecondary} />
+            <View style={styles.takeNumber}><Text style={styles.panelTabLabel}>{index + 1}</Text></View><View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={1} style={styles.takeName}>{take.filename}</Text><Text style={styles.takeMeta}>{take.recordingContext ? `Mix V${take.recordingContext.referenceVersionNumber||'?'} · starts ${formatTimestamp(take.recordingContext.startSeconds)} · ` : ''}{take.durationSec ? formatTimestamp(take.durationSec) + ' · ' : ''}{new Date(take.uploadedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</Text></View><Ionicons name={selectedTake?.id === take.id ? 'checkmark-circle' : 'chevron-forward'} size={22} color={selectedTake?.id === take.id ? Colors.gradientMid : Colors.textSecondary} />
           </Pressable>)}
         </>}
       </ScrollView>
-      {activeAudio ? <View style={[styles.playerDock, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      {activeAudio && panel!=='requests' ? <View style={[styles.playerDock, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View style={styles.sourceTabs}>
           {data?.referenceTrack ? <Pressable onPress={() => chooseAudio('reference')} accessibilityRole="button" accessibilityState={{ selected: activeAudio.id === 'reference' }} aria-pressed={activeAudio.id === 'reference'} style={[styles.sourceTab, activeAudio.id === 'reference' && styles.sourceTabActive]}><Text style={[styles.sourceLabel, activeAudio.id === 'reference' && styles.panelTabLabelActive]}>Reference mix</Text></Pressable> : null}
           {selectedTake?.audioUrl ? <Pressable onPress={() => chooseAudio('take')} accessibilityRole="button" accessibilityState={{ selected: activeAudio.id === selectedTake.id }} aria-pressed={activeAudio.id === selectedTake.id} style={[styles.sourceTab, activeAudio.id === selectedTake.id && styles.sourceTabActive]}><Text style={[styles.sourceLabel, activeAudio.id === selectedTake.id && styles.panelTabLabelActive]}>Vocal take</Text></Pressable> : null}

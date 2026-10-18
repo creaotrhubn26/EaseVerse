@@ -70,7 +70,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const full = await getTakeWithAnalysis(take.id);
     if (full) {
-      void processTake(full).catch((err) => console.warn("[takes/finalize] processTake failed:", err));
+      const processing = processTake(full).catch((err) => console.warn("[takes/finalize] processTake failed:", err));
+      // Retain analysis after the HTTP response on serverless hosts.
+      const runtimeRequest = req as VercelRequest & { waitUntil?: (task: Promise<unknown>) => void };
+      runtimeRequest.waitUntil?.(processing);
     }
     return res.status(200).json({ take: full ?? take, soundRoomVersionId: completed.version?.id });
   } catch (error) {

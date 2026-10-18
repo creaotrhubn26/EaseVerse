@@ -14,11 +14,11 @@ import {
 import { recordClaudeUsage } from "./usage-db.js";
 
 const anthropicKey = process.env.ANTHROPIC_API_KEY;
-const claudeClient: Anthropic | null = anthropicKey ? new Anthropic({ apiKey: anthropicKey }) : null;
+const claudeClient: Anthropic | null = anthropicKey ? new Anthropic({ apiKey: anthropicKey, timeout: 15_000, maxRetries: 0 }) : null;
 const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-7";
 
 const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-const openaiClient: OpenAI | null = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null;
+const openaiClient: OpenAI | null = openaiKey ? new OpenAI({ apiKey: openaiKey, timeout: 15_000, maxRetries: 0 }) : null;
 
 export type TranscriptWord = { word: string; start: number; end: number };
 
@@ -157,7 +157,7 @@ export async function processTake(take: TakeRow): Promise<void> {
       if (typeof playback.url !== 'string' || !playback.url.startsWith('https://')) throw new Error('Invalid audio playback');
       audioUrl = playback.url;
     }
-    const response = await fetch(audioUrl);
+    const response = await fetch(audioUrl, { signal: AbortSignal.timeout(15_000) });
     if (!response.ok) throw new Error(`Blob download failed: ${response.status}`);
     const arrayBuffer = await response.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);

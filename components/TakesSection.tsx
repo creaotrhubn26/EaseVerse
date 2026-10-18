@@ -855,7 +855,7 @@ function TakeRow({
           </View>
         ) : null}
       </View> : <View style={styles.producerBox}>
-        {take.storageUrl && take.status === 'done' ? <UniversalAudioPlayer url={take.storageUrl} label={take.filename} /> : null}
+        {take.storageUrl ? <UniversalAudioPlayer url={take.storageUrl} label={take.filename} /> : null}
         {take.producerDecision ? <Text style={styles.consensusText}>Producer decision: {take.producerDecision === 'keeper' ? 'Keeper' : 'Re-do requested'}</Text> : null}
         {take.producerNote ? <Text style={styles.analysisNotes}>{take.producerNote}</Text> : null}
         {take.externalTrackId && take.projectId ? <Pressable accessibilityRole="button" accessibilityLabel="View lyrics and producer feedback" style={styles.boothBtn} onPress={() => router.push({ pathname: '/booth/[trackId]', params: { trackId: take.externalTrackId!, projectId: take.projectId! } })}>

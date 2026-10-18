@@ -254,7 +254,7 @@ export function RecordingRequests({
               </Text>
             </Pressable>
           ) : null}
-          {["open", "submitted"].includes(current.status) ? (
+          {(["open", "submitted"].includes(current.status)||recorder.isRecording||!!uri||!!pendingFile) ? (
             <>
               <Text style={{ color: Colors.textSecondary, marginTop: 10 }}>
                 Use headphones. This response starts at{" "}

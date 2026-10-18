@@ -249,6 +249,8 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
             <TakeRow
               key={t.id}
               take={t}
+              canProduce={!t.projectId || projects.find(project => project.id === t.projectId)?.role === 'producer'}
+              projectName={projects.find(project => project.id === t.projectId)?.name}
               getToken={getToken}
               onTakeUpdated={(updated) =>
                 setTakes((prev) => prev.map((tt) => (tt.id === updated.id ? { ...tt, ...updated } : tt)))
@@ -263,10 +265,14 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
 
 function TakeRow({
   take,
+  canProduce,
+  projectName,
   getToken,
   onTakeUpdated,
 }: {
   take: TakeRecord;
+  canProduce: boolean;
+  projectName?: string;
   getToken: () => Promise<string | null>;
   onTakeUpdated: (updated: TakeRecord) => void;
 }) {
@@ -531,8 +537,9 @@ function TakeRow({
   function copyBoothUrl() {
     if (!take.externalTrackId) return;
     if (Platform.OS !== "web" || typeof window === "undefined" || !navigator.clipboard) return;
-    const url = `${window.location.origin}/booth/${encodeURIComponent(take.externalTrackId)}`;
-    void navigator.clipboard.writeText(url).then(
+    const url = new URL(`/booth/${encodeURIComponent(take.externalTrackId)}`, window.location.origin);
+    if (take.projectId) url.searchParams.set('projectId', take.projectId);
+    void navigator.clipboard.writeText(url.toString()).then(
       () => {
         setBoothCopied(true);
         setTimeout(() => setBoothCopied(false), 1500);
@@ -549,7 +556,7 @@ function TakeRow({
             {take.filename}
           </Text>
           <Text style={styles.takeMeta}>
-            {take.externalTrackId ? `${take.externalTrackId} · ` : ""}
+            {projectName ? `${projectName} · ` : !take.projectId && take.externalTrackId ? `${take.externalTrackId} · ` : ""}
             {take.byteSize ? `${(take.byteSize / 1024 / 1024).toFixed(1)} MB · ` : ""}
             {take.durationSec ? `${take.durationSec.toFixed(1)}s · ` : ""}
             {new Date(take.uploadedAt).toLocaleString()}
@@ -634,7 +641,7 @@ function TakeRow({
           ) : null}
         </View>
       ) : null}
-      <View style={styles.producerBox}>
+      {canProduce ? <View style={styles.producerBox}>
         <View style={styles.decisionRow}>
           <DecisionChip
             active={take.producerDecision === "keeper"}
@@ -847,7 +854,14 @@ function TakeRow({
             ) : null}
           </View>
         ) : null}
-      </View>
+      </View> : <View style={styles.producerBox}>
+        {take.storageUrl && take.status === 'done' ? <UniversalAudioPlayer url={take.storageUrl} label={take.filename} /> : null}
+        {take.producerDecision ? <Text style={styles.consensusText}>Producer decision: {take.producerDecision === 'keeper' ? 'Keeper' : 'Re-do requested'}</Text> : null}
+        {take.producerNote ? <Text style={styles.analysisNotes}>{take.producerNote}</Text> : null}
+        {take.externalTrackId && take.projectId ? <Pressable accessibilityRole="button" accessibilityLabel="View lyrics and producer feedback" style={styles.boothBtn} onPress={() => router.push({ pathname: '/booth/[trackId]', params: { trackId: take.externalTrackId!, projectId: take.projectId! } })}>
+          <Text style={styles.boothBtnText}>Lyrics & producer feedback</Text>
+        </Pressable> : null}
+      </View>}
     </View>
   );
 }

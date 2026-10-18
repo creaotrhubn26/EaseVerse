@@ -14,7 +14,8 @@ test("cookie-only sign-in reaches private uploads and preserves server authoriza
     return route.fulfill({ json: { userId: user.id, email: user.email, status: "approved" } });
   });
   await page.route("**/api/projects", route => route.fulfill({ json: { projects: [{ id: "cookie-project", name: "Cookie project", role: "vocalist", memberCount: 2 }] } }));
-  await page.route("**/api/takes", route => route.fulfill({ json: { takes: [] } }));
+  await page.route("**/api/takes", route => route.fulfill({ json: { takes: [{ id: '22222222-2222-4222-8222-222222222222', userId: user.id, projectId: 'cookie-project', externalTrackId: 'cookie-song', filename: 'Existing vocal.wav', status: 'done', storageUrl: '/api/takes/22222222-2222-4222-8222-222222222222/audio', uploadedAt: '2026-10-18T00:00:00Z' }] } }));
+  await page.route('**/api/takes/22222222-2222-4222-8222-222222222222/audio?format=json', route => route.fulfill({ status: 503, json: { error: 'Playback temporarily unavailable' } }));
   let uploadRequested = false;
   let storageRequested = false;
   await page.route("**/api/takes/upload", route => {
@@ -29,6 +30,9 @@ test("cookie-only sign-in reaches private uploads and preserves server authoriza
   await expect.poll(() => registered).toBe(true);
   await page.goto("/sessions");
   await page.getByRole("combobox").selectOption("cookie-project");
+  await expect(page.getByRole('button', { name: 'View lyrics and producer feedback' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mark take Keeper' })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Producer note for vocalist' })).toHaveCount(0);
   await page.locator('input[type="file"]').setInputFiles({ name: "cookie-vocal.wav", mimeType: "audio/wav", buffer: Buffer.from("synthetic-test-audio") });
   await expect(page.getByText("Only project members may upload", { exact: true })).toBeVisible();
   expect(uploadRequested).toBe(true);

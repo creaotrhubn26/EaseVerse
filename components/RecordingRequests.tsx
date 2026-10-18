@@ -264,7 +264,7 @@ export function RecordingRequests({
               {!uri && !pendingFile ? (
                 <Pressable
                   accessibilityRole="button"
-                  disabled={!allowed || busy}
+                  disabled={!recorder.isRecording && (!allowed || busy)}
                   onPress={() => void (recorder.isRecording ? stop() : start())}
                   style={action}
                 >

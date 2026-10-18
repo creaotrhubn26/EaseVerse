@@ -100,7 +100,6 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
     setError(null);
     try {
       const token = await getToken();
-      if (!token) throw new Error("Missing auth token");
       const inferredTrackId = externalTrackId || file.name.replace(/\.[^.]+$/, "").slice(0, 80);
       await uploadTake({
         file,
@@ -429,7 +428,6 @@ function TakeRow({
         setMemoUploading(true);
         try {
           const token = await getToken();
-          if (!token) throw new Error("missing auth token");
           await uploadProducerMemo({ takeId: take.id, blob, durationSec, token });
           setTimeout(async () => {
             const token2 = await getToken();

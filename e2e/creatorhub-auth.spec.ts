@@ -2,6 +2,40 @@ import { expect, test } from "@playwright/test";
 
 const transferId = "550e8400-e29b-41d4-a716-446655440000";
 
+test("cookie-only sign-in reaches private uploads and preserves server authorization failures", async ({ page, context }) => {
+  const base = new URL(process.env.E2E_API_BASE || "http://127.0.0.1:5051");
+  await context.addCookies([{ name: "easeverse_session", value: "cookie-only-e2e", domain: base.hostname, path: "/", httpOnly: true }]);
+  const user = { id: "cookie-vocalist", email: "vocalist@example.test", name: "Vocalist" };
+  await page.route("**/api/auth/session", route => route.fulfill({ json: { authenticated: true, user } }));
+  let registered = false;
+  await page.route("**/api/users/me", route => {
+    registered = true;
+    expect(route.request().headers().authorization).toBeUndefined();
+    return route.fulfill({ json: { userId: user.id, email: user.email, status: "approved" } });
+  });
+  await page.route("**/api/projects", route => route.fulfill({ json: { projects: [{ id: "cookie-project", name: "Cookie project", role: "vocalist", memberCount: 2 }] } }));
+  await page.route("**/api/takes", route => route.fulfill({ json: { takes: [] } }));
+  let uploadRequested = false;
+  let storageRequested = false;
+  await page.route("**/api/takes/upload", route => {
+    uploadRequested = true;
+    expect(route.request().headers().authorization).toBeUndefined();
+    expect(route.request().headers().cookie).toContain("easeverse_session=cookie-only-e2e");
+    expect(route.request().postDataJSON()).toMatchObject({ projectId: "cookie-project", filename: "cookie-vocal.wav" });
+    return route.fulfill({ status: 403, json: { error: "Only project members may upload" } });
+  });
+  await page.route("https://s3.example.test/**", route => { storageRequested = true; return route.abort(); });
+  await page.goto("/profile");
+  await expect.poll(() => registered).toBe(true);
+  await page.goto("/sessions");
+  await page.getByRole("combobox").selectOption("cookie-project");
+  await page.locator('input[type="file"]').setInputFiles({ name: "cookie-vocal.wav", mimeType: "audio/wav", buffer: Buffer.from("synthetic-test-audio") });
+  await expect(page.getByText("Only project members may upload", { exact: true })).toBeVisible();
+  expect(uploadRequested).toBe(true);
+  expect(storageRequested).toBe(false);
+  await expect(page.getByRole("button", { name: "Choose audio file to upload as take" })).toBeEnabled();
+});
+
 test("starts sign-in with the shared CreatorHub Workspace OAuth flow", async ({ page }) => {
   let startPayload: unknown = null;
   await page.route("**/api/auth/start", async (route) => {

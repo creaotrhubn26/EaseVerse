@@ -335,7 +335,6 @@ function Inner() {
           if (blob.size < 2000 || !session) return;
           try {
             const token = await getToken();
-            if (!token) return;
             const filename = `live-${session.id}-${user?.id || "anon"}-${Date.now()}.webm`;
             const file = new File([blob], filename, { type: blob.type });
             await uploadTake({

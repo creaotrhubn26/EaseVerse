@@ -277,6 +277,7 @@ export function adaptVercelHandler(handler: VercelStyleHandler) {
       body,
       rawBody,
       cookies: cookiesFromHeader(headers.cookie),
+      waitUntil: context.waitUntil?.bind(context),
       on(event: string, listener: () => void) {
         if (event === "close") closeListeners.add(listener);
         return this;

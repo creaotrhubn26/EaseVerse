@@ -73,3 +73,24 @@ test("supports empty 204 responses", async () => {
   assert.equal(response.status, 204);
   assert.equal(await response.text(), "");
 });
+
+test("retains independent post-response work through the host lifecycle", async () => {
+  const retained: Promise<unknown>[] = [];
+  let finish!: () => void;
+  let completed = false;
+  const task = new Promise<void>((resolve) => { finish = resolve; }).then(() => { completed = true; });
+  const handler = adaptVercelHandler((req, res) => {
+    req.waitUntil(task);
+    return res.status(200).json({ accepted: true });
+  });
+  const response = await handler(new Request("https://easeverse.netlify.app/api/takes/finalize"), {
+    waitUntil(promise) { retained.push(promise); },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { accepted: true });
+  assert.equal(completed, false, "response must not wait for analysis");
+  assert.ok(retained.includes(task), "the analysis task must reach the runtime");
+  finish();
+  await Promise.all(retained);
+  assert.equal(completed, true);
+});

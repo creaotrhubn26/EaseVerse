@@ -76,7 +76,7 @@ export function RecordingRequests({
     [uri, setUri] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   useEffect(() => {
-    onPendingChange(recorder.isRecording || !!uri || !!pendingFile || busy);
+    onPendingChange(recorder.isRecording || !!uri || !!pendingFile);
   }, [recorder.isRecording, uri, pendingFile, busy, onPendingChange]);
   const load = async (request: RecordingRequest) => {
     if (recorder.isRecording || uri || pendingFile) return;
@@ -140,11 +140,30 @@ export function RecordingRequests({
     };
     try {
       if (pendingFile) await uploadTake({ ...context, file: pendingFile });
-      else
+      else if (Platform.OS === "web") {
+        const response = await fetch(uri!);
+        const blob = await response.blob();
+        const type = blob.type || "audio/webm";
+        const extension = type.includes("mp4")
+          ? "m4a"
+          : type.includes("wav")
+          ? "wav"
+          : "webm";
+        const file = new File(
+          [blob],
+          `${current!.title
+            .replace(/[^A-Za-z0-9ÆØÅæøå ._-]/g, "_")
+            .slice(0, 100)}.${extension}`,
+          { type }
+        );
+        await uploadTake({ ...context, file });
+      } else
         await uploadTakeFromUri({
           ...context,
           uri: uri!,
-          filename: `${current!.title.replace(/[^A-Za-z0-9ÆØÅæøå ._-]/g,'_').slice(0,100)}.m4a`,
+          filename: `${current!.title
+            .replace(/[^A-Za-z0-9ÆØÅæøå ._-]/g, "_")
+            .slice(0, 100)}.m4a`,
           contentType: "audio/mp4",
         });
       setUri(null);
@@ -254,7 +273,10 @@ export function RecordingRequests({
               </Text>
             </Pressable>
           ) : null}
-          {(["open", "submitted"].includes(current.status)||recorder.isRecording||!!uri||!!pendingFile) ? (
+          {["open", "submitted"].includes(current.status) ||
+          recorder.isRecording ||
+          !!uri ||
+          !!pendingFile ? (
             <>
               <Text style={{ color: Colors.textSecondary, marginTop: 10 }}>
                 Use headphones. This response starts at{" "}

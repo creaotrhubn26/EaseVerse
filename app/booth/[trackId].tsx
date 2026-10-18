@@ -1,7 +1,9 @@
+import {usePreventRemove} from '@react-navigation/native';
 import { RecordingRequests, type RecordingRequest } from '@/components/RecordingRequests';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   Image,
   Pressable,
@@ -85,6 +87,7 @@ export default function BoothScreen() {
   const insets = useSafeAreaInsets();
   const { trackId, projectId } = useLocalSearchParams<{ trackId: string; projectId?: string }>();
   const [requestPending,setRequestPending]=useState(false);
+  usePreventRemove(requestPending,()=>Alert.alert('Unshared recording','Share the response or choose another recording before leaving.'));
   const [data, setData] = useState<BoothPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

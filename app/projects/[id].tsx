@@ -24,6 +24,7 @@ import {
   type ProjectRole,
 } from "@/lib/projects-client";
 import { getActiveSession, startSession } from "@/lib/sessions-client";
+import { StudioBookingsCard } from "@/components/StudioBookingsCard";
 import { ProToolsProjectSyncCard } from "@/components/ProToolsProjectSyncCard";
 import { UniversalAudioPlayer } from "@/components/UniversalAudioPlayer";
 
@@ -231,6 +232,7 @@ function ProjectDetailInner() {
       ) : null}
 
       {linkedTrackId ? <Pressable accessibilityRole="button" accessibilityLabel="Open lyrics, audio and producer feedback" style={styles.primaryBtn} onPress={() => router.push({ pathname: '/booth/[trackId]', params: { trackId: linkedTrackId, projectId: String(id) } })}><Text style={styles.primaryBtnText}>Lyrics & producer feedback</Text></Pressable> : null}
+        {linkedTrackId ? <StudioBookingsCard key={project.id} projectId={project.id} /> : null}
         <ProToolsProjectSyncCard projectId={project.id} />
 
       <View style={styles.refCard}>

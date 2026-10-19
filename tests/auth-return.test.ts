@@ -10,3 +10,10 @@ test("auth callback resumes only a local CreatorHub integration path", () => {
   assert.equal(safeCreatorHubAuthNextPath("/projects/private-project"), null);
   assert.equal(safeCreatorHubAuthNextPath("javascript:alert(1)"), null);
 });
+
+test('authentication resumes the same invitation without allowing another return destination',()=>{
+ const path='/sound-room/invite/inv_0123456789abcdef0123456789abcdef';
+ assert.equal(safeCreatorHubAuthNextPath(path),path);
+ assert.equal(safeCreatorHubAuthNextPath('/sound-room/invite/short'),null);
+ assert.equal(safeCreatorHubAuthNextPath('https://attacker.example'+path),null);
+});

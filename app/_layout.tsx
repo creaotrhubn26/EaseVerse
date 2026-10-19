@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -145,6 +145,7 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const pathname = usePathname();
   const [fontsLoaded] = useFonts({
     Inter_400Regular: require("@/assets/fonts/Inter_400Regular.ttf"),
     Inter_500Medium: require("@/assets/fonts/Inter_500Medium.ttf"),
@@ -173,6 +174,14 @@ export default function RootLayout() {
       useNativeDriver: true,
     }).start(() => setShowIntro(false));
   }, [introOpacity]);
+
+  useEffect(() => {
+    if (pathname.startsWith('/sound-room/invite/')) {
+      introDismissedRef.current = true;
+      introPlayer.pause();
+      setShowIntro(false);
+    }
+  }, [pathname, introPlayer]);
 
   // expo-video: 'playToEnd' tilsvarer expo-av sin didJustFinish; ved feil-status
   // hopper vi rett til appen (samme oppførsel som onError før).

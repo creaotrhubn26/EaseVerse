@@ -1,4 +1,5 @@
 import {usePreventRemove} from '@react-navigation/native';
+import { StudioBookingsCard } from '@/components/StudioBookingsCard';
 import { RecordingRequests, type RecordingRequest } from '@/components/RecordingRequests';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -245,6 +246,7 @@ export default function BoothScreen() {
     {loading && !data ? <ActivityIndicator accessibilityLabel="Loading vocal booth" color={Colors.gradientMid} style={{ marginTop: 32 }} /> : error && !data ? <View style={styles.stateCard}><Text style={styles.error}>{error}</Text><Pressable onPress={() => void (!auth.user && auth.signIn ? auth.signIn().then(load) : load())} style={styles.headerButton} accessibilityRole="button" accessibilityLabel={!auth.user ? "Sign in to open song" : "Retry loading song"}><Text style={styles.panelTabLabelActive}>{!auth.user ? "Continue with CreatorHub" : "Try again"}</Text></Pressable></View> : <>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll}>
         {error && data ? <Pressable accessibilityRole="button" accessibilityLabel="Retry song updates" onPress={() => void load()} style={styles.hintRow}><Text accessibilityLiveRegion="polite" aria-live="polite" style={styles.hintText}>Could not refresh. Retrying automatically. Tap to retry now.</Text></Pressable> : null}
+        {data?.projectId ? <StudioBookingsCard key={data.projectId} projectId={data.projectId} compact disabled={requestPending} /> : null}
         {introVisible ? <View style={styles.hintRow}><Text style={styles.hintText}>Tap a timecode to hear feedback in context.</Text><Pressable onPress={dismissIntro} style={styles.headerButton} accessibilityRole="button" accessibilityLabel="Dismiss booth tip"><Ionicons name="close" size={18} color={Colors.textSecondary} /></Pressable></View> : null}
         {panel!=='requests' && data?.recordingRequests?.some(r=>r.status==='open') ? <Pressable accessibilityRole="button" accessibilityLabel="Open recording requests" onPress={()=>{chooseAudio('reference');setPanel('requests');}} style={styles.hintRow}><Text style={styles.hintText}>Your producer has requested a new recording. Open requests →</Text></Pressable>:null}
         {panel === 'requests' ? data?.collaborationUnavailable ? <Text accessibilityRole="alert" style={styles.error}>Recording requests are temporarily unavailable. Your song and recordings are still available.</Text> : <RecordingRequests requests={data?.recordingRequests||[]} projectId={data?.projectId||''} refresh={()=>void load()} onPendingChange={setRequestPending}/> : panel === 'lyrics' ? <>

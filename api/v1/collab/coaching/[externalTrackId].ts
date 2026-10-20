@@ -1,10 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Pool } from "pg";
+import { coachingEvidence } from "../../../_lib/coaching-evidence.js";
 import { requireExternalKey } from "../../../_lib/collab-store.js";
 
-// Eksponerer vokal-coachens vurdering per take (timing/uttale-score + AI-notater +
-// beste-take-flagg) for et eksternt track, slik at CreatorHub Audio Showcase kan
-// vise coach-tilbakemeldingen i review-rommet.
+// Expose documented PCM level statistics, never historic AI performance scores.
 let pool: Pool | null = null;
 function getPool(): Pool | null {
   if (!process.env.DATABASE_URL) return null;
@@ -22,17 +21,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { rows } = await p.query(
       `SELECT t.id, t.filename, t.producer_decision, t.uploaded_at,
-              a.timing_score, a.pronunciation_score, a.ai_notes, a.best_take_in_group, a.processed_at
+              a.energy_avg_db, a.energy_stddev_db, a.processed_at
          FROM takes t JOIN take_analyses a ON a.take_id = t.id
         WHERE t.external_track_id = $1
-        ORDER BY a.best_take_in_group DESC NULLS LAST, t.uploaded_at DESC LIMIT 50`,
+        ORDER BY t.uploaded_at DESC LIMIT 50`,
       [externalTrackId],
     );
-    const items = rows.map((r) => ({
-      takeId: String(r.id), filename: r.filename || "take.wav", decision: r.producer_decision || null,
-      timingScore: r.timing_score ?? null, pronunciationScore: r.pronunciation_score ?? null,
-      aiNotes: r.ai_notes ?? null, bestInGroup: !!r.best_take_in_group, processedAt: r.processed_at || null,
-    }));
+    const items = rows.map(coachingEvidence);
     return res.status(200).json({ ok: true, count: items.length, items });
   } catch (e) {
     console.error("collab coaching error:", e);

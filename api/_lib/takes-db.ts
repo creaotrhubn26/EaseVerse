@@ -503,9 +503,9 @@ export async function upsertTakeAnalysis(args: Partial<TakeAnalysisRow> & { take
        vibrato_rate_hz = COALESCE(EXCLUDED.vibrato_rate_hz, take_analyses.vibrato_rate_hz),
        energy_avg_db = COALESCE(EXCLUDED.energy_avg_db, take_analyses.energy_avg_db),
        energy_stddev_db = COALESCE(EXCLUDED.energy_stddev_db, take_analyses.energy_stddev_db),
-       timing_score = COALESCE(EXCLUDED.timing_score, take_analyses.timing_score),
-       pronunciation_score = COALESCE(EXCLUDED.pronunciation_score, take_analyses.pronunciation_score),
-       ai_notes = COALESCE(EXCLUDED.ai_notes, take_analyses.ai_notes),
+       timing_score = EXCLUDED.timing_score,
+       pronunciation_score = EXCLUDED.pronunciation_score,
+       ai_notes = EXCLUDED.ai_notes,
        best_take_in_group = COALESCE(EXCLUDED.best_take_in_group, take_analyses.best_take_in_group),
        processed_at = NOW()`,
     [

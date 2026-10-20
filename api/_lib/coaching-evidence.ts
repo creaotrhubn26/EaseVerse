@@ -17,3 +17,10 @@ export function coachingEvidence(row: Record<string, unknown>) {
     timingScore: null, pronunciationScore: null, aiNotes: null, bestInGroup: false,
   };
 }
+
+/** Only statements justified by the waveform measurement are generated here. */
+export function measuredTakeNotes(energyAvgDb: number | null): string {
+  const measured = typeof energyAvgDb === 'number' && Number.isFinite(energyAvgDb) && energyAvgDb >= -180 && energyAvgDb <= 12;
+  return (measured ? `Measured average RMS level: ${energyAvgDb.toFixed(1)} dBFS. ` : 'Audio level measurement is unavailable. ')
+    + 'Timing, pronunciation and musical performance have not been assessed.';
+}

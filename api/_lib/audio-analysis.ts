@@ -2,9 +2,10 @@
 // WAV/AIFF blob downloaded from storage. For unsupported formats the pipeline
 // records only metadata + transcript (Whisper handles MP3 etc. natively).
 
-import wavefilePkg from "wavefile";
+import * as wavefilePkg from "wavefile";
 
-const { WaveFile } = wavefilePkg as unknown as {
+const wavefileModule = (wavefilePkg as unknown as { default?: unknown }).default ?? wavefilePkg;
+const { WaveFile } = wavefileModule as unknown as {
   WaveFile: new (buffer?: Uint8Array) => {
     fromBuffer: (buffer: Uint8Array) => void;
     toBitDepth: (depth: string) => void;
@@ -22,12 +23,13 @@ export type AudioAnalysisResult = {
   energyStddevDb: number | null;
 };
 
-function tryDecodeWav(buffer: Uint8Array): { samples: Float32Array; sampleRate: number } | null {
+function tryDecodeWav(buffer: Uint8Array): { samples: Float32Array; channels: Float32Array[]; sampleRate: number } | null {
   try {
     const wav = new WaveFile(buffer);
     wav.toBitDepth("32f");
     const sr = wav.fmt.sampleRate;
-    const raw = wav.getSamples(true);
+    const raw = wav.getSamples(false);
+    const channels = (Array.isArray(raw) ? raw : [raw]).map(channel => Float32Array.from(channel));
     let mono: Float32Array;
     if (Array.isArray(raw)) {
       const channels = raw as Float64Array[];
@@ -42,7 +44,7 @@ function tryDecodeWav(buffer: Uint8Array): { samples: Float32Array; sampleRate: 
       mono = new Float32Array((raw as Float64Array).length);
       for (let i = 0; i < mono.length; i++) mono[i] = (raw as Float64Array)[i];
     }
-    return { samples: mono, sampleRate: sr };
+    return { samples: mono, channels, sampleRate: sr };
   } catch {
     return null;
   }
@@ -90,7 +92,7 @@ export function analyzeWavBuffer(buffer: Uint8Array): AudioAnalysisResult {
       energyStddevDb: null,
     };
   }
-  const { samples, sampleRate } = decoded;
+  const { samples, channels, sampleRate } = decoded;
   const durationSec = samples.length / sampleRate;
 
   // Pitch: windowed autocorrelation, 25 windows over the audio.
@@ -117,10 +119,12 @@ export function analyzeWavBuffer(buffer: Uint8Array): AudioAnalysisResult {
   for (let start = 0; start + energyWindow <= samples.length; start += energyWindow) {
     let sum = 0;
     for (let i = 0; i < energyWindow; i++) {
-      const v = samples[start + i];
-      sum += v * v;
+      for (const channel of channels) {
+        const v = channel[start + i];
+        sum += v * v;
+      }
     }
-    const rms = Math.sqrt(sum / energyWindow);
+    const rms = Math.sqrt(sum / (energyWindow * channels.length));
     if (rms > 0) energies.push(20 * Math.log10(rms));
   }
   const energyAvgDb = energies.length > 0 ? energies.reduce((s, v) => s + v, 0) / energies.length : null;

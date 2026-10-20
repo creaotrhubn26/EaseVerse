@@ -44,7 +44,7 @@ export default function SessionWarmup() {
 }
 function SessionWarmupContent() {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
-  const { isLoaded, user, getToken, signIn } = useAuth();
+  const { isLoaded, user, getToken, signIn, isSigningIn } = useAuth();
   const userId = user?.id;
   const insets = useSafeAreaInsets();
   const { stopSoundscape } = useWarmupSoundscape();
@@ -153,10 +153,20 @@ function SessionWarmupContent() {
         {!userId && isLoaded ? (
           <Pressable
             accessibilityRole="button"
-            onPress={() => void signIn()}
+            disabled={isSigningIn}
+            onPress={() => {
+              setError("");
+              void signIn().catch(() =>
+                setError("Innloggingen kunne ikke startes. Prøv igjen om litt.")
+              );
+            }}
             style={s.primary}
           >
-            <Text style={s.primaryText}>Logg inn for å se oppvarmingen</Text>
+            <Text style={s.primaryText}>
+              {isSigningIn
+                ? "Åpner innlogging…"
+                : "Logg inn for å se oppvarmingen"}
+            </Text>
           </Pressable>
         ) : loading ? (
           <ActivityIndicator color={Colors.gradientMid} />
@@ -166,7 +176,7 @@ function SessionWarmupContent() {
             <Text accessibilityRole="alert" style={s.text}>
               {error}
             </Text>
-            {!active && (
+            {!active && !!userId && (
               <Pressable
                 accessibilityRole="button"
                 onPress={() => {

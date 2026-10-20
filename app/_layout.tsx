@@ -308,6 +308,10 @@ const styles = StyleSheet.create({
   },
   introVideo: {
     ...StyleSheet.absoluteFillObject,
+    // VideoView maps styles directly to <video> on web. Explicit dimensions
+    // prevent the intrinsic video size from widening small phone viewports.
+    width: "100%",
+    height: "100%",
   },
   introActions: {
     position: "absolute",
@@ -318,7 +322,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   introActionButton: {
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.35)",

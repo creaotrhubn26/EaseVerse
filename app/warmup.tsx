@@ -6,6 +6,8 @@ import {
   ScrollView,
   Pressable,
   Platform,
+  Image,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -22,7 +24,8 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { BreathPacingCircle } from '@/components/BreathPacingCircle';
-import { useNarration } from '@/lib/useNarration';
+import { WarmupVoicePlayer } from '@/components/WarmupVoicePlayer';
+import {WarmupSoundscape} from '@/components/WarmupSoundscape';
 import {
   warmUpExercises,
   voiceSafetyRules,
@@ -66,7 +69,6 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
   const [timeLeft, setTimeLeft] = useState(exercise.durationSeconds);
   const [isRunning, setIsRunning] = useState(false);
   const [showTips, setShowTips] = useState(true);
-  const narration = useNarration();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useSharedValue(1);
 
@@ -210,29 +212,10 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
           <Feather name="skip-forward" size={scaledIcon(11)} color={Colors.textSecondary} />
           <Text style={styles.skipBtnText}>Skip</Text>
         </Pressable>
-        <Pressable
-          onPress={() => {
-            if (narration.state === 'playing' || narration.state === 'loading') {
-              narration.stop();
-            } else {
-              void narration.speak(exercise.instruction);
-            }
-          }}
-          style={styles.skipBtn}
-          accessibilityRole="button"
-          accessibilityLabel={narration.state === 'playing' ? 'Stop coach demo' : 'Hear coach demo'}
-          accessibilityHint="Plays a voiced demo of the exercise instruction"
-        >
-          <Ionicons
-            name={narration.state === 'playing' ? 'stop' : narration.state === 'loading' ? 'hourglass' : 'volume-high'}
-            size={scaledIcon(11)}
-            color={Colors.textSecondary}
-          />
-          <Text style={styles.skipBtnText}>
-            {narration.state === 'playing' ? 'Stop' : 'Hear example'}
-          </Text>
-        </Pressable>
+
       </View>
+
+      <WarmupVoicePlayer key={exercise.id} exerciseId={exercise.id} />
 
       {showTips && !isRunning && timeLeft > 0 && (
         <View style={styles.instructionBox}>
@@ -262,10 +245,13 @@ function ExerciseTimer({ exercise, onComplete, onSkip }: {
   );
 }
 
-export default function WarmUpScreen() {
+export default function WarmUpScreen(){return <WarmupSoundscape><WarmUpContent/></WarmupSoundscape>}
+
+function WarmUpContent() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const [phase, setPhase] = useState<WarmUpPhase>('intro');
+  const [showSafety,setShowSafety]=useState(false);
   const [currentExIdx, setCurrentExIdx] = useState(0);
   const [completedExercises, setCompletedExercises] = useState<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
@@ -282,7 +268,6 @@ export default function WarmUpScreen() {
     () => (size: number) => scaledIconSize(size, responsive),
     [responsive]
   );
-  const heroCircleSize = tierValue(responsive.tier, [84, 92, 102, 116, 136, 164, 196]);
   const completeCircleSize = tierValue(responsive.tier, [96, 106, 120, 136, 160, 192, 228]);
   const totalMinutes = Math.ceil(getEstimatedDuration() / 60);
   const currentExercise = warmUpExercises[currentExIdx];
@@ -299,10 +284,10 @@ export default function WarmUpScreen() {
     }
   };
 
-  const handleStart = () => {
+  const handleStart = (index=0) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase('exercise');
-    setCurrentExIdx(0);
+    setCurrentExIdx(index);
   };
 
   const handleExerciseComplete = useCallback(() => {
@@ -350,34 +335,23 @@ export default function WarmUpScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.introHero, { paddingHorizontal: horizontalInset }]}>
-            <View style={styles.heroIconWrap}>
-              <LinearGradient
-                colors={[Colors.gradientStart, Colors.gradientEnd]}
-                style={[
-                  styles.heroIconGradient,
-                  {
-                    width: heroCircleSize,
-                    height: heroCircleSize,
-                    borderRadius: Math.round(heroCircleSize / 2),
-                  },
-                ]}
-              >
-                <Ionicons name="fitness" size={scaledIcon(20)} color="#fff" />
-              </LinearGradient>
-            </View>
-            <Text style={styles.introTitle}>Protect Your Voice</Text>
+            <Image source={require('@/assets/images/warmup-hero-amber.png')} resizeMode="contain" accessible={false} style={{width:240,height:190,maxWidth:'100%'}} />
+            <Text style={{color:Colors.gradientMid,fontSize:12,fontFamily:'Inter_600SemiBold',letterSpacing:1.3}}>EASEVERSE · BEFORE YOU SING</Text>
+            <Text style={styles.introTitle}>Warm up. Find your focus.</Text>
             <Text style={styles.introSubtitle}>
               {warmUpExercises.length} exercises  ~{totalMinutes} min
             </Text>
             <Text style={styles.introDescription}>
-              Warming up is like stretching before a workout. It prevents injury, 
-              improves your range, and helps you sound your best.
+              Ease into your routine with gentle movement, breath and sound. Follow the voice guidance or go at your own pace.
             </Text>
           </View>
 
           <View style={[styles.safetySection, { paddingHorizontal: horizontalInset }]}>
-            <Text style={styles.sectionTitle}>Voice Safety Rules</Text>
-            {voiceSafetyRules.map((rule, i) => (
+            <View style={{padding:14,borderRadius:16,backgroundColor:Colors.surface,gap:8}}>
+              <Text style={{color:Colors.textSecondary,fontSize:14,lineHeight:21}}>Keep it comfortable. Stop if you feel pain or strain.</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Voice care and comfort" accessibilityState={{expanded:showSafety}} onPress={()=>setShowSafety(v=>!v)} style={{minHeight:44,flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><Text style={{color:Colors.textPrimary,fontSize:14}}>Voice care & comfort</Text><Ionicons name={showSafety?'chevron-up':'chevron-down'} size={18} color={Colors.textSecondary}/></Pressable>
+            </View>
+            {showSafety&&voiceSafetyRules.map((rule, i) => (
               <View key={i} style={[
                 styles.safetyCard,
                 rule.type === 'danger' && styles.safetyDanger,
@@ -400,12 +374,13 @@ export default function WarmUpScreen() {
                 </View>
               </View>
             ))}
+            {showSafety&&<Pressable accessibilityRole="link" accessibilityLabel="Read voice care advice from NIDCD" onPress={()=>void Linking.openURL('https://www.nidcd.nih.gov/health/taking-care-your-voice')} style={{minHeight:44,justifyContent:'center'}}><Text style={{color:Colors.gradientMid,fontSize:13}}>Voice care source · NIDCD</Text></Pressable>}
           </View>
 
           <View style={[styles.exercisePreview, { paddingHorizontal: horizontalInset }]}>
             <Text style={styles.sectionTitle}>{"Today's Routine"}</Text>
             {warmUpExercises.map((ex, i) => (
-              <View key={ex.id} style={styles.previewItem}>
+              <Pressable key={ex.id} accessibilityRole="button" accessibilityLabel={`Start ${ex.title}`} onPress={()=>handleStart(i)} style={styles.previewItem}>
                 <View style={[styles.previewNumber, { backgroundColor: ex.categoryColor + '25' }]}>
                   <Text style={[styles.previewNumberText, { color: ex.categoryColor }]}>{i + 1}</Text>
                 </View>
@@ -417,7 +392,8 @@ export default function WarmUpScreen() {
                     <Text style={styles.previewDuration}>{Math.ceil(ex.durationSeconds / 60)} min</Text>
                   </View>
                 </View>
-              </View>
+                <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary}/>
+              </Pressable>
             ))}
           </View>
         </ScrollView>
@@ -433,7 +409,7 @@ export default function WarmUpScreen() {
           ]}
         >
           <Pressable
-            onPress={handleStart}
+            onPress={()=>handleStart()}
             style={styles.startPressable}
             accessibilityRole="button"
             accessibilityLabel="Begin warm-up"
@@ -478,10 +454,10 @@ export default function WarmUpScreen() {
               <Ionicons name="checkmark" size={scaledIcon(28)} color="#fff" />
             </LinearGradient>
           </View>
-          <Text style={styles.completeTitle}>Voice Warmed Up</Text>
+          <Text style={styles.completeTitle}>Routine complete</Text>
           <Text style={styles.completeSubtitle}>
             You completed {completedExercises.size} of {warmUpExercises.length} exercises.
-            Your voice is ready to perform!
+            Your routine is complete. Choose a comfortable pace when you return to singing.
           </Text>
 
           <View style={styles.completeTips}>
@@ -491,7 +467,7 @@ export default function WarmUpScreen() {
             </View>
             <View style={styles.completeTipCard}>
               <Ionicons name="timer" size={scaledIcon(12)} color={Colors.gradientStart} />
-              <Text style={styles.completeTipText}>{"You're good to sing for the next 1-2 hours"}</Text>
+              <Text style={styles.completeTipText}>{"A completed routine does not assess vocal readiness. Stop if singing feels painful or strained."}</Text>
             </View>
             <View style={styles.completeTipCard}>
               <Ionicons name="snow" size={scaledIcon(12)} color="#A78BFA" />
@@ -544,7 +520,7 @@ export default function WarmUpScreen() {
                 key={i}
                 style={[
                   styles.progressDot,
-                  i < currentExIdx && styles.progressDotDone,
+                  completedExercises.has(warmUpExercises[i].id) && styles.progressDotDone,
                   i === currentExIdx && styles.progressDotActive,
                 ]}
               />

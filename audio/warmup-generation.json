@@ -1,0 +1,95 @@
+{
+  "voice": "Algenib",
+  "provider": "fal.ai",
+  "language": "nb-NO",
+  "clips": [
+    {
+      "id": "body-stretch",
+      "title": "Slipp spenningene",
+      "transcript": "Rull skuldrene rolig bakover og framover. Beveg hodet forsiktig fra side til side, innenfor det som kjennes behagelig. La kjeven være myk, og rist lett løs i hender og armer. Stopp hvis noe gjør vondt.",
+      "request_id": "01a15b40-35d0-70e1-b21a-ca8115adf808",
+      "endpoint": "google/gemini-3.8-flash-tts",
+      "url": "https://v3b.fal.media/files/b/0aaf2fee/NeTxOpRFdEPzX0FyMw5g5_gemini_tts_output.wav",
+      "durationSeconds": 20.4
+    },
+    {
+      "id": "diaphragm-breathing",
+      "title": "Rolig pust",
+      "transcript": "Stå eller sitt behagelig, og senk skuldrene. Pust rolig inn gjennom nesen. La pusten få plass uten å presse. Pust deretter jevnt ut med en myk s-lyd. Ta en vanlig pust mellom rundene, og unngå å holde pusten hvis det føles ubehagelig.",
+      "request_id": "01a15b40-35cb-7851-adf5-1b0fd298429c",
+      "endpoint": "google/gemini-3.8-flash-tts",
+      "url": "https://v3b.fal.media/files/b/0aaf2fef/YasGFvupqgC6PXhrFV7yd_gemini_tts_output.wav",
+      "durationSeconds": 24.2
+    },
+    {
+      "id": "humming",
+      "title": "Myk nynning",
+      "transcript": "Lukk leppene lett, og nynn en myk m-lyd på en tone som kjennes behagelig. La kjeven være avslappet. Beveg tonen forsiktig litt opp og ned, uten å presse volum eller tonehøyde. Ta pauser når du trenger det.",
+      "request_id": "01a15b40-35d7-7243-817b-b1887fbf9431",
+      "endpoint": "google/gemini-3.8-flash-tts",
+      "url": "https://v3b.fal.media/files/b/0aaf2fee/6919c_EDjgRrH0NdNelXJ_gemini_tts_output.wav",
+      "durationSeconds": 19.84
+    },
+    {
+      "id": "lip-trills",
+      "title": "Leppevibrasjon",
+      "transcript": "La leppene være løse, og blås forsiktig luft gjennom dem så de vibrerer. Legg eventuelt til en myk tone i et behagelig leie. Hvis vibrasjonen stopper, ta en pause og prøv med mindre trykk. Ikke press for å få det til.",
+      "request_id": "01a15b40-35d5-7702-a10a-514be839a65b",
+      "endpoint": "google/gemini-3.8-flash-tts",
+      "url": "https://v3b.fal.media/files/b/0aaf2fee/McKe9lbtQcKvZZnYB1cfj_gemini_tts_output.wav",
+      "durationSeconds": 19.6
+    },
+    {
+      "id": "sirens",
+      "title": "Rolig toneglidning",
+      "transcript": "Lag en myk o-lyd på en behagelig tone. Gli rolig litt oppover, og tilbake ned igjen. Hold deg innenfor et område som kjennes lett. Det er ingen konkurranse om å nå høye toner. Ta en pause hvis stemmen føles anstrengt.",
+      "request_id": "01a15b40-35e8-7f02-a2f0-60e79d3ef924",
+      "endpoint": "google/gemini-3.8-flash-tts",
+      "url": "https://v3b.fal.media/files/b/0aaf2fef/G_Ls5Ip71InykJzGqeSWM_gemini_tts_output.wav",
+      "durationSeconds": 21.32
+    },
+    {
+      "id": "yawn-sigh",
+      "title": "Gjesp og sukk",
+      "transcript": "La kjeven falle mykt ned, som ved et lite gjesp. Pust så rolig ut på et lett sukk med en myk a-lyd. La tonen synke naturlig. Hold bevegelsen liten og avslappet, uten å presse eller trekke inn ekstra mye luft.",
+      "request_id": "01a15b40-35b7-74d3-a569-32cd27ea1024",
+      "endpoint": "google/gemini-3.8-flash-tts",
+      "url": "https://v3b.fal.media/files/b/0aaf2fee/FdyURXy0OAonDMXp0xJXp_gemini_tts_output.wav",
+      "durationSeconds": 21.76
+    },
+    {
+      "id": "vowel-scales",
+      "title": "Myke vokaler",
+      "transcript": "Velg en behagelig tone, og syng vokalene a, e, i, o og u med lavt volum. La kjeven være myk når du bytter vokal. Prøv deretter en kort bevegelse opp og ned i tonehøyde. Hold deg der stemmen kjennes lett.",
+      "request_id": "01a15b40-35bb-7153-83c4-d30d73ebbf3d",
+      "endpoint": "google/gemini-3.8-flash-tts",
+      "url": "https://v3b.fal.media/files/b/0aaf2fee/w5dlVdy9D507ukOL9t5fE_gemini_tts_output.wav",
+      "durationSeconds": 22.16
+    },
+    {
+      "id": "tongue-twisters",
+      "title": "Tydelig uttale",
+      "transcript": "Begynn med å si: Tre trøtte troll. Si ordene langsomt og tydelig, med avslappet kjeve og tunge. Gjenta noen ganger før du eventuelt øker tempoet litt. Tydelighet er viktigere enn fart. Ta en pause hvis du merker spenning.",
+      "request_id": "01a15b40-35e1-7843-8184-4d9b7a8d4247",
+      "endpoint": "google/gemini-3.8-flash-tts",
+      "url": "https://v3b.fal.media/files/b/0aaf2fef/pt9pot-15nmAAi1tftRnJ_gemini_tts_output.wav",
+      "durationSeconds": 20.24
+    }
+  ],
+  "backgroundMusic": {
+    "endpoint": "fal-ai/elevenlabs/music",
+    "requestId": "01a15b4b-71ce-7451-a744-e01a9bb9efa3",
+    "instrumental": true,
+    "requestedDurationSeconds": 64,
+    "measuredDurationSeconds": 64.130563,
+    "sourceUrl": "https://v3b.fal.media/files/b/0aaf3038/vMwK1RIvUttVt0UkX2lP4_music_generated.mp3",
+    "asset": "assets/audio/warmups/relaxing-rhythm.mp3",
+    "defaultEnabled": false
+  },
+  "artwork": {
+    "tool": "built-in image_gen",
+    "asset": "assets/images/warmup-hero-amber.png",
+    "transparentBackground": true,
+    "prompt": "Use case: stylized-concept. Asset type: polished illustration for EaseVerse mobile vocal warm-up screen on a charcoal #0E0F14 app background. Create one original, elegant three-dimensional editorial illustration: an abstract warm amber-orange sound ribbon forming a gentle flowing loop, with a small matte orange vocal microphone form and subtly suggested breath ripples. Calm, grounded, sophisticated music production tool, tactile satin ceramic and frosted amber material, restrained warm highlights, soft ambient shadow. Compact centered sculptural composition, square canvas with generous fully transparent margins; clear silhouette at 240px wide, rich but restrained detail. This is decorative artwork beside real app controls, not a diagram. No words, no lettering, no UI, no buttons, no logos, no branding, no medical imagery, no waveform pretending to be real audio, no gradients filling the transparent background. Real transparent alpha background."
+  }
+}

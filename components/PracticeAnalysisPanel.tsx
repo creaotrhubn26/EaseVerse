@@ -18,7 +18,8 @@ export function PracticeAnalysisPanel({session,language,accentGoal,onResult}:{se
  useEffect(()=>{let current=true;const scope=++generation.current;setCapability(null);setBusy(null);locked.current=false;setError('');setConsent(false);void localPracticeCapability(locale).then(value=>{if(current)setCapability(value);});return()=>{current=false;generation.current=scope+1;request.current?.abort();};},[locale,session.id]);
  const save=async(transcript:string,comparison:ReturnType<typeof matchLyricTranscript>,provider:NonNullable<Session['analysis']>['provider'])=>onResult({transcript,analysis:{provider,language,analysedAt:Date.now(),comparison},insights:{textAccuracy:comparison.score,analysisAvailable:true,pronunciationClarity:0,timingConsistency:'low',topToFix:comparison.wordsToCheck.map(word=>({word,reason:'Not matched in the transcript. Listen back and check this word.'}))}});
  const analyse=async(mode:'local'|'cloud')=>{
-  if(locked.current||!session.recordingUri)return;
+  if(locked.current){setError('An analysis is still finishing. Please retry in a moment.');return;}
+  if(!session.recordingUri){setError('Could not find the audio for this take.');return;}
   locked.current=true;setError('');setConsent(false);setBusy(mode==='local'?'Transcribing on this device…':'Transcribing in the cloud…');
   const controller=new AbortController();request.current=controller;const currentGeneration=generation.current;
   try{
@@ -47,6 +48,7 @@ export function PracticeAnalysisPanel({session,language,accentGoal,onResult}:{se
  const disabled=!session.recordingUri||!session.lyrics.trim();
  return <View style={s.card} testID="practice-analysis-panel">
   <Text style={s.title}>Check this take against your lyrics</Text>
+  {!!error&&<Text style={s.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text>}
   <Text style={s.copy}>The result compares recognised words with your lyrics. It does not score your voice, pronunciation or musical timing.</Text>
   {disabled?<Text style={s.copy}>Add lyrics and an audio recording to compare a take.</Text>:<>
    {busy?<View accessibilityLiveRegion="polite" style={s.status}><ActivityIndicator color={Colors.gradientStart}/><Text style={s.copy}>{busy}</Text>{request.current&&<Pressable style={s.secondary} onPress={()=>request.current?.abort()} accessibilityRole="button"><Text style={s.link}>Cancel analysis</Text></Pressable>}</View>:<>
@@ -61,7 +63,6 @@ export function PracticeAnalysisPanel({session,language,accentGoal,onResult}:{se
     <Pressable style={s.secondary} onPress={()=>setConsent(false)} accessibilityRole="button"><Text style={s.link}>Keep it on this device</Text></Pressable>
    </View>}
   </>}
-  {!!error&&<Text style={s.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text>}
   {session.analysis&&<View style={s.result}>
    <Text style={s.copy}>Source: {session.analysis.provider==='openai'?'OpenAI transcription':session.analysis.provider==='browser-speech'?'Browser speech recognition':'On-device speech recognition'} · {session.analysis.language}</Text>
    <Text style={s.copy}>{session.analysis.comparison.matchedWords} of {session.analysis.comparison.expectedWords} words matched · {session.analysis.comparison.missingWords} missing · {session.analysis.comparison.extraWords} extra · {session.analysis.comparison.substitutions} different.</Text>

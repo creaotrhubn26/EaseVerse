@@ -27,9 +27,9 @@ import { useIsFocused } from '@react-navigation/native';
 
 function InsightCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <View style={styles.insightCard}>
-      <Text style={[styles.insightValue, { color }]}>{value}</Text>
+    <View style={styles.insightCard} accessible accessibilityLabel={`${label}: ${value}`} testID={`session-insight-${label.toLowerCase().replace(/ /g, "-")}`}>
       <Text style={styles.insightLabel}>{label}</Text>
+      <Text style={[styles.insightValue, { color }]}>{value}</Text>
     </View>
   );
 }
@@ -112,6 +112,7 @@ export default function SessionReviewScreen() {
   const { id, fromRecording } = useLocalSearchParams<{ id: string; fromRecording?: string }>();
   const { sessions, toggleFavorite } = useApp();
   const coach = usePronunciationCoach();
+  const [showGenreTips, setShowGenreTips] = useState(false);
   const [activeFixWord, setActiveFixWord] = useState<string | null>(null);
   const [showAddedToast, setShowAddedToast] = useState(false);
   const [waveformProgress, setWaveformProgress] = useState(0);
@@ -507,13 +508,18 @@ export default function SessionReviewScreen() {
 
         {genreProfile && (
           <View style={[styles.genreCoachSection, { paddingHorizontal: horizontalInset }]}>
-            <View style={styles.genreCoachHeader}>
+            <Pressable onPress={() => setShowGenreTips(value => !value)} style={styles.genreCoachHeader}
+              accessibilityRole="button" accessibilityLabel={`General ${genreProfile.label} practice tips`}
+              accessibilityState={{ expanded: showGenreTips }} aria-expanded={showGenreTips}>
               <View style={[styles.genreCoachBadge, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
                 <Ionicons name={genreProfile.icon} size={scaledIcon(9)} color={genreProfile.color} />
-                <Text style={[styles.genreCoachBadgeText, { color: genreProfile.color }]}>{genreProfile.label} Coaching</Text>
+                <Text style={[styles.genreCoachBadgeText, { color: genreProfile.color }]}>{genreProfile.label} · practice tips</Text>
               </View>
-            </View>
-            <View style={styles.genreCoachCard}>
+              <Ionicons name={showGenreTips ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.textSecondary}/>
+            </Pressable>
+            <Text style={styles.genreCoachDisclaimer}>General genre suggestions, not an assessment of this recording. No producer or AI has reviewed your voice for these tips.</Text>
+            {showGenreTips && <View style={styles.genreCoachCard}>
+
               <View style={styles.genreCoachRow}>
                 <Ionicons name="mic-outline" size={scaledIcon(10)} color={genreProfile.color} />
                 <View style={styles.genreCoachInfo}>
@@ -552,7 +558,7 @@ export default function SessionReviewScreen() {
                   ))}
                 </>
               )}
-            </View>
+            </View>}
           </View>
         )}
 
@@ -673,6 +679,7 @@ const styles = StyleSheet.create({
   },
   sessionMeta: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
   },
@@ -767,38 +774,49 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
   },
   insightsRow: {
-    flexDirection: 'row',
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 8,
     marginBottom: 24,
   },
   insightCard: {
-    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     backgroundColor: Colors.surface,
     borderRadius: 14,
-    padding: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
     borderWidth: 1,
     borderColor: Colors.borderGlass,
   },
   insightValue: {
-    fontSize: 20,
-    fontFamily: 'Inter_700Bold',
+    flexGrow: 1,
+    flexBasis: 130,
+    fontSize: 16,
+    lineHeight: 23,
+    fontFamily: 'Inter_600SemiBold',
+    textAlign: 'right',
   },
   insightLabel: {
-    color: Colors.textTertiary,
-    fontSize: 11,
+    flexGrow: 1,
+    flexBasis: 120,
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
     fontFamily: 'Inter_500Medium',
-    textAlign: 'center',
   },
   genreCoachSection: {
     paddingHorizontal: 20,
     marginBottom: 24,
     gap: 10,
   },
+  genreCoachDisclaimer: { color: Colors.textSecondary, fontSize: 13, lineHeight: 20, fontFamily: 'Inter_400Regular' },
   genreCoachHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 10,
     alignItems: 'center',
   },
   genreCoachBadge: {

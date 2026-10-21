@@ -1,3 +1,4 @@
+import { preserveLocalRecordingUri } from './local-recordings';
 import { useRef, useState, useCallback, useEffect } from 'react';
 import {
   useAudioRecorder,
@@ -230,7 +231,7 @@ export function useRecording() {
       if (engineRef.current === 'expo') {
         await recorder.stop();
         const state = recorder.getStatus();
-        uri = state.url || null;
+        uri = state.url ? await preserveLocalRecordingUri(state.url) : null;
       }
       recordingActiveRef.current = false;
       setIsRecording(false);

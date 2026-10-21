@@ -18,7 +18,7 @@ test('Profile uses explicit navigation and reports unavailable suggestions',asyn
  await page.route('**/api/**',route=>route.fulfill({status:401,json:{error:'Missing CreatorHub session'}}));await openProfile(page);
  await page.getByRole('button',{name:'Practice suggestions',exact:true}).click();await page.getByRole('button',{name:/^Refresh Recommendations:/}).click();await expect(page.getByText('Practice suggestions are unavailable. Try again later.',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Help & privacy',exact:true}).click();await page.getByRole('button',{name:'Privacy Policy: Read',exact:true}).click();await expect(page).toHaveURL(/\/privacy$/);await page.goBack();
- await page.getByRole('button',{name:'Sign in to CreatorHub',exact:true}).click();await expect(page.getByRole('button',{name:'Continue with CreatorHub',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Sign in to CreatorHub',exact:true}).click();await expect(page.getByRole('button',{name:'Continue with Google',exact:true})).toBeVisible();
 });
 test('long signed-in account stays readable, usage retries and sign-out retains local data',async({page})=>{
  await page.setViewportSize({width:320,height:900});let signedIn=true,usageCalls=0,logoutCalls=0;
@@ -35,4 +35,10 @@ test('long signed-in account stays readable, usage retries and sign-out retains 
  await openProfile(page);await expect(page.getByText(user.name,{exact:true})).toBeVisible();await page.screenshot({path:'outputs/warmup-fal-20261020/profile-account-long-320.png',fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
  await page.getByRole('button',{name:'Usage & administration',exact:true}).click();await page.getByRole('button',{name:'Retry loading usage',exact:true}).click();await expect(page.getByText('No usage recorded yet.',{exact:true})).toBeVisible();expect(usageCalls).toBe(2);await expect(page.getByRole('button',{name:'Open admin dashboard',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Sign out of CreatorHub',exact:true}).click();await expect(page.getByText('Could not confirm sign-out. Please try again.',{exact:true})).toBeVisible();await expect(page.getByText(user.name,{exact:true})).toBeVisible();await page.getByRole('button',{name:'Sign out of CreatorHub',exact:true}).click();await expect(page.getByText("You're signed out",{exact:true})).toBeVisible();expect(logoutCalls).toBe(2);expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('@lyricflow_songs')||'[]')[0].title)).toBe('Private local draft');await expect(page.getByRole('button',{name:'Usage & administration',exact:true})).toHaveCount(0);
+});
+
+test('artist onboarding explains individual producer invitations without directing users to Workspace registration',async({page})=>{
+ await page.route('**/api/**',route=>route.fulfill({status:401,json:{error:'Missing session'}}));await openProfile(page);
+ await page.getByRole('button',{name:'Invited by your producer?',exact:true}).click();await expect(page.getByText('Your invitation starts with your producer',{exact:true})).toBeVisible();await expect(page.getByText('1. Open your personal invitation email.',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Open CreatorHub Workspace',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Back to Profile',exact:true}).click();await expect(page.getByRole('heading',{name:'Profile',exact:true})).toBeVisible();
 });

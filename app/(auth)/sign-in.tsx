@@ -34,15 +34,15 @@ export default function SignInScreen() {
       <View style={styles.mark}>
         <Ionicons name="musical-notes" size={28} color={Colors.gradientMid} />
       </View>
-      <Text style={styles.eyebrow}>CREATORHUB WORKSPACE</Text>
-      <Text style={styles.title}>One login for your whole music workflow</Text>
+      <Text style={styles.eyebrow}>EASEVERSE</Text>
+      <Text style={styles.title}>Sign in to EaseVerse</Text>
       <Text style={styles.subtitle}>
-        Continue with the same CreatorHub account you use in Workspace. Your EaseVerse projects and Pro Tools Companion pairing stay connected to that identity.
+        Use the email address your producer invited. Open your personal invitation first if you have not joined the studio project yet.
       </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable onPress={start} disabled={isSigningIn} accessibilityRole="button" accessibilityLabel="Continue with CreatorHub">
+      <Pressable onPress={start} disabled={isSigningIn} accessibilityRole="button" accessibilityLabel="Continue with Google">
         <LinearGradient
           colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd] as const}
           start={{ x: 0, y: 0 }}
@@ -54,7 +54,7 @@ export default function SignInScreen() {
           ) : (
             <>
               <Ionicons name="logo-google" size={18} color="#fff" />
-              <Text style={styles.primaryText}>Continue with CreatorHub</Text>
+              <Text style={styles.primaryText}>Continue with Google</Text>
             </>
           )}
         </LinearGradient>
@@ -63,7 +63,7 @@ export default function SignInScreen() {
       <View style={styles.note}>
         <Ionicons name="shield-checkmark-outline" size={17} color={Colors.gradientMid} />
         <Text style={styles.noteText}>
-          EaseVerse does not create a separate password or account. Authentication is handled by CreatorHub Workspace.
+          CreatorHub provides sign-in for EaseVerse. Artists and band members join studio projects through their producer’s invitation.
         </Text>
       </View>
     </ScrollView>

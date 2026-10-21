@@ -63,7 +63,7 @@ test("starts sign-in with the shared CreatorHub Workspace OAuth flow", async ({ 
   await page.goto("/sign-in");
   const skip = page.getByRole("button", { name: "Skip intro" });
   if (await skip.isVisible()) await skip.click();
-  await page.getByRole("button", { name: "Continue with CreatorHub" }).click();
+  await page.getByRole("button", { name: "Continue with Google" }).click();
 
   await expect(page).toHaveURL(/accounts\.google\.com\/o\/oauth2\/v2\/auth/);
   expect(startPayload).toEqual({ platform: "web" });

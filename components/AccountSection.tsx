@@ -56,7 +56,7 @@ function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number })
           style={styles.secondaryButton}
           accessibilityRole="button"
         >
-          <Text style={styles.secondaryButtonText}>Create account</Text>
+          <Text style={styles.secondaryButtonText}>Invited by your producer?</Text>
         </Pressable>
       </View>
     );

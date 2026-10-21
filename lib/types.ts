@@ -61,6 +61,12 @@ export interface Session {
   insights: SessionInsight;
   lyrics: string;
   transcript?: string;
+  analysis?: {
+    provider: 'apple-speech' | 'android-speech' | 'browser-speech' | 'openai';
+    language: string;
+    analysedAt: number;
+    comparison: import('../shared/lyric-match').LyricMatch;
+  };
 }
 
 export type SignalQuality = 'good' | 'ok' | 'poor';

@@ -1,3 +1,4 @@
+import { useAuth } from '@/lib/creatorhub-auth';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View, Pressable, Platform, Image, ScrollView, type ImageSourcePropType } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,9 +34,9 @@ import { buildLiveLyricLines, getLiveLyricProgress } from '@/lib/live-lyrics';
 import * as Storage from '@/lib/storage';
 import { resolveSpeechRecognitionLang, resolveSttLanguageCode } from '@/lib/language';
 import { useRecording } from '@/lib/useRecording';
-import { analyzeSessionRecording, fetchWhisperStatus } from '@/lib/session-scoring-client';
+import { analyzeSessionRecording } from '@/lib/session-scoring-client';
 import { ingestSessionLearningEvent } from '@/lib/learning-client';
-import { buildSessionScoring } from '@shared/session-scoring';
+import { matchLyricTranscript } from '@/shared/lyric-match';
 import type { LyricLine, SignalQuality, Session, Song } from '@/lib/types';
 import { useResponsiveLayout } from '@/lib/responsive';
 
@@ -66,6 +67,7 @@ function TransportIcon({ source, size, active, dimmed }: {
 }
 
 export default function SingScreen() {
+  const { getToken } = useAuth();
   useAssets([recordControlIconSource, stopControlIconSource, metronomeControlIconSource, markerControlIconSource]);
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
@@ -573,55 +575,47 @@ export default function SingScreen() {
     const elapsed = result.durationSeconds;
     // `useRecording` tracks duration in whole seconds, so `> 3` effectively
     // requires 4+ seconds. Treat 3 seconds as the minimum valid take length.
-    if (elapsed >= 3) {
+    if (elapsed >= 3 && result.uri) {
       try {
         setIsAnalyzing(true);
         setAnalysisStatus(null);
-        const whisperStatus = settings.cloudAnalysisEnabled ? await fetchWhisperStatus() : null;
-        if (whisperStatus?.state === 'loading' || whisperStatus?.state === 'idle') {
-          setAnalysisStatus('Preparing speech model...');
-        } else if (whisperStatus?.state === 'error') {
-          setAnalysisStatus('Speech model unavailable. Using fallback.');
-        }
         const recordingUri = result.uri;
+        const sessionId = Storage.generateId();
+        // Save the actual take before any optional network analysis begins.
+        await Storage.saveSession({id:sessionId,songId:activeSong?.id,genre,
+          title:`${activeSong?.title || 'Recording'} - Take`,duration:elapsed,date:Date.now(),
+          recordingUri:recordingUri || undefined,tags:['practice',genreProfile.label.toLowerCase()],
+          favorite:false,lyrics:lyricsText,insights:{textAccuracy:0,pronunciationClarity:0,
+            timingConsistency:'low',topToFix:[],analysisAvailable:false}});
+        let resolvedAnalysis: Session['analysis'];
+
         let resolvedInsights: Session['insights'] | null = null;
         let resolvedTranscript = liveTranscript.trim();
 
         if (recordingUri && settings.cloudAnalysisEnabled) {
           const scored = await analyzeSessionRecording({
             recordingUri,
+            token: await getToken(),
             lyrics: lyricsText,
             durationSeconds: elapsed,
             language: resolveSttLanguageCode(settings.language),
             accentGoal: settings.accentGoal,
           });
-          if (scored?.insights) {
-            resolvedInsights = {
-              textAccuracy: Math.max(0, Math.min(100, scored.insights.textAccuracy)),
-              pronunciationClarity: Math.max(
-                0,
-                Math.min(100, scored.insights.pronunciationClarity)
-              ),
-              timingConsistency: scored.insights.timingConsistency,
-              topToFix: scored.insights.topToFix?.slice(0, 5) || [],
-            };
-            resolvedTranscript = scored.transcript?.trim() || resolvedTranscript;
+          if (scored) {
+            resolvedInsights = scored.insights;
+            resolvedTranscript = scored.transcript;
+            resolvedAnalysis = {provider:'openai',language:settings.language,analysedAt:Date.now(),comparison:scored.comparison};
           }
         }
 
-        if (!resolvedInsights && liveTranscript.trim()) {
-          const localScore = buildSessionScoring({
-            expectedLyrics: lyricsText,
-            transcript: liveTranscript,
-            durationSeconds: elapsed,
-          });
-          resolvedInsights = {
-            textAccuracy: localScore.insights.textAccuracy,
-            pronunciationClarity: localScore.insights.pronunciationClarity,
-            timingConsistency: localScore.insights.timingConsistency,
-            topToFix: localScore.insights.topToFix.slice(0, 5),
-          };
-          resolvedTranscript = localScore.transcript.trim();
+        if (!resolvedInsights && liveTranscript.trim() && lyricsText.trim()) {
+          try {
+            const comparison = matchLyricTranscript(lyricsText, liveTranscript);
+            resolvedInsights = {textAccuracy:comparison.score,pronunciationClarity:0,
+              timingConsistency:'low',analysisAvailable:true,
+              topToFix:comparison.wordsToCheck.map(word=>({word,reason:'Not matched in the transcript. Listen back and check this word.'}))};
+            resolvedAnalysis={provider:'browser-speech',language:settings.language,analysedAt:Date.now(),comparison};
+          } catch { /* Unusable recognition leaves the take available for a manual retry. */ }
         }
 
         if (!resolvedInsights) {
@@ -630,11 +624,11 @@ export default function SingScreen() {
             timingConsistency: 'low', topToFix: [], analysisAvailable: false,
           };
         }
-        resolvedInsights.analysisAvailable = Boolean(resolvedTranscript.trim());
+        resolvedInsights.analysisAvailable = Boolean(resolvedAnalysis);
         if (!resolvedInsights.analysisAvailable) resolvedInsights.topToFix = [];
 
         const session: Session = {
-          id: Storage.generateId(),
+          id: sessionId,
           songId: activeSong?.id,
           genre,
           title: `${activeSong?.title || 'Recording'} - Take`,
@@ -646,6 +640,7 @@ export default function SingScreen() {
           insights: resolvedInsights,
           lyrics: lyricsText,
           transcript: resolvedTranscript || undefined,
+          analysis: resolvedAnalysis,
         };
         addSession(session);
         // Persist immediately so a hard navigation doesn't drop the new session.
@@ -659,6 +654,8 @@ export default function SingScreen() {
         } else {
           router.push({ pathname: '/session/[id]', params: { id: session.id, fromRecording: '1' } });
         }
+      } catch {
+        setToast({visible:true,message:'Could not save the session details. Your audio file is still on this device. Keep the app open and try again.'});
       } finally {
         setIsAnalyzing(false);
         setAnalysisStatus(null);
@@ -666,7 +663,7 @@ export default function SingScreen() {
     } else {
       setToast({
         visible: true,
-        message: 'Record at least 3 seconds to generate session feedback.',
+        message: result.uri?'Record at least 3 seconds to save a take.':'No recording was returned. Please try again.',
       });
     }
 
@@ -674,6 +671,7 @@ export default function SingScreen() {
     setCountInRemaining(null);
   }, [
     activeSong,
+    getToken,
     addSession,
     genre,
     genreProfile.label,

@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.easeverse.app",
-      "buildNumber": "33",
+      "buildNumber": "34",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Allow EaseVerse to load photos you choose from your photo library."
@@ -103,7 +103,7 @@
         {
           "photosPermission": "Velg et profilbilde til samarbeidet i Sound Room.",
           "cameraPermission": false,
-          "microphonePermission": false
+          "microphonePermission": "EaseVerse uses your microphone only when you start recording a take."
         }
       ]
     ],

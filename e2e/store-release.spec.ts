@@ -30,7 +30,7 @@ for(const enabled of [false,true])test(`cloud analysis is ${enabled?'explicitly 
  let requests=0;
  await page.addInitScript(()=>localStorage.setItem('@lyricflow_songs',JSON.stringify([{id:'qa-consent',title:'QA local recording',lyrics:'Hold the tone',sections:[],genre:'pop',createdAt:1,updatedAt:1}])));
  await page.route('**/api/**',route=>{const path=new URL(route.request().url()).pathname;
- if(path==='/api/v1/session-score'){requests++;return route.fulfill({json:{transcript:'Hold the tone',insights:{textAccuracy:100,pronunciationClarity:0,timingConsistency:0,topToFix:[]}}});}
+ if(path==='/api/v1/session-score'){requests++;return route.fulfill({json:{transcript:'Hold the tone',provider:'openai',method:'transcription_text_match',insights:{textAccuracy:100,pronunciationClarity:0,timingConsistency:0,topToFix:[]}}});}
  return route.fulfill({status:401,json:{error:'No session in isolated fixture'}});});
  await page.goto('/profile');const intro=page.getByRole('button',{name:'Skip intro',exact:true});await intro.click();await expect(intro).toHaveCount(0);
  await page.getByRole('button',{name:'Recording & timing',exact:true}).click();const consent=page.getByRole('switch',{name:'Cloud practice analysis',exact:true});await expect(consent).toHaveAttribute('aria-checked','false');
@@ -38,5 +38,6 @@ for(const enabled of [false,true])test(`cloud analysis is ${enabled?'explicitly 
  await page.getByRole('tab',{name:'Sing tab',exact:true}).click();await page.getByTestId('record-button').click();await expect(page.getByTestId('stop-button')).toBeVisible();await page.waitForTimeout(3500);await page.getByTestId('stop-button').click();
  await expect(page.getByRole('heading',{name:'Session Review',exact:true})).toBeVisible({timeout:20000});expect(requests).toBe(enabled?1:0);
  if(!enabled)await expect(page.getByText('Not analysed',{exact:true})).toBeVisible();
+ else await expect(page.getByTestId('session-insight-lyric-match')).toHaveAttribute('aria-label','Lyric match: 100%');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('@lyricflow_sessions')||'[]').length)).toBe(1);
 });

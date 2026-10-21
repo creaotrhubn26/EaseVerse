@@ -1,3 +1,4 @@
+import { PracticeAnalysisPanel } from '@/components/PracticeAnalysisPanel';
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -110,7 +111,7 @@ export default function SessionReviewScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const { id, fromRecording } = useLocalSearchParams<{ id: string; fromRecording?: string }>();
-  const { sessions, toggleFavorite } = useApp();
+  const { sessions, toggleFavorite, updateSession, settings } = useApp();
   const coach = usePronunciationCoach();
   const [showGenreTips, setShowGenreTips] = useState(false);
   const [activeFixWord, setActiveFixWord] = useState<string | null>(null);
@@ -506,6 +507,8 @@ export default function SessionReviewScreen() {
           />
         </View>
 
+        <View style={{paddingHorizontal:horizontalInset}}><PracticeAnalysisPanel session={session} language={settings.language} accentGoal={settings.accentGoal} onResult={patch=>updateSession(session.id,patch)}/></View>
+
         {genreProfile && (
           <View style={[styles.genreCoachSection, { paddingHorizontal: horizontalInset }]}>
             <Pressable onPress={() => setShowGenreTips(value => !value)} style={styles.genreCoachHeader}
@@ -564,7 +567,7 @@ export default function SessionReviewScreen() {
 
         {session.insights.topToFix.length>0 && <View style={[styles.fixSection, { paddingHorizontal: horizontalInset }]}>
           <View style={styles.fixSectionHeader}>
-            <Text style={styles.fixSectionTitle}>Top to Fix</Text>
+            <Text style={styles.fixSectionTitle}>Words to check</Text>
             <View style={styles.fixSectionHint}>
               <Ionicons name="volume-high-outline" size={scaledIcon(8)} color={Colors.textTertiary} />
               <Text style={styles.fixSectionHintText}>Tap to hear</Text>

@@ -191,3 +191,17 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   return ADMIN_EMAILS.includes(email.toLowerCase());
 }
+
+/** Atomic per-account quota shared across serverless instances. No audio or lyrics are stored. */
+export async function reservePracticeAnalysis(userId: string): Promise<boolean> {
+  const p = getPool();
+  if (!p) throw new Error('Analysis quota unavailable');
+  await ensureSchema();
+  const { rows } = await p.query(`UPDATE app_users SET metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),'{practiceAnalysis}',
+    jsonb_build_object('hour',to_char(date_trunc('hour',NOW() AT TIME ZONE 'UTC'),'YYYYMMDDHH24'),
+      'count',CASE WHEN metadata#>>'{practiceAnalysis,hour}'=to_char(date_trunc('hour',NOW() AT TIME ZONE 'UTC'),'YYYYMMDDHH24')
+        THEN COALESCE((metadata#>>'{practiceAnalysis,count}')::int,0)+1 ELSE 1 END))
+    WHERE user_id=$1 AND (metadata#>>'{practiceAnalysis,hour}' IS DISTINCT FROM to_char(date_trunc('hour',NOW() AT TIME ZONE 'UTC'),'YYYYMMDDHH24')
+      OR COALESCE((metadata#>>'{practiceAnalysis,count}')::int,0)<12) RETURNING user_id`,[userId]);
+  return rows.length === 1;
+}

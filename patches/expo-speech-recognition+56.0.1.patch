@@ -1,0 +1,38 @@
+diff --git a/node_modules/expo-speech-recognition/ios/ExpoSpeechRecognitionModule.swift b/node_modules/expo-speech-recognition/ios/ExpoSpeechRecognitionModule.swift
+index daec776..8919a8f 100644
+--- a/node_modules/expo-speech-recognition/ios/ExpoSpeechRecognitionModule.swift
++++ b/node_modules/expo-speech-recognition/ios/ExpoSpeechRecognitionModule.swift
+@@ -204,6 +204,16 @@ public class ExpoSpeechRecognitionModule: Module {
+             )
+           }
+ 
++          // Never silently fall back to Apple's network service for an offline request.
++          if options.requiresOnDeviceRecognition {
++            guard let locale = resolveLocale(localeIdentifier: options.lang),
++              let recognizer = SFSpeechRecognizer(locale: locale),
++              recognizer.supportsOnDeviceRecognition else {
++              sendErrorAndStop(error: "language-unavailable", message: "On-device recognition is unavailable for this language.")
++              return
++            }
++          }
++
+           if !options.requiresOnDeviceRecognition {
+             guard await SFSpeechRecognizer.hasAuthorizationToRecognize() else {
+               sendErrorAndStop(
+@@ -392,12 +402,14 @@ public class ExpoSpeechRecognitionModule: Module {
+ 
+     AsyncFunction("getSupportedLocales") { (options: GetSupportedLocaleOptions, promise: Promise) in
+       let supportedLocales = SFSpeechRecognizer.supportedLocales().map { $0.identifier }.sorted()
+-      let installedLocales = supportedLocales
++      let installedLocales = supportedLocales.filter { identifier in
++        SFSpeechRecognizer(locale: Locale(identifier: identifier))?.supportsOnDeviceRecognition == true
++      }
+ 
+       // Return as an object
+       promise.resolve([
+         "locales": supportedLocales,
+-        // On iOS, the installed locales are the same as the supported locales
++        // Report only languages with native on-device recognition support.
+         "installedLocales": installedLocales,
+       ])
+     }

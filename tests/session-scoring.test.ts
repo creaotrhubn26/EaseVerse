@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSessionScoring } from '../shared/session-scoring';
 
-test('buildSessionScoring returns perfect scores on exact match', () => {
+test('buildSessionScoring measures exact lyric text without inventing acoustic scores', () => {
   const result = buildSessionScoring({
     expectedLyrics: 'hello from the other side',
     transcript: 'hello from the other side',
@@ -11,8 +11,9 @@ test('buildSessionScoring returns perfect scores on exact match', () => {
 
   assert.equal(result.matchedWordCount, 5);
   assert.equal(result.insights.textAccuracy, 100);
-  assert.equal(result.insights.pronunciationClarity, 100);
-  assert.equal(result.insights.timingConsistency, 'high');
+  assert.equal(result.insights.pronunciationClarity, 0);
+  assert.equal(result.insights.timingConsistency, 'low');
+  assert.deepEqual(result.measurements,{lyricMatch:'measured',pronunciation:'not_measured',timing:'not_measured'});
 });
 
 test('buildSessionScoring flags missed words and lowers scores', () => {

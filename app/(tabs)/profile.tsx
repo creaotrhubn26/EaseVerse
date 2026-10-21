@@ -435,7 +435,7 @@ export default function ProfileScreen() {
   }, []);
 
   const totalDuration=sessions.reduce((sum,item)=>sum+(Number.isFinite(item.duration)?Math.max(0,item.duration):0),0);
-  const languages=['English','Spanish','French','German','Italian','Portuguese','Japanese','Korean'];
+  const languages=['English','Norwegian','Swedish','Danish','Finnish','Icelandic','Spanish','French','German','Italian','Portuguese','Japanese','Korean'];
   const accents=['US','UK','AU','Standard'];
   const formatDuration = (secs: number) => {
     const h = Math.floor(secs / 3600);

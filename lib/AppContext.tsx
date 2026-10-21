@@ -28,7 +28,7 @@ interface AppContextValue {
   updateSong: (song: Song) => void;
   removeSong: (id: string) => void;
   addSession: (session: Session) => void;
-  updateSession: (id: string, patch: Partial<Session>) => void;
+  updateSession: (id: string, patch: Partial<Session>) => Promise<void>;
   toggleFavorite: (id: string) => void;
   removeSession: (id: string) => void;
   updateSettings: (settings: Partial<UserSettings>) => void;
@@ -187,18 +187,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [queuePersist]);
 
   const updateSession = useCallback((id: string, patch: Partial<Session>) => {
-    let updatedSession: Session | undefined;
-    setSessions(prev => prev.map(session => {
-      if (session.id !== id) {
-        return session;
-      }
-      updatedSession = { ...session, ...patch };
-      return updatedSession;
-    }));
-    if (updatedSession) {
-      void queuePersist(() => Storage.saveSession(updatedSession as Session));
-    }
-  }, [queuePersist]);
+    // Persist outside a React state updater: concurrent rendering may defer or replay it.
+    const pending = persistQueueRef.current.catch(() => undefined).then(async () => {
+      const stored = (await Storage.getSessions()).find(session => session.id === id);
+      if (!stored) throw new Error('This take is no longer saved.');
+      const updated = { ...stored, ...patch };
+      await Storage.saveSession(updated);
+      setSessions(prev => prev.map(session => session.id === id ? { ...session, ...patch } : session));
+    });
+    persistQueueRef.current = pending.catch(() => undefined);
+    return pending;
+  }, []);
 
   const toggleFavorite = useCallback((id: string) => {
     let updatedSession: Session | undefined;

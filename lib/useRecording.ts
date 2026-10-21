@@ -215,7 +215,9 @@ export function useRecording() {
     }
   }, [startMetering, recorder]);
 
+  const stopInFlightRef = useRef(false);
   const stop = useCallback(async (): Promise<{ uri: string | null; durationSeconds: number }> => {
+    if(stopInFlightRef.current)return {uri:null,durationSeconds:0};
     stopMetering();
     setAudioLevel(0);
     const elapsed = Math.max(durationRef.current, getElapsedSecondsNow());
@@ -223,9 +225,10 @@ export function useRecording() {
     if (!recordingActiveRef.current) {
       setIsRecording(false);
       setIsPaused(false);
-      return { uri: null, durationSeconds: elapsed };
+      return { uri: null, durationSeconds: 0 };
     }
 
+    stopInFlightRef.current=true;
     try {
       let uri: string | null = null;
       if (engineRef.current === 'expo') {
@@ -259,7 +262,7 @@ export function useRecording() {
       startEpochMsRef.current = null;
       elapsedMsRef.current = 0;
       return { uri: null, durationSeconds: elapsed };
-    }
+    } finally { stopInFlightRef.current=false; }
   }, [getElapsedSecondsNow, stopMetering, recorder]);
 
   const togglePause = useCallback(async () => {

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 type SupportedLanguageLabel =
+  | 'Norwegian' | 'Swedish' | 'Danish' | 'Finnish' | 'Icelandic'
   | 'English'
   | 'Spanish'
   | 'French'
@@ -11,6 +12,8 @@ type SupportedLanguageLabel =
   | 'Korean';
 
 const LANGUAGE_BY_PRIMARY_TAG: Record<string, SupportedLanguageLabel> = {
+  no: 'Norwegian', nb: 'Norwegian', nn: 'Norwegian',
+  sv: 'Swedish', da: 'Danish', fi: 'Finnish', is: 'Icelandic',
   en: 'English',
   es: 'Spanish',
   fr: 'French',

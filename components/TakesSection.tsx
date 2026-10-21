@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import { AUTH_CONFIGURED } from "@/lib/use-app-user";
+import { useAuth } from "@/lib/creatorhub-auth";
 import {
   fetchTakeDetail,
   fetchTakes,
@@ -23,6 +24,12 @@ import {
   type ProducerDecision,
   type TakeAnalysis,
   type TakeRecord,
+  createRegion,
+  deleteRegion,
+  listRegions,
+  type TakeRegion,
+  createComp,
+  listComps,
 } from "@/lib/takes-client";
 import { formatTimestamp, parseProducerNote } from "@/lib/parse-timestamps";
 import { listProjects, type ProjectListItem } from "@/lib/projects-client";
@@ -31,27 +38,22 @@ import {
   UniversalAudioPlayer,
   type UniversalAudioPlayerHandle,
 } from "@/components/UniversalAudioPlayer";
-import {
-  createRegion,
-  deleteRegion,
-  listRegions,
-  type TakeRegion,
-} from "@/lib/takes-client";
 import { useApp } from "@/lib/AppContext";
-import { createComp, listComps } from "@/lib/takes-client";
 import { router } from "expo-router";
 
-type Props = { horizontalMargin?: number };
+type Props = { horizontalMargin?: number; collapsible?: boolean };
 
 export function TakesSection(props: Props) {
   if (!AUTH_CONFIGURED) return null;
   return <TakesSectionAuthed {...props} />;
 }
 
-function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
-  // Lazy-load useAuth so this module doesn't blow up when CreatorHub authentication is unavailable.
-  const { useAuth } = require("@/lib/creatorhub-auth") as typeof import("@/lib/creatorhub-auth");
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+function TakesSectionAuthed({ horizontalMargin = 16, collapsible = false }: Props) {
+  const { getToken, isLoaded, isSignedIn, user } = useAuth();
+  const userId = user?.id;
+  const accountRef = useRef(userId);
+  accountRef.current = userId;
+  const [expanded, setExpanded] = useState(false);
   const [takes, setTakes] = useState<TakeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,17 +69,26 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
     try {
       const token = await getToken();
       const fetched = await fetchTakes(token);
+      if (accountRef.current !== userId) return;
       setTakes(fetched);
       setError(null);
     } catch (err) {
+      if (accountRef.current !== userId) return;
       setError((err as Error).message || "Takes fetch failed");
     } finally {
-      setLoading(false);
+      if (accountRef.current === userId) setLoading(false);
     }
-  }, [getToken, isSignedIn]);
+  }, [getToken, isSignedIn, userId]);
 
   useEffect(() => {
     if (!isLoaded) return;
+    let current = true;
+    setTakes([]);
+    setProjectsList([]);
+    setSelectedProjectId('');
+    setError(null);
+    setExpanded(false);
+    setLoading(isSignedIn);
     if (!isSignedIn) {
       setLoading(false);
       return;
@@ -87,12 +98,13 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
       try {
         const token = await getToken();
         const list = await listProjects(token);
-        setProjectsList(list);
+        if (current) setProjectsList(list);
       } catch {
         /* ignore */
       }
     })();
-  }, [isLoaded, isSignedIn, reload, getToken]);
+    return () => { current = false; };
+  }, [isLoaded, isSignedIn, reload, getToken, userId]);
 
   async function handleFile(file: File, externalTrackId?: string) {
     if (!isSignedIn) return;
@@ -137,20 +149,30 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
 
   return (
     <View style={[styles.card, { marginHorizontal: horizontalMargin }]}>
-      <View style={styles.headerRow}>
+      <Pressable style={[styles.headerRow, {minHeight: 52}]}
+        disabled={!collapsible} accessibilityRole={collapsible ? 'button' : undefined}
+        accessibilityLabel={collapsible ? 'Studio takes' : undefined}
+        accessibilityState={collapsible ? {expanded} : undefined} aria-expanded={collapsible ? expanded : undefined}
+        onPress={() => setExpanded(value => !value)}>
         <Ionicons name="albums" size={18} color={Colors.gradientMid} />
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Studio takes</Text>
           <Text style={styles.subtitle}>
-            Drop vocal takes from Pro Tools (bounced or printed) — analysis runs in the background.
+            {collapsible
+              ? loading ? 'Loading studio recordings…' : error ? 'Could not load studio recordings' : `${takes.length} ${takes.length === 1 ? 'take' : 'takes'} from your studio projects`
+              : 'Review recordings shared through your studio projects.'}
           </Text>
         </View>
-      </View>
+        {collapsible && <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={Colors.gradientMid} />}
+      </Pressable>
+
+      {(!collapsible || expanded) && <>
 
       {Platform.OS === "web" && projects.length > 0 ? (
         <View style={styles.projectPickerRow}>
           <Text style={styles.projectPickerLabel}>Project:</Text>
           <select
+            aria-label="Filter studio takes by project"
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
             style={{
@@ -229,7 +251,11 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
         <Text style={styles.subtitle}>Open EaseVerse on web to upload takes.</Text>
       )}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <View><Text accessibilityRole="alert" style={styles.error}>{error}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Retry loading studio takes" onPress={() => {setLoading(true);void reload();}} style={{minHeight:44,justifyContent:'center'}}>
+          <Text style={{color:Colors.gradientMid}}>Try again</Text>
+        </Pressable>
+      </View> : null}
 
       <View style={styles.list}>
         {(() => {
@@ -242,7 +268,7 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
               <Text style={styles.empty}>
                 {selectedProjectId
                   ? "No takes in this project yet."
-                  : "No takes yet. Upload your first one above."}
+                  : Platform.OS === 'web' ? "No takes yet. Upload your first one above." : "Recordings shared through your studio will appear here."}
               </Text>
             );
           return filtered.map((t) => (
@@ -259,6 +285,7 @@ function TakesSectionAuthed({ horizontalMargin = 16 }: Props) {
           ));
         })()}
       </View>
+      </>}
     </View>
   );
 }

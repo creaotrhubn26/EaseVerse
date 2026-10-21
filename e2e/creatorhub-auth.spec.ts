@@ -29,6 +29,7 @@ test("cookie-only sign-in reaches private uploads and preserves server authoriza
   await page.goto("/profile");
   await expect.poll(() => registered).toBe(true);
   await page.goto("/sessions");
+  await page.getByRole("button", {name:"Studio takes",exact:true}).click();
   await page.getByRole("combobox").selectOption("cookie-project");
   await expect(page.getByRole('button', { name: 'View lyrics and producer feedback' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mark take Keeper' })).toHaveCount(0);

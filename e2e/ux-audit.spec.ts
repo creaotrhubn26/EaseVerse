@@ -466,13 +466,13 @@ test.describe("UX audit", () => {
       await page.goto("/sessions", { waitUntil: "domcontentloaded" });
     }
     
-    // Wait for the page to fully hydrate - the "recordings" stat label should appear
-    await expect(page.getByText("recordings")).toBeVisible({ timeout: 5_000 });
+    // Wait for the local recording library to hydrate
+    await expect(page.getByTestId("sessions-local-count")).toBeVisible({ timeout: 5_000 });
     
     // Give a bit more time for the list to render from storage
     await page.waitForTimeout(500);
     
-    const noSessions = page.getByText("No sessions yet");
+    const noSessions = page.getByRole('button', {name:'Go to Sing to record your first take',exact:true});
     if (await noSessions.isVisible()) {
       pushIssue(
         issues,

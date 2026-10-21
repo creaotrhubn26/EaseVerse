@@ -23,6 +23,7 @@ import { useApp } from '@/lib/AppContext';
 import { goBackWithFallback } from '@/lib/navigation';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
+import { useIsFocused } from '@react-navigation/native';
 
 function InsightCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -114,6 +115,9 @@ export default function SessionReviewScreen() {
   const [activeFixWord, setActiveFixWord] = useState<string | null>(null);
   const [showAddedToast, setShowAddedToast] = useState(false);
   const [waveformProgress, setWaveformProgress] = useState(0);
+  const [playbackError, setPlaybackError] = useState('');
+  const [audioAttempt, setAudioAttempt] = useState(0);
+  const focused = useIsFocused();
   type TrimMarks = { start: number | null; end: number | null };
   const [trimMarks, setTrimMarks] = useState<TrimMarks>({ start: null, end: null });
   const [trimHistory, setTrimHistory] = useState<TrimMarks[]>([]);
@@ -167,7 +171,7 @@ export default function SessionReviewScreen() {
   const playerStatus = useAudioPlayerStatus(player);
   const genreProfile = useMemo(() => session?.genre ? getGenreProfile(session.genre) : null, [session?.genre]);
 
-  const webTopInset = Platform.OS === 'web' ? 67 : 0;
+  const webTopInset = 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
   const hasRecording = Boolean(session?.recordingUri);
   const hasWebLocalRecordingUri =
@@ -175,6 +179,15 @@ export default function SessionReviewScreen() {
     typeof session?.recordingUri === 'string' &&
     /^(file|content):\/\//i.test(session.recordingUri);
   const canPlayRecording = hasRecording && !hasWebLocalRecordingUri;
+  useEffect(() => {
+    if (!focused) { try { player.pause(); } catch {} }
+  }, [focused, player]);
+  useEffect(() => {
+    setPlaybackError('');
+    if (!canPlayRecording || playerStatus.isLoaded) return;
+    const timer = setTimeout(() => setPlaybackError('Could not load this recording. Try again.'), 10000);
+    return () => clearTimeout(timer);
+  }, [canPlayRecording, playerStatus.isLoaded, session?.id, audioAttempt]);
   const horizontalInset = responsive.contentPadding;
   const contentMaxWidth = responsive.contentMaxWidth;
   const sectionWrapStyle = useMemo(
@@ -207,7 +220,7 @@ export default function SessionReviewScreen() {
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <Pressable
-            onPress={() => goBackWithFallback(router, '/profile')}
+            onPress={() => goBackWithFallback(router, '/sessions')}
             hitSlop={12}
             style={styles.backButton}
             accessibilityRole="button"
@@ -266,7 +279,7 @@ export default function SessionReviewScreen() {
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
-          onPress={() => goBackWithFallback(router, '/profile')}
+            onPress={() => goBackWithFallback(router, '/sessions')}
           hitSlop={12}
           style={styles.backButton}
           accessibilityRole="button"
@@ -324,9 +337,8 @@ export default function SessionReviewScreen() {
         <View style={[styles.waveformSection, { paddingHorizontal: horizontalInset }]}>
           <WaveformTimeline
             progress={waveformProgress}
-            barCount={70}
-            duration={session.duration}
-            interactive
+            duration={playerStatus.duration || session.duration}
+            interactive={canPlayRecording && playerStatus.isLoaded}
             onSeek={(seekPos) => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setWaveformProgress(seekPos);
@@ -335,12 +347,13 @@ export default function SessionReviewScreen() {
                   playerStatus.duration && playerStatus.duration > 0
                     ? playerStatus.duration
                     : session.duration;
-                void player.seekTo(Math.max(0, Math.min(effectiveDuration, seekPos * effectiveDuration)));
+                void player.seekTo(Math.max(0, Math.min(effectiveDuration, seekPos * effectiveDuration))).catch(() => setPlaybackError('Could not change playback position. Try again.'));
               }
             }}
           />
           <View style={styles.waveformControls}>
             <Pressable
+              disabled={!canPlayRecording || !playerStatus.isLoaded}
               onPress={() => {
                 if (!canPlayRecording) {
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -350,10 +363,17 @@ export default function SessionReviewScreen() {
                 if (playerStatus.playing) {
                   void player.pause();
                 } else {
-                  void player.play();
+                  setPlaybackError('');
+                  const duration = playerStatus.duration || session.duration;
+                  void (async () => {
+                    try {
+                      if (playerStatus.didJustFinish || playerStatus.currentTime >= duration - 0.05) await player.seekTo(0);
+                      player.play();
+                    } catch { setPlaybackError('Could not play this recording. Try again.'); }
+                  })();
                 }
               }}
-              style={styles.waveformPlayBtn}
+              style={[styles.waveformPlayBtn, (!canPlayRecording || !playerStatus.isLoaded) && {opacity:0.45}]}
               accessibilityRole="button"
               accessibilityLabel={playerStatus.playing ? 'Pause session audio' : 'Play session audio'}
               accessibilityHint="Plays or pauses the recorded take"
@@ -370,6 +390,14 @@ export default function SessionReviewScreen() {
               </Text>
             )}
           </View>
+          {canPlayRecording && !playerStatus.isLoaded && !playbackError && <Text style={styles.waveformHintText}>Loading recording…</Text>}
+          {!!playbackError && <View>
+            <Text accessibilityRole="alert" style={styles.waveformHintText}>{playbackError}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Retry session audio" style={{minHeight:44,justifyContent:'center'}}
+              onPress={() => {setAudioAttempt(value=>value+1);setPlaybackError('');try{player.replace(sessionAudioSource);}catch{setPlaybackError('Could not load this recording. Try again.');}}}>
+              <Text style={{color:Colors.gradientMid}}>Try again</Text>
+            </Pressable>
+          </View>}
           {hasRecording && Platform.OS === 'web' && !hasWebLocalRecordingUri ? (
             <View style={styles.trimRow}>
               <View style={styles.trimMarkRow}>

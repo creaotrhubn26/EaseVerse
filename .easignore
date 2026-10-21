@@ -21,3 +21,6 @@ outputs/
 server_cache/
 *.log
 .DS_Store
+
+# Generated Xcode products are rebuilt remotely, never uploaded as project source.
+ios-build/

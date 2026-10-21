@@ -55,3 +55,14 @@ test("assigned warmup links preserve one valid project on cold and warm launches
     ]) assert.equal(resolveNativeIntent(path, initial), "/");
   }
 });
+
+test('invitation links work cold and warm without accepting arbitrary origins or invalid tokens',()=>{
+ const token='inv_0123456789abcdef0123456789abcdef';
+ for(const initial of [true,false]){
+  assert.equal(resolveNativeIntent(`https://easeverse.netlify.app/sound-room/invite/${token}`,initial),`/sound-room/invite/${token}`);
+  assert.equal(resolveNativeIntent(`easeverse://sound-room/invite/${token}`,initial),`/sound-room/invite/${token}`);
+  assert.equal(resolveNativeIntent(`https://attacker.example/sound-room/invite/${token}`,initial),'/');
+  assert.equal(resolveNativeIntent('easeverse://sound-room/invite/short',initial),'/');
+  assert.equal(resolveNativeIntent('easeverse://auth/callback?chGoogleTransfer=qa',initial),'/auth/callback?chGoogleTransfer=qa');
+ }
+});

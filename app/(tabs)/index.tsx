@@ -8,7 +8,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { AudioModule, useAudioPlayer } from 'expo-audio';
 import { useAssets } from 'expo-asset';
 import Colors from '@/constants/colors';
-import { getGenreProfile, getGenreCoachHints, getWordTipForGenre, getGenreFixReasons } from '@/constants/genres';
+import { getGenreProfile, getGenreCoachHints, getWordTipForGenre } from '@/constants/genres';
 import RecordButton from '@/components/RecordButton';
 import CoachPill from '@/components/CoachPill';
 import QualityPill from '@/components/QualityPill';
@@ -577,7 +577,7 @@ export default function SingScreen() {
       try {
         setIsAnalyzing(true);
         setAnalysisStatus(null);
-        const whisperStatus = await fetchWhisperStatus();
+        const whisperStatus = settings.cloudAnalysisEnabled ? await fetchWhisperStatus() : null;
         if (whisperStatus?.state === 'loading' || whisperStatus?.state === 'idle') {
           setAnalysisStatus('Preparing speech model...');
         } else if (whisperStatus?.state === 'error') {
@@ -587,7 +587,7 @@ export default function SingScreen() {
         let resolvedInsights: Session['insights'] | null = null;
         let resolvedTranscript = liveTranscript.trim();
 
-        if (recordingUri) {
+        if (recordingUri && settings.cloudAnalysisEnabled) {
           const scored = await analyzeSessionRecording({
             recordingUri,
             lyrics: lyricsText,
@@ -625,17 +625,13 @@ export default function SingScreen() {
         }
 
         if (!resolvedInsights) {
-          const genreFixes = getGenreFixReasons(genre).slice(0, 3);
           resolvedInsights = {
-            textAccuracy: 0,
-            pronunciationClarity: 0,
-            timingConsistency: 'low',
-            topToFix:
-              genreFixes.length > 0
-                ? genreFixes
-                : [{ word: 'analysis', reason: 'Scoring unavailable. Check API connectivity.' }],
+            textAccuracy: 0, pronunciationClarity: 0,
+            timingConsistency: 'low', topToFix: [], analysisAvailable: false,
           };
         }
+        resolvedInsights.analysisAvailable = Boolean(resolvedTranscript.trim());
+        if (!resolvedInsights.analysisAvailable) resolvedInsights.topToFix = [];
 
         const session: Session = {
           id: Storage.generateId(),
@@ -685,6 +681,7 @@ export default function SingScreen() {
     lyricsText,
     recording,
     settings.accentGoal,
+    settings.cloudAnalysisEnabled,
     settings.language,
   ]);
 

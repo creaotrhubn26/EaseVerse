@@ -26,13 +26,12 @@ export function MicPermissionRationale({ visible, onAllow, onCancel }: Props) {
           </View>
           <Text style={styles.title}>We need your microphone</Text>
           <Text style={styles.body}>
-            EaseVerse records vocals locally on your device for live lyric tracking and pronunciation coaching.
-            Recordings are only saved if you choose to keep them.
+            EaseVerse uses your microphone when you start a take. Takes of at least 3 seconds are saved locally when you stop. You can listen back or delete them from Sessions.
           </Text>
           <View style={styles.bulletList}>
             <Bullet icon="musical-notes-outline">Live highlighting of lyric words as you sing</Bullet>
-            <Bullet icon="sparkles-outline">Coach tips for pronunciation, rhythm and clarity</Bullet>
-            <Bullet icon="lock-closed-outline">Audio never leaves your device without your choice</Bullet>
+            <Bullet icon="sparkles-outline">Optional cloud analysis is off until you enable it in Profile</Bullet>
+            <Bullet icon="lock-closed-outline">Studio recordings are shared only when you choose Share</Bullet>
           </View>
           <Pressable onPress={onAllow} accessibilityRole="button">
             <LinearGradient

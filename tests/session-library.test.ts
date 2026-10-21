@@ -16,3 +16,5 @@ test('library search, favorites and latest preserve useful local ordering',()=>{
   assert.deepEqual(selectLibrarySessions(source,'favorites','chor').map(x=>x.id),['Chorus']);
   assert.deepEqual(selectLibrarySessions(source,'match','verse').map(x=>x.id),['Verse']);
 });
+
+test('unavailable analysis is not displayed or sorted as a measured zero',()=>{const s=take('no-analysis',1,0);s.insights.analysisAvailable=false;assert.equal(sessionLyricMatch(s),null);});

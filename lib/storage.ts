@@ -198,6 +198,7 @@ const defaultSettings: UserSettings = {
   countIn: 0,
   narrationVoice: 'female',
   metronomeEnabled: false,
+  cloudAnalysisEnabled: false,
   metronomeHaptics: false,
 };
 

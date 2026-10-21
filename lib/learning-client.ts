@@ -80,6 +80,7 @@ export async function ingestSessionLearningEvent(params: {
   }
 
   try {
+    if (!(await Storage.getSettings()).cloudAnalysisEnabled) return null;
     const userId = await Storage.getOrCreateLearningUserId();
     const url = new URL("/api/v1/learning/session", getApiUrl());
     const response = await fetch(url.toString(), {
@@ -130,6 +131,7 @@ export async function ingestEasePocketLearningEvent(params: {
   }
 
   try {
+    if (!(await Storage.getSettings()).cloudAnalysisEnabled) return null;
     const userId = await Storage.getOrCreateLearningUserId();
     const url = new URL("/api/v1/learning/easepocket", getApiUrl());
     const response = await fetch(url.toString(), {

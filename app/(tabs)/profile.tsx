@@ -1,6 +1,7 @@
 import React, { ComponentProps, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet,
+  Platform,
   Text,
   View,
   ScrollView,
@@ -787,6 +788,15 @@ export default function ProfileScreen() {
           </Preference>
         </ProfileGroup>
         <ProfileGroup title="Recording & timing" summary={`${settings.countIn?settings.countIn+'-beat count-in':'No count-in'} · ${settings.lyricsFollowSpeed} lyric tracking`} icon="options-outline">
+          <Preference title="Cloud practice analysis" hint="Optional. When enabled, recordings, lyrics and practice history are sent to EaseVerse for analysis. Transcription may use OpenAI. Turn it off to keep new local takes out of cloud analysis. Sharing a studio take is a separate action.">
+            <Pressable accessibilityRole="switch" accessibilityLabel="Cloud practice analysis"
+              accessibilityState={{checked:settings.cloudAnalysisEnabled===true}}
+              {...(Platform.OS==='web'?{'aria-checked':settings.cloudAnalysisEnabled===true}:{})}
+              onPress={()=>updateSettings({cloudAnalysisEnabled:settings.cloudAnalysisEnabled!==true})}
+              style={{minHeight:48,padding:14,borderRadius:12,backgroundColor:Colors.surface}}>
+              <Text style={{color:Colors.textPrimary}}>{settings.cloudAnalysisEnabled?'On — cloud analysis enabled':'Off — local practice only'}</Text>
+            </Pressable>
+          </Preference>
           <Preference title="Live recognition" hint={settings.liveMode==='stability'?'Waits for more confident recognition before advancing.':'Updates sooner; recognition may be less certain.'}>
             <SegmentedControl<LiveMode> options={[{key:'stability',label:'Stability'},{key:'speed',label:'Speed'}]} value={settings.liveMode} onChange={v=>updateSettings({liveMode:v})}/>
           </Preference>

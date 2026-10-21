@@ -15,11 +15,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.easeverse.app",
-      "buildNumber": "32",
+      "buildNumber": "33",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Allow EaseVerse to load photos you choose from your photo library."
-      }
+      },
+      "associatedDomains": [
+        "applinks:easeverse.netlify.app"
+      ],
+      "appleTeamId": "9TAUZCPK95"
     },
     "android": {
       "package": "com.easeverse.app",
@@ -42,6 +46,23 @@
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
         "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "https",
+              "host": "easeverse.netlify.app",
+              "pathPrefix": "/sound-room/invite/"
+            }
+          ]
+        }
       ]
     },
     "web": {
@@ -75,6 +96,14 @@
           "ios": {
             "deploymentTarget": "16.4"
           }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Velg et profilbilde til samarbeidet i Sound Room.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ]
     ],

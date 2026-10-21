@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import { AUTH_CONFIGURED, useAppUser } from "@/lib/use-app-user";
@@ -13,7 +13,7 @@ export function AppGate({ children }: Props) {
 }
 
 function AppGateInner({ children }: Props) {
-  const { user, loading, reload } = useAppUser();
+  const { user, loading, error, reload } = useAppUser();
 
   if (loading) {
     return (
@@ -23,12 +23,20 @@ function AppGateInner({ children }: Props) {
     );
   }
 
+  if (error) return <View style={styles.loadingScreen}>
+    <Text style={{color:Colors.textPrimary,padding:24,textAlign:"center"}}>{error}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel="Retry account access" onPress={() => { void reload(); }}
+      style={{minHeight:48,padding:16,backgroundColor:Colors.surface,borderRadius:12}}>
+      <Text style={{color:Colors.gradientMid}}>Try again</Text>
+    </Pressable>
+  </View>;
+
   if (!user) {
     // Not signed in or app_users row missing — let downstream UI handle (sign-in CTA).
     return <>{children}</>;
   }
 
-  if (user.status === "pending" || user.status === "banned") {
+  if (user.status === "banned" || (user.status === "pending" && !user.studioAccess?.projectIds.length)) {
     return (
       <PendingApprovalGate
         status={user.status}

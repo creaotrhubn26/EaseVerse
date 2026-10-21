@@ -25,7 +25,7 @@ const sections = [
   {
     title: "Voice and coaching data",
     body:
-      "Audio submitted for Session Scoring or EasePocket analysis is sent securely to the EaseVerse API. Temporary audio conversion files are deleted after processing. Coaching events—including lyrics or transcripts, timing results and practice insights—may be stored under your account or a pseudonymous device identifier to provide history and personalised recommendations. Audio uploaded as a shared take or reference track remains stored until it is deleted or the related account is deleted.",
+      "Cloud practice analysis is off by default. If you enable it in Profile, recordings, lyrics, transcripts and practice history are sent securely to EaseVerse for analysis; transcription may be processed by OpenAI. You can turn this off for future local takes. Audio deliberately submitted for EasePocket analysis or studio sharing is sent securely to the EaseVerse API. Temporary audio conversion files are deleted after processing. Coaching events—including lyrics or transcripts, timing results and practice insights—may be stored under your account or a pseudonymous device identifier to provide history and personalised recommendations. Audio uploaded as a shared take or reference track remains stored until it is deleted or the related account is deleted.",
   },
   {
     title: "Why we use the data",
@@ -35,7 +35,7 @@ const sections = [
   {
     title: "Service providers and transfers",
     body:
-      "We use Google for CreatorHub sign-in and may use Netlify, Render, managed PostgreSQL, AWS S3 and Backblaze B2 for hosting, processing and storage. Providers process data under their service terms and security controls. Data may be processed outside Norway or the EEA with appropriate transfer safeguards where required.",
+      "We use Google for CreatorHub sign-in, OpenAI when optional cloud transcription uses its fallback provider, and may use Netlify, Clever Cloud, managed PostgreSQL and AWS S3 for hosting, processing and storage. Providers process data under their service terms and security controls. Data may be processed outside Norway or the EEA with appropriate transfer safeguards where required.",
   },
   {
     title: "Retention, security and your choices",

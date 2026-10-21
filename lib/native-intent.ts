@@ -33,12 +33,15 @@ export function resolveNativeIntent(path: string, initial: boolean): string {
     }
     if (
       /^\/(booth|projects)\/[A-Za-z0-9._-]{1,160}\/?$/.test(route) ||
-      route === "/integrations/creatorhub"
+      route === "/integrations/creatorhub" ||
+      route === "/auth/callback" ||
+      /^\/sound-room\/invite\/inv_[A-Za-z0-9_-]{16,76}\/?$/.test(route)
     ) {
       return `${route}${destination.search}`;
     }
   } catch {
     return "/";
   }
-  return initial ? "/" : path;
+  // Never pass an unrecognised external invitation through on a warm launch.
+  return !initial && path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/sound-room/invite/") ? path : "/";
 }

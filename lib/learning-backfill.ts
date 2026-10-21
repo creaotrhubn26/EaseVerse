@@ -78,6 +78,7 @@ function shouldSkipBackfill(params: {
 export async function runLearningBackfill(params: {
   sessions: Session[];
 }): Promise<{ skipped: boolean; syncedSessions: number; syncedEasePocket: number }> {
+  if (!(await Storage.getSettings()).cloudAnalysisEnabled) return {skipped:true,syncedSessions:0,syncedEasePocket:0};
   const userId = await Storage.getOrCreateLearningUserId();
   const [existingState, easePocketHistory] = await Promise.all([
     getBackfillState(),

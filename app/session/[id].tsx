@@ -259,21 +259,6 @@ export default function SessionReviewScreen() {
     return Colors.dangerUnderline;
   };
 
-  const getTimingLabel = (t: string) => {
-    switch (t) {
-      case 'high': return 'Consistent';
-      case 'medium': return 'Moderate';
-      default: return 'Needs work';
-    }
-  };
-
-  const getTimingColor = (t: string) => {
-    switch (t) {
-      case 'high': return Colors.successUnderline;
-      case 'medium': return Colors.warningUnderline;
-      default: return Colors.dangerUnderline;
-    }
-  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
@@ -504,19 +489,19 @@ export default function SessionReviewScreen() {
 
         <View style={[styles.insightsRow, { paddingHorizontal: horizontalInset }]}>
           <InsightCard
-            label="Text Accuracy"
-            value={`${session.insights.textAccuracy}%`}
-            color={getAccuracyColor(session.insights.textAccuracy)}
+            label="Lyric match"
+            value={session.insights.analysisAvailable===false?'Not analysed':`${session.insights.textAccuracy}%`}
+            color={session.insights.analysisAvailable===false?Colors.textSecondary:getAccuracyColor(session.insights.textAccuracy)}
           />
           <InsightCard
             label="Pronunciation"
-            value={`${session.insights.pronunciationClarity}%`}
-            color={getAccuracyColor(session.insights.pronunciationClarity)}
+            value="Not measured"
+            color={Colors.textSecondary}
           />
           <InsightCard
             label="Timing"
-            value={getTimingLabel(session.insights.timingConsistency)}
-            color={getTimingColor(session.insights.timingConsistency)}
+            value="Not measured"
+            color={Colors.textSecondary}
           />
         </View>
 
@@ -571,7 +556,7 @@ export default function SessionReviewScreen() {
           </View>
         )}
 
-        <View style={[styles.fixSection, { paddingHorizontal: horizontalInset }]}>
+        {session.insights.topToFix.length>0 && <View style={[styles.fixSection, { paddingHorizontal: horizontalInset }]}>
           <View style={styles.fixSectionHeader}>
             <Text style={styles.fixSectionTitle}>Top to Fix</Text>
             <View style={styles.fixSectionHint}>
@@ -593,7 +578,7 @@ export default function SessionReviewScreen() {
               />
             ))}
           </View>
-        </View>
+        </View>}
 
         {session.lyrics && (
           <View style={[styles.lyricsSection, { paddingHorizontal: horizontalInset }]}>

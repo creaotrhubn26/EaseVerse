@@ -4,6 +4,7 @@ export type SessionLibraryFilter = 'latest' | 'match' | 'favorites';
 
 /** Lyric matching is not a rating of the performance or voice. */
 export function sessionLyricMatch(session: Session): number | null {
+  if (session.insights?.analysisAvailable === false) return null;
   const score = session.insights?.textAccuracy;
   return session.lyrics?.trim() && typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100
     ? score : null;

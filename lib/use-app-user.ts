@@ -11,22 +11,26 @@ export type AppUser = {
   approvedAt: string | null;
   approvedBy: string | null;
   pilotExpiresAt: string | null;
+  studioAccess?: { projectIds: string[] };
 };
 
 export const AUTH_CONFIGURED = true;
 
-export function useAppUser(): { user: AppUser | null; loading: boolean; reload: () => Promise<void> } {
+export function useAppUser(): { user: AppUser | null; loading: boolean; error: string | null; reload: () => Promise<void> } {
   const { getToken, isSignedIn, isLoaded } = useAuth();
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!isSignedIn) {
       setUser(null);
+      setError(null);
       setLoading(false);
       return;
     }
     try {
+      setError(null);
       const token = await getToken();
       const response = await authedFetch("/api/users/me", token, {
         headers: getApiHeaders({
@@ -35,12 +39,14 @@ export function useAppUser(): { user: AppUser | null; loading: boolean; reload: 
       });
       if (!response.ok) {
         setUser(null);
+        setError("Could not verify account access. Please try again.");
         return;
       }
       const data = (await response.json()) as AppUser;
       setUser(data);
     } catch {
       setUser(null);
+      setError("Could not verify account access. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -51,5 +57,5 @@ export function useAppUser(): { user: AppUser | null; loading: boolean; reload: 
     void load();
   }, [isLoaded, load]);
 
-  return { user, loading, reload: load };
+  return { user, loading, error, reload: load };
 }

@@ -85,6 +85,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     countIn: 0,
     narrationVoice: 'female',
     metronomeEnabled: false,
+    cloudAnalysisEnabled: false,
     metronomeHaptics: false,
   });
   const [activeSong, setActiveSong] = useState<Song | null>(null);

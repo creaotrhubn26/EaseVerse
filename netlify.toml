@@ -26,3 +26,9 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+[[headers]]
+  for = "/.well-known/apple-app-site-association"
+  [headers.values]
+    Content-Type = "application/json"
+    Cache-Control = "public, max-age=300"

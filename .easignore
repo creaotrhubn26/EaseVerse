@@ -15,3 +15,9 @@ credentials.json
 !.env.example
 .git/
 companion-desktop/
+
+# Local QA artifacts can contain private account state and are never build inputs.
+outputs/
+server_cache/
+*.log
+.DS_Store

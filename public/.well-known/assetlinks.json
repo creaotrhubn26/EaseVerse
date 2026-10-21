@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.easeverse.app",
+      "sha256_cert_fingerprints": ["D8:71:80:A4:83:17:87:75:A6:E7:EC:9D:55:0E:88:1F:79:B4:F8:99:05:F5:1B:C2:CE:DE:62:A0:6A:22:AD:EB"]
+    }
+  }
+]

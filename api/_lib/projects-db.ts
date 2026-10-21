@@ -360,25 +360,21 @@ export async function applyPendingInvitesForEmail(args: {
   if (!p) return 0;
   await ensureSchema();
   const email = args.email.toLowerCase();
-  const { rows } = await p.query<{ project_id: string; role: string; invited_by_user_id: string }>(
-    `SELECT project_id, role, invited_by_user_id
-     FROM pending_project_invites
-     WHERE email = $1 AND expires_at > NOW()`,
-    [email],
+  // One statement keeps acceptance and consumption atomic. A concurrent new
+  // invitation cannot be deleted by an older email-wide cleanup.
+  const { rows } = await p.query<{ accepted: string }>(
+    `WITH eligible AS (
+       SELECT id,project_id,role,invited_by_user_id FROM pending_project_invites
+       WHERE email=$1 AND expires_at>NOW() FOR UPDATE
+     ), applied AS (
+       INSERT INTO project_members (project_id,user_id,email,role,invited_by_user_id)
+       SELECT project_id,$2,$1,role,invited_by_user_id FROM eligible
+       ON CONFLICT (project_id,user_id) DO NOTHING RETURNING project_id
+     ), consumed AS (
+       DELETE FROM pending_project_invites WHERE id IN (SELECT id FROM eligible) RETURNING id
+     ) SELECT COUNT(*)::text AS accepted FROM consumed`, [email,args.userId],
   );
-  for (const row of rows) {
-    await addProjectMember({
-      projectId: row.project_id,
-      userId: args.userId,
-      email,
-      role: normalizeRole(row.role),
-      invitedByUserId: row.invited_by_user_id,
-    });
-  }
-  if (rows.length > 0) {
-    await p.query(`DELETE FROM pending_project_invites WHERE email = $1`, [email]);
-  }
-  return rows.length;
+  return Number(rows[0]?.accepted ?? 0);
 }
 
 export async function removeProjectMember(args: {

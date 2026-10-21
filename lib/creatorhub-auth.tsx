@@ -40,7 +40,7 @@ type AuthContextValue = {
   isSignedIn: boolean;
   isSigningIn: boolean;
   getToken: () => Promise<string | null>;
-  signIn: () => Promise<boolean>;
+  signIn: (nextPath?: string) => Promise<boolean>;
   completeSignIn: (transferId: string) => Promise<CreatorHubUser>;
   signOut: () => Promise<void>;
 };
@@ -228,7 +228,7 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
     return nextUser;
   }, [updateSession]);
 
-  const signIn = useCallback(async () => {
+  const signIn = useCallback(async (nextPath?: string) => {
     if (isSigningIn) return false;
     setIsSigningIn(true);
     try {
@@ -236,7 +236,7 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
       const runtimeLocation = (globalThis as { location?: { pathname?: string; search?: string } }).location;
       const next = Platform.OS === "web"
         ? safeCreatorHubAuthNextPath(`${runtimeLocation?.pathname ?? ""}${runtimeLocation?.search ?? ""}`)
-        : null;
+        : safeCreatorHubAuthNextPath(nextPath);
       const response = await fetch(apiUrl("/api/auth/start"), {
         method: "POST",
         credentials: "include",

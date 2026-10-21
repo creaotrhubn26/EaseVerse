@@ -87,7 +87,18 @@ test('E2E workflow: Lyrics -> Sync -> Sing -> Review -> Practice Loop', async ({
   await page.goto('/');
   await expect(page.getByRole('heading', { name: songTitle })).toBeVisible({ timeout: 10_000 });
 
+  await page.setViewportSize({width:320,height:568});
   await page.getByTestId('record-button').click();
+  await expect(page.getByRole('button',{name:'Pause recording',exact:true})).toBeVisible();
+  const stopBounds=await page.getByTestId('stop-button').boundingBox();
+  expect(stopBounds).not.toBeNull();expect(stopBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(stopBounds!.x+stopBounds!.width).toBeLessThanOrEqual(320);
+  expect(stopBounds!.y+stopBounds!.height).toBeLessThan(568);
+  await expect.poll(() => page.locator('img').evaluateAll(images => images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+  await page.screenshot({path:'outputs/sing-ux-20261021/recording-320.png'});
+  await page.getByRole('button',{name:'Pause recording',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Resume recording',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Resume recording',exact:true}).click();
 
   // Wait long enough to pass the 3s minimum take duration.
   await expect(page.getByTestId('stop-button')).toBeVisible({ timeout: 10_000 });

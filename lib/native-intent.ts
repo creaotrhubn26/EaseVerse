@@ -9,7 +9,7 @@ export function resolveNativeIntent(path: string, initial: boolean): string {
       const external = new URL(path);
       if (external.protocol === "easeverse:") {
         destination = new URL(
-          `/${external.hostname}${external.pathname}${external.search}`,
+          `${external.hostname ? `/${external.hostname}` : ""}${external.pathname}${external.search}`,
           "https://easeverse.netlify.app",
         );
       } else if (
@@ -24,6 +24,13 @@ export function resolveNativeIntent(path: string, initial: boolean): string {
       } else return "/";
     }
     const route = destination.pathname;
+    if (route === "/warmup-session") {
+      const projectIds = destination.searchParams.getAll("projectId");
+      const projectId = projectIds[0];
+      return projectIds.length === 1 && /^[A-Za-z0-9_-]{1,160}$/.test(projectId)
+        ? `/warmup-session?projectId=${encodeURIComponent(projectId)}`
+        : "/";
+    }
     if (
       /^\/(booth|projects)\/[A-Za-z0-9._-]{1,160}\/?$/.test(route) ||
       route === "/integrations/creatorhub"

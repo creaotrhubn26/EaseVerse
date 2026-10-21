@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Pressable,
   StyleSheet,
   Text,
   View,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,9 +22,11 @@ type Props = {
   onDismiss: () => void;
   title?: string;
   subtitleFormatter?: (done: number, total: number) => string;
+  collapsible?: boolean;
 };
 
-export function OnboardingChecklist({ steps, onDismiss, title, subtitleFormatter }: Props) {
+export function OnboardingChecklist({ steps, onDismiss, title, subtitleFormatter, collapsible = false }: Props) {
+  const [expanded, setExpanded] = useState(false);
   const doneCount = steps.filter((s) => s.done).length;
   const total = steps.length;
   const progress = total === 0 ? 0 : doneCount / total;
@@ -35,12 +38,26 @@ export function OnboardingChecklist({ steps, onDismiss, title, subtitleFormatter
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <View style={styles.headerTextWrap}>
-          <Text style={styles.title}>{title ?? 'Get started'}</Text>
+        <Pressable style={styles.headerTextWrap} disabled={!collapsible}
+          accessibilityRole={collapsible ? 'button' : undefined}
+          accessibilityLabel={collapsible ? 'Practice setup' : undefined}
+          accessibilityState={collapsible ? { expanded } : undefined}
+          aria-expanded={collapsible ? expanded : undefined}
+          {...(Platform.OS === 'web' && collapsible ? {
+            onKeyDown: (event: React.KeyboardEvent) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setExpanded(value => !value);
+              }
+            },
+          } : {})}
+          onPress={() => setExpanded(value => !value)}>
+          <Text style={styles.title}>{title ?? (collapsible ? 'Practice setup' : 'Get started')}</Text>
           <Text style={styles.subtitle}>
             {subtitleFormatter ? subtitleFormatter(doneCount, total) : `${doneCount} of ${total} steps completed`}
           </Text>
-        </View>
+          {collapsible && <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.textTertiary} />}
+        </Pressable>
         <Pressable
           onPress={onDismiss}
           accessibilityRole="button"
@@ -52,7 +69,7 @@ export function OnboardingChecklist({ steps, onDismiss, title, subtitleFormatter
         </Pressable>
       </View>
 
-      <View style={styles.progressTrack}>
+      {(!collapsible || expanded) && <><View style={styles.progressTrack}>
         <LinearGradient
           colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd] as const}
           start={{ x: 0, y: 0 }}
@@ -65,7 +82,7 @@ export function OnboardingChecklist({ steps, onDismiss, title, subtitleFormatter
         {steps.map((step) => (
           <ChecklistRow key={step.id} step={step} />
         ))}
-      </View>
+      </View></>}
     </View>
   );
 }
@@ -116,6 +133,8 @@ const styles = StyleSheet.create({
   },
   headerTextWrap: {
     flex: 1,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   title: {
     color: Colors.textPrimary,
@@ -129,7 +148,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   dismissButton: {
-    padding: 4,
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   progressTrack: {
     height: 4,

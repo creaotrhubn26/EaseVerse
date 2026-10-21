@@ -35,3 +35,23 @@ test("unexpected origins and malformed links do not become app destinations", ()
   );
   assert.equal(resolveNativeIntent("not a URL", true), "/");
 });
+
+test("assigned warmup links preserve one valid project on cold and warm launches", () => {
+  for (const initial of [true, false]) {
+    for (const path of [
+      "easeverse://warmup-session?projectId=prj_123",
+      "easeverse:///warmup-session?projectId=prj_123",
+      "https://easeverse.netlify.app/warmup-session?projectId=prj_123",
+      "/warmup-session?projectId=prj_123&unexpected=discarded",
+    ]) {
+      assert.equal(resolveNativeIntent(path, initial), "/warmup-session?projectId=prj_123");
+    }
+    for (const path of [
+      "/warmup-session",
+      "/warmup-session?projectId=",
+      "/warmup-session?projectId=../private",
+      "/warmup-session?projectId=prj_123&projectId=prj_456",
+      "https://untrusted.example/warmup-session?projectId=prj_123",
+    ]) assert.equal(resolveNativeIntent(path, initial), "/");
+  }
+});

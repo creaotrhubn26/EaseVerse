@@ -1,0 +1,16 @@
+{
+  "tool": "OpenAI built-in imagegen",
+  "createdAt": "2026-10-21",
+  "assets": [
+    {
+      "path": "assets/images/studio-preparation-amber-v1.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: editorial illustration for EaseVerse mobile vocal warmup and studio preparation. A beautifully restrained tactile 3D still life: an unbranded studio microphone and soft folded ribbon forming one gentle breath-like curve, warm amber light over charcoal-black background, fine matte material, premium contemporary music app aesthetic. Wide 3:2 composition, subject slightly right of center, generous clean negative space. Calm, intimate, grounded in a real recording studio. No people, no lettering, no logos, no UI, no waveform, no glowing neon rings, no medical or anatomical imagery. This illustration supports a functional native UI; do not render buttons or text.",
+      "use": "Sing start screen and producer warmup overview; decorative, no UI baked into image."
+    },
+    {
+      "path": "assets/images/lyrics-notebook-amber-v1.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: small editorial artwork beside the Lyrics heading in EaseVerse, a premium dark music writing app. Square composition, a close-up still life of a matte charcoal songwriting notebook, one elegantly sharpened amber-orange pencil resting diagonally across a blank page, a soft folded corner, tactile paper and restrained warm studio lighting. Subject centered and legible at a small display size. Dark charcoal background matches #0E0F14, warm amber accent. Clean, grounded, intimate, quietly creative. No lettering, no lyrics, no logo, no watermark, no UI, no borders, no neon, no floating particles, no music notes, no human hands.",
+      "use": "Small decorative artwork beside the Lyrics heading, excluded from accessibility navigation."
+    }
+  ]
+}

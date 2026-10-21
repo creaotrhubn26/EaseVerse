@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View, Pressable, Platform, Image, type ImageSourcePropType } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -25,6 +24,7 @@ import LiveLyricsCanvas from '@/components/LiveLyricsCanvas';
 import VUMeter from '@/components/VUMeter';
 import SongPickerModal from '@/components/SongPickerModal';
 import LogoHeader from '@/components/LogoHeader';
+import { SingStartScreen } from '@/components/SingStartScreen';
 import Toast from '@/components/Toast';
 import { MicPermissionRationale } from '@/components/MicPermissionRationale';
 import { OnboardingChecklist, type ChecklistStep } from '@/components/OnboardingChecklist';
@@ -861,7 +861,6 @@ export default function SingScreen() {
   const quickDockButtonSize = Math.max(58, quickDockIconSize + 12);
   const transportImageSize = tierValue(responsive.tier, [34, 38, 42, 50, 62, 76, 92]);
   const transportButtonSize = tierValue(responsive.tier, [50, 54, 58, 66, 78, 94, 112]);
-  const noSongStateIconSize = tierValue(responsive.tier, [120, 140, 164, 196, 240, 290, 340]);
   const recordButtonSize = tierValue(responsive.tier, [88, 96, 104, 116, 136, 164, 196]);
   // Recording adds three more controls to the transport. Keep all five actions
   // inside the viewport on compact phones while retaining larger tablet targets.
@@ -910,6 +909,81 @@ export default function SingScreen() {
             ? 'Tap record to resume. To hear your take, tap Stop — it opens Session Review with playback.'
             : 'Tap record to start a take.';
 
+  const prepareVoiceMemo = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const now = Date.now();
+    const memo: Song = {
+      id: Storage.generateId(),
+      title: `Voice memo · ${new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      lyrics: '', genre: 'pop', sections: [], createdAt: now, updatedAt: now,
+    };
+    addSong(memo);
+    setActiveSong(memo);
+  };
+  const personalSetup = onboardingFlags && !onboardingFlags.checklistDismissed ? (
+        <OnboardingChecklist
+          collapsible
+          steps={[
+            {
+              id: 'language',
+              label: `Choose language (${settings.language})`,
+              done: onboardingFlags.languageConfirmed,
+              onPress: () => {
+                void Storage.updateOnboardingFlags({ languageConfirmed: true }).then(
+                  setOnboardingFlags,
+                );
+                router.push('/(tabs)/profile');
+              },
+            },
+            {
+              id: 'accent',
+              label: `Choose accent goal (${settings.accentGoal})`,
+              done: onboardingFlags.accentConfirmed,
+              onPress: () => {
+                void Storage.updateOnboardingFlags({ accentConfirmed: true }).then(
+                  setOnboardingFlags,
+                );
+                router.push('/(tabs)/profile');
+              },
+            },
+            {
+              id: 'firstTake',
+              label: 'Record your first take',
+              done: sessions.length > 0,
+              onPress: !activeSong ? prepareVoiceMemo : undefined,
+            },
+          ] satisfies ChecklistStep[]}
+          onDismiss={() => {
+            void Storage.updateOnboardingFlags({ checklistDismissed: true }).then(
+              setOnboardingFlags,
+            );
+          }}
+        />
+      ) : null;
+
+  if (!activeSong && !isRecording && !isAnalyzing && countInRemaining === null) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <SingStartScreen onCaptureIdea={prepareVoiceMemo} onChooseSong={() => setShowSongPicker(true)}
+          onboarding={<>{personalSetup}{AUTH_CONFIGURED ? <StudioOnboardingChecklist /> : null}</>}
+          notices={<>{AUTH_CONFIGURED ? <WhatsNewBanner /> : null}{recoveredDraft ? (
+            <View style={styles.draftBanner}>
+              <Ionicons name="time-outline" size={18} color={Colors.gradientMid} />
+              <View style={{flex: 1}}><Text style={styles.draftBannerTitle}>Draft recovered</Text>
+                <Text style={styles.draftBannerSubtitle}>Your last take{recoveredDraft.songTitle ? ` of “${recoveredDraft.songTitle}”` : ''} ran about {Math.round(recoveredDraft.durationSeconds)}s.</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Dismiss draft recovery"
+                style={{minHeight:44,minWidth:44,alignItems:'center',justifyContent:'center'}}
+                onPress={() => {void Storage.clearDraftSession();setRecoveredDraft(null);}}>
+                <Ionicons name="close" size={20} color={Colors.textSecondary} />
+              </Pressable>
+            </View>
+          ) : null}</>}
+        />
+        <SongPickerModal visible={showSongPicker} songs={songs} onSelect={setActiveSong} onClose={() => setShowSongPicker(false)} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <Toast
@@ -952,44 +1026,7 @@ export default function SingScreen() {
           </Pressable>
         </View>
       ) : null}
-      {onboardingFlags && !onboardingFlags.checklistDismissed ? (
-        <OnboardingChecklist
-          steps={[
-            {
-              id: 'language',
-              label: `Choose language (${settings.language})`,
-              done: onboardingFlags.languageConfirmed,
-              onPress: () => {
-                void Storage.updateOnboardingFlags({ languageConfirmed: true }).then(
-                  setOnboardingFlags,
-                );
-                router.push('/(tabs)/profile');
-              },
-            },
-            {
-              id: 'accent',
-              label: `Choose accent goal (${settings.accentGoal})`,
-              done: onboardingFlags.accentConfirmed,
-              onPress: () => {
-                void Storage.updateOnboardingFlags({ accentConfirmed: true }).then(
-                  setOnboardingFlags,
-                );
-                router.push('/(tabs)/profile');
-              },
-            },
-            {
-              id: 'firstTake',
-              label: 'Record your first take',
-              done: sessions.length > 0,
-            },
-          ] satisfies ChecklistStep[]}
-          onDismiss={() => {
-            void Storage.updateOnboardingFlags({ checklistDismissed: true }).then(
-              setOnboardingFlags,
-            );
-          }}
-        />
-      ) : null}
+      {personalSetup}
       <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <View style={styles.songSelectorSlot}>
           {activeSong ? (
@@ -1371,135 +1408,6 @@ export default function SingScreen() {
         </View>
       </View>
 
-      {!activeSong && (
-        <View style={styles.emptyOverlay}>
-          <View
-            style={[
-              styles.emptyCard,
-              { width: '100%' as const, maxWidth: responsive.cardMaxWidth },
-            ]}
-          >
-            <Pressable
-              onPress={() => {
-                Haptics.selectionAsync();
-                setShowSongPicker(true);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Choose existing song"
-              accessibilityHint="Opens the song picker so you can load a song"
-              style={({ pressed }) => [styles.emptyStateIconPressable, pressed && styles.emptyStateIconPressablePressed]}
-            >
-              <Image
-                source={require('@/assets/images/nosong_state.png')}
-                style={[
-                  styles.emptyStateIcon,
-                  {
-                    width: noSongStateIconSize,
-                    height: noSongStateIconSize,
-                  },
-                ]}
-                resizeMode="contain"
-                accessibilityRole="image"
-                accessibilityLabel="No song loaded"
-              />
-            </Pressable>
-            <Text style={styles.emptyTitle}>No lyrics loaded</Text>
-            <Text style={styles.emptySubtitle}>
-              Choose an existing song, add lyrics, or just capture a quick vocal idea below.
-            </Text>
-            <Pressable
-              style={({ pressed }) => [styles.quickMemoBtn, pressed && { opacity: 0.85 }]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                const memo: Song = {
-                  id: Storage.generateId(),
-                  title: `Voice memo · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-                  lyrics: '',
-                  genre: 'pop',
-                  sections: [],
-                  createdAt: Date.now(),
-                  updatedAt: Date.now(),
-                };
-                addSong(memo);
-                setActiveSong(memo);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Capture a quick vocal idea"
-              accessibilityHint="Skips lyrics setup so you can record a memo right now"
-            >
-              <Ionicons name="mic" size={16} color="#fff" />
-              <Text style={styles.quickMemoText}>Capture a vocal idea</Text>
-            </Pressable>
-            <View style={styles.emptyQuickRow}>
-              <Pressable
-                style={({ pressed }) => [styles.emptyQuickBtn, pressed && styles.emptyQuickBtnPressed]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  router.push('/warmup');
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Warm up"
-                accessibilityHint="Opens the vocal warm-up routine"
-              >
-                <Image
-                  source={warmupIconSource}
-                  style={styles.emptyQuickIcon}
-                  resizeMode="contain"
-                  accessible={false}
-                />
-                <Text style={styles.emptyQuickText}>Warm Up</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.emptyQuickBtn, pressed && styles.emptyQuickBtnPressed]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  router.push('/mindfulness');
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Mindfulness"
-                accessibilityHint="Opens the breathing and focus routine"
-              >
-                <Image
-                  source={mindfulnessIconSource}
-                  style={styles.emptyQuickIcon}
-                  resizeMode="contain"
-                  accessible={false}
-                />
-                <Text style={styles.emptyQuickText}>Mindfulness</Text>
-              </Pressable>
-            </View>
-            <Pressable
-              style={({ pressed }) => [styles.emptySecondaryBtn, pressed && styles.emptySecondaryBtnPressed]}
-              onPress={() => {
-                Haptics.selectionAsync();
-                setShowSongPicker(true);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Choose existing song"
-              accessibilityHint="Opens the song picker"
-            >
-              <Ionicons name="musical-notes-outline" size={scaledIcon(11)} color={Colors.textPrimary} />
-              <Text style={styles.emptySecondaryBtnText}>Choose Existing Song</Text>
-            </Pressable>
-            <Pressable
-              style={styles.emptyBtn}
-              onPress={() => router.push('/(tabs)/lyrics')}
-              accessibilityRole="button"
-              accessibilityLabel="Add lyrics"
-              accessibilityHint="Navigates to the lyrics tab"
-            >
-              <LinearGradient
-                colors={[Colors.gradientStart, Colors.gradientEnd]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.emptyBtnGradient}
-              >
-                <Text style={styles.emptyBtnText}>Add Lyrics</Text>
-              </LinearGradient>
-            </Pressable>
-          </View>
-        </View>
-      )}
 
       <SongPickerModal
         visible={showSongPicker}
@@ -1810,136 +1718,5 @@ const styles = StyleSheet.create({
   transportIconImage: {
     maxWidth: '100%' as const,
     maxHeight: '100%' as const,
-  },
-  emptyOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(14,15,20,0.95)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    // Over kontrollene (zIndex 10) så opptaksknappen/transport ikke lekker
-    // gjennom og overlapper «Add Lyrics» i tom tilstand. «Capture a vocal idea»
-    // setter activeSong → overlegget forsvinner → transport vises som normalt.
-    zIndex: 20,
-    elevation: 20,
-  },
-  quickMemoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: Colors.gradientStart,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    borderRadius: 10,
-    marginBottom: 14,
-    shadowColor: Colors.gradientStart,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  quickMemoText: {
-    color: '#fff',
-    fontFamily: 'Inter_700Bold',
-    fontSize: 14,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    gap: 16,
-  },
-  emptyStateIcon: {
-    marginBottom: -4,
-  },
-  emptyStateIconPressable: {
-    borderRadius: 20,
-    padding: 6,
-  },
-  emptyStateIconPressablePressed: {
-    opacity: 0.86,
-    transform: [{ scale: 0.99 }],
-  },
-  emptyTitle: {
-    color: Colors.textSecondary,
-    fontSize: 18,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  emptySubtitle: {
-    color: Colors.textTertiary,
-    fontSize: 13,
-    lineHeight: 18,
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    maxWidth: 360,
-    marginTop: -8,
-  },
-  emptyQuickRow: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-    maxWidth: 420,
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-  },
-  emptyQuickBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: Colors.surfaceGlass,
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-    minHeight: 44,
-  },
-  emptyQuickBtnPressed: {
-    opacity: 0.9,
-  },
-  emptyQuickIcon: {
-    width: 20,
-    height: 20,
-  },
-  emptyQuickText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  emptySecondaryBtn: {
-    width: '100%',
-    maxWidth: 420,
-    minHeight: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-    backgroundColor: Colors.surfaceGlass,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    marginTop: -4,
-  },
-  emptySecondaryBtnPressed: {
-    opacity: 0.9,
-  },
-  emptySecondaryBtnText: {
-    color: Colors.textPrimary,
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  emptyBtn: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  emptyBtnGradient: {
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  emptyBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
   },
 });

@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/lib/creatorhub-auth";
 import { authedFetch } from "@/lib/authed-fetch";
 import Colors from "@/constants/colors";
+import { goBackWithFallback } from "@/lib/navigation";
 import {
   WarmupSoundscape,
   useWarmupSoundscape,
@@ -129,7 +131,7 @@ function SessionWarmupContent() {
           accessibilityRole="button"
           accessibilityLabel="Tilbake fra oppvarming"
           disabled={saving}
-          onPress={() => (active ? setActive(null) : router.back())}
+          onPress={() => (active ? setActive(null) : goBackWithFallback(router))}
           style={s.control}
         >
           <Ionicons name="arrow-back" size={23} color={Colors.textPrimary} />
@@ -150,6 +152,25 @@ function SessionWarmupContent() {
         )}
       </View>
       <ScrollView contentContainerStyle={s.content}>
+        {!active && (
+          <View style={s.intro}>
+            <View style={s.introArtwork}><Image
+              source={require("@/assets/images/studio-preparation-amber-v1.jpg")}
+              style={s.introImage}
+              accessible={false}
+              resizeMode="cover"
+            /></View>
+            <View style={s.introCopy}>
+              <Text style={s.eyebrow}>FØR OPPTAKET</Text>
+              <Text accessibilityRole="header" style={s.title}>
+                Finn roen. Gjør deg klar.
+              </Text>
+              <Text style={s.text}>
+                Følg øvelsene produsenten har valgt til studioøkten din, i ditt eget tempo.
+              </Text>
+            </View>
+          </View>
+        )}
         {!userId && isLoaded ? (
           <Pressable
             accessibilityRole="button"
@@ -256,12 +277,13 @@ function SessionWarmupContent() {
           </>
         ) : !loading && userId ? (
           <>
-            <Text style={s.title}>Oppvarming til studioøkten</Text>
-            <Text style={s.text}>
-              Rutiner, egen stemme og musikk som produsenten har delt med deg.
-            </Text>
+            <Text accessibilityRole="header" style={s.listHeading}>Dine oppvarminger</Text>
             {!routines.length && !error && (
-              <Text style={s.text}>Ingen oppvarming er tilordnet ennå.</Text>
+              <View style={s.card}>
+                <Ionicons name="headset-outline" size={24} color={Colors.gradientMid} />
+                <Text style={s.cardTitle}>Ingen oppvarming ennå</Text>
+                <Text style={s.text}>Når produsenten deler en oppvarming med deg, finner du den her.</Text>
+              </View>
             )}
             {routines.map((r) => (
               <Pressable
@@ -295,10 +317,12 @@ function SessionWarmupContent() {
                 )}
                 {!!r.session_start_at && (
                   <Text style={s.small}>
-                    {new Date(r.session_start_at).toLocaleString("nb-NO")}
+                    {new Date(r.session_start_at).toLocaleString("nb-NO", {
+                      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                    })}
                   </Text>
                 )}
-                <Text style={s.small}>
+                <Text style={[s.small, r.completed_at && s.completed]}>
                   {r.steps.length} steg
                   {r.completed_at ? " · Fullført" : " · Ikke fullført"}
                 </Text>
@@ -416,6 +440,12 @@ const s = StyleSheet.create({
     maxWidth: 560,
     alignSelf: "center",
   },
+  intro: { borderRadius: 24, overflow: "hidden", backgroundColor: Colors.surface },
+  introArtwork: { width: "100%", aspectRatio: 2.35, overflow: "hidden" },
+  introImage: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  introCopy: { padding: 20, gap: 10 },
+  listHeading: { fontSize: 18, fontWeight: "600", color: Colors.textPrimary },
+  completed: { color: Colors.successUnderline },
   stepProgress: { flexDirection: "row", gap: 5 },
   stepSegment: {
     flex: 1,

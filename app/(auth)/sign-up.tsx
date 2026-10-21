@@ -24,7 +24,7 @@ export default function SignUpScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: insets.top + 28 }]}>
-      <Pressable onPress={() => router.back()} style={styles.back} accessibilityRole="button" accessibilityLabel="Go back">
+      <Pressable onPress={() => router.back()} style={[styles.back,{top:insets.top+12}]} accessibilityRole="button" accessibilityLabel="Go back">
         <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
       </Pressable>
       <View style={styles.icon}>

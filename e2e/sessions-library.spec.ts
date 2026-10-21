@@ -6,7 +6,13 @@ async function setup(page:any,takes:any[]=[]){
  await page.route('**/api/**',(route:any)=>route.fulfill({status:401,json:{error:'Missing CreatorHub session'}}));
  const wav=Buffer.alloc(44+48000*2*8);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(48000,24);wav.writeUInt32LE(96000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
  for(let n=0;n<48000*8;n++)wav.writeInt16LE(Math.round(Math.sin(n*2*Math.PI*220/48000)*1000),44+n*2);
- await page.route('**/qa-session.wav',(route:any)=>route.fulfill({contentType:'audio/wav',body:wav}));
+ await page.route('**/qa-session.wav',(route:any)=>{
+  // Chromium requests byte ranges for seekable audio, just like private S3 playback.
+  const range=/bytes=(\d+)-(\d*)/.exec(route.request().headers().range||'');
+  if(!range)return route.fulfill({contentType:'audio/wav',headers:{'Accept-Ranges':'bytes'},body:wav});
+  const start=Number(range[1]),end=range[2]?Math.min(Number(range[2]),wav.length-1):wav.length-1;
+  return route.fulfill({status:206,contentType:'audio/wav',headers:{'Accept-Ranges':'bytes','Content-Range':`bytes ${start}-${end}/${wav.length}`},body:wav.subarray(start,end+1)});
+ });
  await page.addInitScript(({takes}:any)=>{if(!localStorage.getItem('qa-fixture-loaded')){localStorage.setItem('@lyricflow_sessions',JSON.stringify(takes));localStorage.setItem('qa-fixture-loaded','1');}},{takes});
  await page.goto('/sessions');
  const intro=page.getByRole('button',{name:'Skip intro',exact:true});await expect(intro).toBeVisible();await intro.click();await expect(intro).toHaveCount(0);

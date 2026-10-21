@@ -57,6 +57,7 @@ test('E2E workflow: Lyrics -> Sync -> Sing -> Review -> Practice Loop', async ({
 
   // Update settings + sync in Profile.
   await page.goto('/profile');
+  await page.getByRole('button',{name:'Studio & lyrics',exact:true}).click();
   await expect(page.getByRole('heading', { name: 'Lyrics Sync' })).toBeVisible({ timeout: 10_000 });
 
   // Verify lyrics updated from sync.

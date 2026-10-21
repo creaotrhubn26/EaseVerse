@@ -30,12 +30,14 @@ function formatNum(value: number): string {
 }
 
 export function CostDashboardCard({ horizontalMargin = 16 }: Props) {
-  const { getToken, isSignedIn, isLoaded } = useAuth();
+  const { getToken, isSignedIn, isLoaded, user } = useAuth();
   const [data, setData] = useState<Response | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [attempt,setAttempt]=useState(0);
   useEffect(() => {
+    setData(null);setError(null);setLoading(true);
     if (!isLoaded || !isSignedIn) {
       setLoading(false);
       return;
@@ -46,13 +48,13 @@ export function CostDashboardCard({ horizontalMargin = 16 }: Props) {
         const token = await getToken();
         const response = await authedFetch("/api/usage", token, { method: "GET" });
         if (!response.ok) {
-          setError(`Usage fetch failed: ${response.status}`);
+          if(!cancelled)setError('Could not load usage. Please try again.');
           return;
         }
         const json = (await response.json()) as Response;
         if (!cancelled) setData(json);
-      } catch (err) {
-        if (!cancelled) setError((err as Error).message || "Usage fetch failed");
+      } catch {
+        if (!cancelled) setError('Could not load usage. Please try again.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -60,7 +62,7 @@ export function CostDashboardCard({ horizontalMargin = 16 }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, getToken, user?.id, attempt]);
 
   if (!isSignedIn) return null;
 
@@ -74,7 +76,7 @@ export function CostDashboardCard({ horizontalMargin = 16 }: Props) {
       {loading ? (
         <ActivityIndicator color={Colors.textTertiary} />
       ) : error ? (
-        <Text style={styles.error}>{error}</Text>
+        <View><Text accessibilityRole="alert" style={styles.error}>{error}</Text><Pressable accessibilityRole="button" accessibilityLabel="Retry loading usage" onPress={()=>setAttempt(value=>value+1)} style={{minHeight:44,justifyContent:"center"}}><Text style={{color:Colors.gradientMid}}>Try again</Text></Pressable></View>
       ) : data ? (
         <>
           <View style={styles.statRow}>

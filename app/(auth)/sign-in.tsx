@@ -28,7 +28,7 @@ export default function SignInScreen() {
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 28 }]}
     >
-      <Pressable onPress={() => router.back()} style={styles.back} accessibilityLabel="Go back">
+      <Pressable onPress={() => router.back()} style={styles.back} accessibilityRole="button" accessibilityLabel="Go back">
         <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
       </Pressable>
       <View style={styles.mark}>
@@ -42,7 +42,7 @@ export default function SignInScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable onPress={start} disabled={isSigningIn} accessibilityRole="button">
+      <Pressable onPress={start} disabled={isSigningIn} accessibilityRole="button" accessibilityLabel="Continue with CreatorHub">
         <LinearGradient
           colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd] as const}
           start={{ x: 0, y: 0 }}

@@ -272,15 +272,13 @@ export function CreatorHubAuthProvider({ children }: { children: React.ReactNode
 
   const signOut = useCallback(async () => {
     const currentToken = tokenRef.current;
-    try {
-      await fetch(apiUrl("/api/auth/logout"), {
-        method: "POST",
-        credentials: "include",
-        headers: getApiHeaders(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
-      });
-    } finally {
-      await clearSession();
-    }
+    const response=await fetch(apiUrl("/api/auth/logout"), {
+      method:"POST",
+      credentials:"include",
+      headers:getApiHeaders(currentToken?{Authorization:`Bearer ${currentToken}`}:{})
+    });
+    if(!response.ok&&response.status!==401)throw new Error("Could not sign out. Please try again.");
+    await clearSession();
   }, [clearSession]);
 
   const getToken = useCallback(async () => tokenRef.current, []);

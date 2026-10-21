@@ -215,6 +215,7 @@ test.describe("UX audit", () => {
     await auditRoute(
       "/profile",
       async () => {
+        await page.getByRole("button", {name:"Studio & lyrics",exact:true}).click();
         await expect(page.getByRole("button", { name: /Sync Latest Lyrics/i })).toBeVisible({
           timeout: 20_000,
         });
@@ -400,6 +401,7 @@ test.describe("UX audit", () => {
       );
     } else {
       await page.goto("/profile", { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", {name:"Studio & lyrics",exact:true}).click();
       const syncButton = page.getByRole("button", { name: /Sync Latest Lyrics/i });
       await syncButton.click();
       try {

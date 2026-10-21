@@ -60,14 +60,6 @@ const howToIconSource =
   Platform.OS === 'web'
     ? require('@/assets/images/icon-set/howto-icon.webp')
     : require('@/assets/images/icon-set/howto-icon.png');
-const liveModeIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/icon-set/Live_mode.webp')
-    : require('@/assets/images/icon-set/Live_mode.png');
-const feedbackHighIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/icon-set/Feedback_intensity_high.webp')
-    : require('@/assets/images/icon-set/Feedback_intensity_high.png');
 const easePocketIconSource =
   Platform.OS === 'web'
     ? require('@/assets/images/EasePocket.webp')
@@ -84,18 +76,6 @@ const fourBeatsIconSource =
   Platform.OS === 'web'
     ? require('@/assets/images/four_beats.webp')
     : require('@/assets/images/four_beats.png');
-const lyricsFlowSpeedIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/lyrics_flow_speed_icon.webp')
-    : require('@/assets/images/lyrics_flow_speed_icon.png');
-const countInIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/count_in_icon.webp')
-    : require('@/assets/images/count_in_icon.png');
-const aboutIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/about_icon.webp')
-    : require('@/assets/images/about_icon.png');
 
 function SnippetFrame({ children }: { children: React.ReactNode }) {
   return <View style={styles.snippetFrame}>{children}</View>;
@@ -250,7 +230,7 @@ export default function HowToUseEaseVerse({
         icon: 'mic',
         iconImage: singTabIconSource,
         bullets: [
-          'If no song is loaded, use the quick overlay: Warm Up, Mindfulness, or Add Lyrics.',
+          'Without a song, start a vocal idea, open a song or add lyrics from the start page.',
           'Pick your song from the title dropdown, then confirm Tempo (BPM).',
           'Count-In (0/2/4) and metronome both follow the active song BPM.',
           'Tap Record, sing, then Stop to open Session Review instantly.',
@@ -328,16 +308,16 @@ export default function HowToUseEaseVerse({
         iconImage: sessionsTabIconSource,
         bullets: [
           'Browse recordings and open Session Review.',
-          'Filter by Latest, Best, or Flagged.',
-          'Swipe right to favorite, swipe left to delete.',
+          'Search titles and tags, or filter by Latest, Lyrics match or Favorites.',
+          'Use the heart to favorite a take. Delete asks for confirmation; swipe shortcuts are also available on mobile.',
           'Tap Practice Loop in Session Review to drill a phrase and adjust speed.',
         ],
         legend: [
           { icon: 'time-outline', label: 'Latest', description: 'Most recent recordings first.' },
-          { icon: 'trophy-outline', label: 'Best', description: 'Sort by your top score.' },
-          { icon: 'heart-outline', label: 'Flagged', description: 'Your saved favorites.' },
+          { icon: 'document-text-outline', label: 'Lyrics match', description: 'Sort by matched lyric words, not artistic quality.' },
+          { icon: 'heart-outline', label: 'Favorites', description: 'Your saved favorites.' },
           { icon: 'repeat', label: 'Practice Loop', description: 'Drill a line and slow it down if needed.' },
-          { icon: 'trash-outline', label: 'Delete', description: 'Swipe left on a session to remove it.' },
+          { icon: 'trash-outline', label: 'Delete', description: 'Choose Delete and confirm to remove a local recording.' },
         ],
       },
       {
@@ -384,32 +364,17 @@ export default function HowToUseEaseVerse({
         icon: 'person',
         iconImage: profileTabIconSource,
         bullets: [
-          'Set Language and Accent Goal for coaching tone.',
-          'Adjust Live Mode and Lyrics Follow Speed for live tracking behavior.',
+          'Open Voice & language to choose your practice language, accent goal and guidance voice.',
+          'Open Recording & timing to adjust live recognition and lyric tracking.',
           'Choose Count-In: None, 2 beats, or 4 beats.',
           'Choose Mindfulness Voice (Female/Male) for spoken guidance.',
-          'Use Lyrics Sync to pull latest collab drafts, update lyrics/BPM, and see diffs.',
+          'Open Studio & lyrics to pull shared lyric drafts and review changes.',
         ],
         legend: [
-          { icon: 'globe-outline', label: 'Language', description: 'Affects live recognition and pronunciation coaching.' },
-          { icon: 'flash-outline', label: 'Live mode', description: 'Stability vs Speed tracking.' },
-          {
-            iconImage: lyricsFlowSpeedIconSource,
-            label: 'Lyrics speed',
-            description: 'How fast the highlighted word advances.',
-          },
-          {
-            iconImage: countInIconSource,
-            label: 'Count-in',
-            description: 'Choose 0, 2, or 4 beats before recording starts.',
-          },
-          { icon: 'volume-high-outline', label: 'Mindfulness voice', description: 'Select a male/female voice for narration.' },
-          { icon: 'sync-outline', label: 'Lyrics sync', description: 'Pulls latest lyrics + BPM, shows diffs, and fires a synced toast.' },
-          {
-            iconImage: aboutIconSource,
-            label: 'About',
-            description: 'Overview of features, API links, and version info.',
-          },
+          {icon:'mic-outline',label:'Voice & language',description:'Practice language, accent goal, feedback and guidance voice.'},
+          {icon:'options-outline',label:'Recording & timing',description:'Recognition, lyric tracking, count-in and vibration.'},
+          {icon:'people-outline',label:'Studio & lyrics',description:'Shared studio projects, Pro Tools setup and lyric sync.'},
+          {icon:'help-circle-outline',label:'Help & privacy',description:'Quick tour, app version, privacy and data request options.'},
         ],
       },
     ],
@@ -597,42 +562,6 @@ export default function HowToUseEaseVerse({
                         {
                           label: 'Marker',
                           source: require('@/assets/images/flag_icon.png'),
-                        },
-                      ]}
-                    />
-                  )}
-
-                  {step.id === 'profile' && (
-                    <IconTiles
-                      title="Profile icons"
-                      items={[
-                        {
-                          label: 'Live mode',
-                          source: liveModeIconSource,
-                        },
-                        {
-                          label: 'Lyrics speed',
-                          source: lyricsFlowSpeedIconSource,
-                        },
-                        {
-                          label: 'Count-in',
-                          source: countInIconSource,
-                        },
-                        {
-                          label: 'Feedback',
-                          source: feedbackHighIconSource,
-                        },
-                        {
-                          label: 'Mindfulness voice',
-                          source: require('@/assets/images/icon-set/Mindfullness_voice.png'),
-                        },
-                        {
-                          label: 'Lyrics sync',
-                          source: require('@/assets/images/icon-set/Lyrics_sync.png'),
-                        },
-                        {
-                          label: 'About',
-                          source: aboutIconSource,
                         },
                       ]}
                     />

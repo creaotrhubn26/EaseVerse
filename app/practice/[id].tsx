@@ -393,29 +393,33 @@ export default function PracticeLoopScreen() {
           <Pressable
             style={styles.pronounceBtn}
             onPress={() => {
+              if(coach.state==='loading'||coach.state==='playing'){coach.dismiss();return;}
               const line = lyricsLines[selectedLineIdx];
               if (!line) return;
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               const words = line.split(' ').filter((w: string) => w.trim());
               const hardWord = words.reduce((longest: string, w: string) => w.length > longest.length ? w : longest, '');
-              coach.pronounce(hardWord, line, session?.genre);
+              setIsLooping(false);
+              loopPlayer.pause();
+              void coach.pronounce(hardWord, line, session?.genre);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Hear pronunciation"
-            accessibilityHint="Plays pronunciation guidance for the selected phrase"
+            accessibilityLabel={coach.state==='playing'||coach.state==='loading'?'Stop pronunciation example':'Hear pronunciation example'}
+            accessibilityHint="Speaks an example of the longest word in the selected phrase using your device’s speech voice"
           >
             {coach.state === 'loading' ? (
               <ActivityIndicator size="small" color={Colors.gradientStart} />
             ) : (
-              <Ionicons name="volume-high-outline" size={scaledIcon(11)} color={Colors.gradientStart} />
+              <Ionicons name={coach.state==='playing'?'stop-circle-outline':'volume-high-outline'} size={24} color={Colors.gradientStart} />
             )}
             <Text style={styles.pronounceBtnText}>
-              {coach.state === 'playing' ? 'Speaking...' : 'Hear pronunciation'}
+              {coach.state === 'playing' ? 'Stop example' : coach.state==='loading'?'Preparing voice…':'Hear example pronunciation'}
             </Text>
           </Pressable>
+          {!!coach.errorMessage&&<Text style={styles.pronounceError} accessibilityRole="alert">{coach.errorMessage}</Text>}
           {coach.result && (
             <View style={styles.pronounceResult}>
-              <Text style={styles.pronouncePhonetic}>{coach.result.phonetic}</Text>
+              {!!coach.result.phonetic&&<Text style={styles.pronouncePhonetic}>{coach.result.phonetic}</Text>}
               <Text style={styles.pronounceTip}>{coach.result.tip}</Text>
             </View>
           )}
@@ -516,6 +520,7 @@ export default function PracticeLoopScreen() {
               return;
             }
 
+            coach.dismiss();
             const ready = await ensureLoopAudio();
             if (!ready) {
               return;
@@ -785,8 +790,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    minHeight: 44,
-    paddingVertical: 6,
+    minHeight: 52,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 20,
     backgroundColor: Colors.accentSubtle,
@@ -797,7 +802,10 @@ const styles = StyleSheet.create({
     color: Colors.gradientStart,
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
+    flexShrink:1,
+    textAlign:'center',
   },
+  pronounceError:{color:Colors.dangerUnderline,fontSize:14,lineHeight:21,textAlign:'center'},
   pronounceResult: {
     alignItems: 'center',
     gap: 4,

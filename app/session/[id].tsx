@@ -36,7 +36,7 @@ function InsightCard({ label, value, color }: { label: string; value: string; co
   );
 }
 
-function FixItem({ word, reason, index, onPronounce, isActive, coachState, coachResult }: {
+function FixItem({ word, reason, index, onPronounce, isActive, coachState, coachResult, coachError }: {
   word: string;
   reason: string;
   index: number;
@@ -44,23 +44,24 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
   isActive: boolean;
   coachState: string;
   coachResult: { phonetic: string; tip: string; slow: string } | null;
+  coachError:string|null;
 }) {
   const responsive = useResponsiveLayout();
-  const iconSize = scaledIconSize(11, responsive);
+  const iconSize = Math.max(24,scaledIconSize(16, responsive));
   const detailIconSize = scaledIconSize(10, responsive);
   const replayIconSize = scaledIconSize(9, responsive);
 
   return (
     <View>
       <Pressable
-        style={styles.fixItem}
+        style={({pressed})=>[styles.fixItem,pressed&&{backgroundColor:Colors.accentSubtle}]}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onPronounce(word);
         }}
         accessibilityRole="button"
-        accessibilityLabel={`Hear pronunciation for ${word}`}
-        accessibilityHint={reason}
+        accessibilityLabel={isActive&&(coachState==='playing'||coachState==='loading')?`Stop pronunciation example for ${word}`:`Hear pronunciation example for ${word}`}
+        accessibilityHint="Speaks an example using your device’s speech voice. This is not a clip from your recording."
       >
         <View style={styles.fixIndex}>
           <Text style={styles.fixIndexText}>{index + 1}</Text>
@@ -72,12 +73,14 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
         {isActive && coachState === 'loading' ? (
           <ActivityIndicator size="small" color={Colors.gradientStart} />
         ) : (
-          <Ionicons name="volume-high-outline" size={iconSize} color={Colors.gradientStart} />
+          <Ionicons name={isActive&&coachState==='playing'?'stop-circle-outline':'volume-high-outline'} size={iconSize} color={Colors.gradientStart} />
         )}
       </Pressable>
+      {isActive&&(coachState==='loading'||coachState==='playing')&&<View style={styles.coachPanel} accessibilityLiveRegion="polite"><Text style={styles.coachTip}>{coachState==='loading'?'Preparing example pronunciation…':'Playing example pronunciation…'} Tap the word again to stop.</Text></View>}
+      {isActive&&coachError&&<View style={styles.coachPanel}><Text style={styles.coachError} accessibilityRole="alert">{coachError}</Text><Pressable style={styles.replayBtn} onPress={()=>onPronounce(word)} accessibilityRole="button" accessibilityLabel={`Retry pronunciation for ${word}`}><Text style={styles.replayText}>Try again</Text></Pressable></View>}
       {isActive && coachResult && (
         <View style={styles.coachPanel}>
-          <View style={styles.coachPhoneticRow}>
+          {!!coachResult.phonetic&&<View style={styles.coachPhoneticRow}>
             <Ionicons name="ear-outline" size={detailIconSize} color={Colors.gradientEnd} />
             <Text style={styles.coachPhonetic}>{coachResult.phonetic}</Text>
             {coachState === 'playing' && (
@@ -87,7 +90,7 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
                 <View style={[styles.speakingBar, styles.speakingBar3]} />
               </View>
             )}
-          </View>
+          </View>}
           <Text style={styles.coachTip}>{coachResult.tip}</Text>
           <Pressable
             style={styles.replayBtn}
@@ -119,6 +122,7 @@ export default function SessionReviewScreen() {
   const [showAddedToast, setShowAddedToast] = useState(false);
   const [waveformProgress, setWaveformProgress] = useState(0);
   const [playbackError, setPlaybackError] = useState('');
+  const [footerHeight,setFooterHeight]=useState(100);
   const [audioAttempt, setAudioAttempt] = useState(0);
   const focused = useIsFocused();
   type TrimMarks = { start: number | null; end: number | null };
@@ -162,6 +166,8 @@ export default function SessionReviewScreen() {
   const session = useMemo(() => sessions.find(s => s.id === id), [sessions, id]);
 
   const handlePronounce = (word: string) => {
+    if(activeFixWord===word&&(coach.state==='playing'||coach.state==='loading')){coach.dismiss();setActiveFixWord(null);return;}
+    player.pause();
     setActiveFixWord(word);
     coach.pronounce(word, undefined, session?.genre);
   };
@@ -311,7 +317,7 @@ export default function SessionReviewScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}
+        contentContainerStyle={{ paddingBottom: footerHeight + 24 }}
       >
         <View style={{ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }}>
         <View style={[styles.sessionHeader, { paddingHorizontal: horizontalInset }]}>
@@ -352,6 +358,7 @@ export default function SessionReviewScreen() {
                 if (playerStatus.playing) {
                   void player.pause();
                 } else {
+                  coach.dismiss();
                   setPlaybackError('');
                   const duration = playerStatus.duration || session.duration;
                   void (async () => {
@@ -367,7 +374,7 @@ export default function SessionReviewScreen() {
               accessibilityLabel={playerStatus.playing ? 'Pause session audio' : 'Play session audio'}
               accessibilityHint="Plays or pauses the recorded take"
             >
-              <Ionicons name={playerStatus.playing ? 'pause' : 'play'} size={scaledIcon(10)} color="#fff" />
+              <Ionicons name={playerStatus.playing ? 'pause' : 'play'} size={24} color="#111318" />
               <Text style={styles.waveformPlayText}>{playerStatus.playing ? 'Pause' : 'Play'}</Text>
             </Pressable>
             {!hasRecording && (
@@ -572,7 +579,7 @@ export default function SessionReviewScreen() {
             <Text style={styles.fixSectionTitle}>Words to check</Text>
             <View style={styles.fixSectionHint}>
               <Ionicons name="volume-high-outline" size={scaledIcon(8)} color={Colors.textTertiary} />
-              <Text style={styles.fixSectionHintText}>Tap to hear</Text>
+              <Text style={styles.fixSectionHintText}>Hear an example</Text>
             </View>
           </View>
           <View style={styles.fixList}>
@@ -586,6 +593,7 @@ export default function SessionReviewScreen() {
                 isActive={activeFixWord === item.word}
                 coachState={activeFixWord === item.word ? coach.state : 'idle'}
                 coachResult={activeFixWord === item.word ? coach.result : null}
+                coachError={activeFixWord === item.word ? coach.errorMessage : null}
               />
             ))}
           </View>
@@ -603,15 +611,15 @@ export default function SessionReviewScreen() {
       </ScrollView>
 
       <View
+        onLayout={event=>setFooterHeight(event.nativeEvent.layout.height)}
         style={[
           styles.bottomAction,
-          sectionWrapStyle,
           {
-            paddingHorizontal: horizontalInset,
             paddingBottom: Math.max(insets.bottom, webBottomInset) + 16,
           },
         ]}
       >
+       <View style={[sectionWrapStyle,{paddingHorizontal:horizontalInset}]}>
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -628,10 +636,11 @@ export default function SessionReviewScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.practiceBtn}
           >
-            <Ionicons name="repeat" size={scaledIcon(12)} color="#fff" />
+            <Ionicons name="repeat" size={24} color="#111318" />
             <Text style={styles.practiceBtnText}>Practice Loop</Text>
           </LinearGradient>
         </Pressable>
+       </View>
       </View>
     </View>
   );
@@ -754,23 +763,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   waveformControls: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     gap: 12,
   },
   waveformPlayBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent:'center',
+    minHeight:52,
+    minWidth:148,
     gap: 8,
     backgroundColor: Colors.gradientStart,
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
   },
   waveformPlayText: {
-    color: '#fff',
-    fontSize: 13,
+    color: '#111318',
+    fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },
   waveformHintText: {
@@ -940,10 +952,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fixItem: {
+    minHeight:76,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderGlass,
     gap: 12,
@@ -963,16 +976,18 @@ const styles = StyleSheet.create({
   },
   fixContent: {
     flex: 1,
+    minWidth:0,
     gap: 2,
   },
   fixWord: {
     color: Colors.textPrimary,
-    fontSize: 15,
+    fontSize: 17,
     fontFamily: 'Inter_600SemiBold',
   },
   fixReason: {
     color: Colors.textTertiary,
     fontSize: 13,
+    lineHeight:20,
     fontFamily: 'Inter_400Regular',
   },
   lyricsSection: {
@@ -998,26 +1013,31 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 20,
     paddingTop: 12,
     backgroundColor: Colors.background,
   },
   practicePressable: {
+    width:'100%',
+    minHeight:56,
     borderRadius: 14,
     overflow: 'hidden',
     boxShadow: `0px 4px 12px ${Colors.accentGlow}`,
     elevation: 6,
   },
   practiceBtn: {
+    minHeight:56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 16,
+    paddingHorizontal:20,
     borderRadius: 14,
   },
   practiceBtnText: {
-    color: '#fff',
+    color: '#111318',
+    textAlign:'center',
+    flexShrink:1,
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },
@@ -1046,13 +1066,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     lineHeight: 18,
   },
+  coachError:{color:Colors.dangerUnderline,fontSize:14,lineHeight:21,fontFamily:'Inter_500Medium'},
   replayBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     alignSelf: 'flex-start',
-    minHeight: 36,
-    paddingVertical: 4,
+    minHeight: 48,
+    minWidth:120,
+    paddingVertical: 12,
+    paddingHorizontal:12,
   },
   replayText: {
     color: Colors.gradientStart,

@@ -1,0 +1,55 @@
+diff --git a/node_modules/expo-speech/android/src/main/java/expo/modules/speech/SpeechModule.kt b/node_modules/expo-speech/android/src/main/java/expo/modules/speech/SpeechModule.kt
+index 9ca869c..5bdb5eb 100644
+--- a/node_modules/expo-speech/android/src/main/java/expo/modules/speech/SpeechModule.kt
++++ b/node_modules/expo-speech/android/src/main/java/expo/modules/speech/SpeechModule.kt
+@@ -83,7 +83,11 @@ class SpeechModule : Module() {
+       throw SpeechUnableToGetVoicesException(err)
+     }
+ 
+-    return nativeVoices.map {
++    // Word examples must not silently select a network or undownloaded voice.
++    return nativeVoices.filter {
++      !it.isNetworkConnectionRequired &&
++        it.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) != true
++    }.map {
+       val quality = if (it.quality > Voice.QUALITY_NORMAL) {
+         VoiceQuality.ENHANCED
+       } else {
+diff --git a/node_modules/expo-speech/build/Speech.js b/node_modules/expo-speech/build/Speech.js
+index fc047a4..9527bcc 100644
+--- a/node_modules/expo-speech/build/Speech.js
++++ b/node_modules/expo-speech/build/Speech.js
+@@ -75,7 +75,13 @@ export function speak(text, options = {}) {
+     const id = _makeCallbackId();
+     _CALLBACKS[id] = options;
+     _registerListenersIfNeeded();
+-    ExponentSpeech.speak(String(id), text, options);
++    Promise.resolve(ExponentSpeech.speak(String(id), text, options)).catch((error) => {
++    const callbacks = _CALLBACKS[id];
++    if (!callbacks) return;
++    callbacks.onError?.(error instanceof Error ? error : new Error('Speech playback failed'));
++    delete _CALLBACKS[id];
++    _unregisterListenersIfNeeded();
++  });
+ }
+ // @needsAudit
+ /**
+diff --git a/node_modules/expo-speech/src/Speech/Speech.ts b/node_modules/expo-speech/src/Speech/Speech.ts
+index c08eec1..6707229 100644
+--- a/node_modules/expo-speech/src/Speech/Speech.ts
++++ b/node_modules/expo-speech/src/Speech/Speech.ts
+@@ -100,7 +100,13 @@ export function speak(text: string, options: SpeechOptions = {}) {
+   const id = _makeCallbackId();
+   _CALLBACKS[id] = options;
+   _registerListenersIfNeeded();
+-  ExponentSpeech.speak(String(id), text, options);
++  Promise.resolve(ExponentSpeech.speak(String(id), text, options)).catch((error) => {
++    const callbacks = _CALLBACKS[id];
++    if (!callbacks) return;
++    callbacks.onError?.(error instanceof Error ? error : new Error('Speech playback failed'));
++    delete _CALLBACKS[id];
++    _unregisterListenersIfNeeded();
++  });
+ }
+ 
+ // @needsAudit

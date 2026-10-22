@@ -1,149 +1,34 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Platform } from 'react-native';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useApp } from '@/lib/AppContext';
-import { getApiHeaders, getApiUrl } from '@/lib/query-client';
+import {useState,useCallback,useRef,useEffect} from 'react';
+import {Platform} from 'react-native';
+import {setAudioModeAsync,setIsAudioActiveAsync} from 'expo-audio';
+import * as Speech from 'expo-speech';
+import {useIsFocused} from '@react-navigation/native';
+import {useApp} from '@/lib/AppContext';
+import {resolveSpeechRecognitionLang} from './language';
+import {playWordPronunciation,type PronunciationBridge} from './word-pronunciation';
 
-export interface PronunciationResult {
-  word: string;
-  phonetic: string;
-  tip: string;
-  slow: string;
-}
-
-export type CoachState = 'idle' | 'loading' | 'playing' | 'ready';
-
-export function usePronunciationCoach() {
-  const { settings } = useApp();
-  const [state, setState] = useState<CoachState>('idle');
-  const [result, setResult] = useState<PronunciationResult | null>(null);
-  const [audioUri, setAudioUri] = useState<string | null>(null);
-
-  const audioSource = useMemo(() => (audioUri ? { uri: audioUri } : null), [audioUri]);
-  const player = useAudioPlayer(audioSource);
-  const status = useAudioPlayerStatus(player);
-
-  const wasPlayingRef = useRef(false);
-  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const lastPronounceArgsRef = useRef<{ word: string; context?: string; genre?: string } | null>(
-    null
-  );
-
-  useEffect(() => {
-    if (state === 'playing' && wasPlayingRef.current && !status.playing && status.currentTime > 0) {
-      setState('ready');
-      wasPlayingRef.current = false;
-    }
-    if (state === 'playing' && status.playing) {
-      wasPlayingRef.current = true;
-    }
-  }, [status.playing, status.currentTime, state]);
-
-  const pronounce = useCallback(async (word: string, context?: string, genre?: string) => {
-    setState('loading');
-    setResult(null);
-    setAudioUri(null);
-    wasPlayingRef.current = false;
-    lastPronounceArgsRef.current = { word, context, genre };
-
-    try {
-      const baseUrl = getApiUrl();
-      const url = new URL('/api/v1/pronounce', baseUrl);
-
-      const response = await fetch(url.toString(), {
-        method: 'POST',
-        headers: getApiHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          word,
-          context,
-          genre,
-          language: settings.language,
-          accentGoal: settings.accentGoal,
-        }),
-      });
-
-      if (!response.ok) throw new Error(`Failed: ${response.status}`);
-
-      const data = await response.json();
-      const pronunciation: PronunciationResult = {
-        word: data.word,
-        phonetic: data.phonetic,
-        tip: data.tip,
-        slow: data.slow,
-      };
-      setResult(pronunciation);
-
-      const audioBase64 = data.audioBase64;
-      if (audioBase64) {
-        const dataUri = `data:audio/mpeg;base64,${audioBase64}`;
-        setAudioUri(dataUri);
-        setState('playing');
-        setTimeout(() => {
-          try { player.play(); } catch {}
-        }, 200);
-      } else {
-        const canUseWebSpeech =
-          Platform.OS === 'web' &&
-          typeof window !== 'undefined' &&
-          typeof window.speechSynthesis !== 'undefined';
-
-        if (canUseWebSpeech) {
-          try {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(data.slow || word);
-            speechUtteranceRef.current = utterance;
-            setState('playing');
-            utterance.onend = () => {
-              setState('ready');
-              speechUtteranceRef.current = null;
-            };
-            utterance.onerror = () => {
-              setState('ready');
-              speechUtteranceRef.current = null;
-            };
-            window.speechSynthesis.speak(utterance);
-          } catch {
-            setState('ready');
-          }
-        } else {
-          setState('ready');
-        }
-      }
-    } catch (err) {
-      console.error('Pronunciation coach error:', err);
-      setState('idle');
-    }
-  }, [player, settings.accentGoal, settings.language]);
-
-  const replay = useCallback(async () => {
-    if (!result) return;
-    if (audioUri) {
-      wasPlayingRef.current = false;
-      setState('playing');
-      try {
-        player.seekTo(0);
-        player.play();
-      } catch {
-        const previous = lastPronounceArgsRef.current;
-        await pronounce(result.word, previous?.context, previous?.genre);
-      }
-    } else {
-      const previous = lastPronounceArgsRef.current;
-      await pronounce(result.word, previous?.context, previous?.genre);
-    }
-  }, [result, audioUri, player, pronounce]);
-
-  const dismiss = useCallback(() => {
-    try { player.pause(); } catch {}
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.speechSynthesis !== 'undefined') {
-      window.speechSynthesis.cancel();
-    }
-    speechUtteranceRef.current = null;
-    setAudioUri(null);
-    setState('idle');
-    setResult(null);
-    wasPlayingRef.current = false;
-  }, [player]);
-
-  return { state, result, pronounce, replay, dismiss };
+export interface PronunciationResult {word:string;phonetic:string;tip:string;slow:string}
+export type CoachState='idle'|'loading'|'playing'|'ready'|'error';
+const bridge:PronunciationBridge={
+ voices:()=>Speech.getAvailableVoicesAsync(),stop:()=>Speech.stop(),speak:(text,options)=>Speech.speak(text,options),
+ prepare:async()=>{if(Platform.OS!=='web'){await setAudioModeAsync({allowsRecording:false,playsInSilentMode:true,shouldRouteThroughEarpiece:false});await setIsAudioActiveAsync(true);}},
+};
+export function usePronunciationCoach(){
+ const {settings}=useApp();const focused=useIsFocused();
+ const [state,setState]=useState<CoachState>('idle'),[result,setResult]=useState<PronunciationResult|null>(null),[errorMessage,setErrorMessage]=useState<string|null>(null);
+ const request=useRef<AbortController|null>(null);const lastWord=useRef('');
+ const dismiss=useCallback(()=>{request.current?.abort();request.current=null;setState('idle');setResult(null);setErrorMessage(null);},[]);
+ useEffect(()=>{dismiss();return()=>{request.current?.abort();};},[focused,dismiss,settings.language,settings.accentGoal]);
+ const pronounce=useCallback(async(word:string,_context?:string,_genre?:string)=>{
+  request.current?.abort();const controller=new AbortController();request.current=controller;lastWord.current=word;
+  setState('loading');setResult(null);setErrorMessage(null);
+  try{
+   await playWordPronunciation(word,resolveSpeechRecognitionLang(settings.language,settings.accentGoal),bridge,controller.signal,()=>{if(request.current===controller)setState('playing');});
+   if(request.current!==controller||controller.signal.aborted)return;
+   setResult({word,phonetic:'',slow:word,tip:'Example pronunciation from your device’s speech voice. This is not audio from your take or a pronunciation assessment.'});setState('ready');
+  }catch(error){if(request.current===controller&&!controller.signal.aborted){setState('error');setErrorMessage(error instanceof Error?error.message:'Could not play the example. Try again.');}}
+  finally{if(request.current===controller)request.current=null;}
+ },[settings.language,settings.accentGoal]);
+ const replay=useCallback(()=>pronounce(lastWord.current),[pronounce]);
+ return {state,result,errorMessage,pronounce,replay,dismiss};
 }

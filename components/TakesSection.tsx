@@ -589,6 +589,9 @@ function TakeRow({
             {new Date(take.uploadedAt).toLocaleString()}
           </Text>
         </View>
+        {take.externalTrackId ? <Pressable accessibilityRole="button" accessibilityLabel="Open studio song"
+          onPress={() => router.push({pathname:"/booth/[trackId]",params:{trackId:take.externalTrackId!,...(take.projectId?{projectId:take.projectId}:{})}})}
+          style={[styles.boothBtn,{minHeight:48,minWidth:48}]}><Text style={styles.boothBtnText}>Open song</Text></Pressable> : null}
         {take.externalTrackId && Platform.OS === "web" ? (
           <>
             <Pressable

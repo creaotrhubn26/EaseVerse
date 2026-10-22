@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { canSetProjectTempo } from "../_lib/producer-tempo-permissions.js";
 import { isAuthConfigured, requireAuth } from "../_lib/auth.js";
 import {
   armRecording,
@@ -20,6 +21,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!session) return res.status(404).json({ error: "Session not found" });
   if (session.startedByUserId !== userId) {
     return res.status(403).json({ error: "Only the producer can arm or stop recording" });
+  }
+
+  if ((req.method === "POST" || req.method === "PATCH") && !await canSetProjectTempo(session.projectId, userId)) {
+    return res.status(403).json({ error: "Only the project producer can set the tempo or arm recording" });
   }
 
   if (req.method === "POST") {

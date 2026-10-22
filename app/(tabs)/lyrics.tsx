@@ -310,7 +310,6 @@ export default function LyricsScreen() {
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = useRef(true);
   const lastToastTimeRef = useRef(0);
-  const tapTempoRef = useRef<number[]>([]);
   const findCursorRef = useRef(0);
   const editorRef = useRef<TextInput | null>(null);
   const openedSongId = useRef(activeSong?.id ?? null);
@@ -571,7 +570,7 @@ export default function LyricsScreen() {
         songId: activeSongRecordKey,
         title: songTitle || activeSong?.title || 'Untitled',
         lyrics: editText,
-        bpm: tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm,
+        bpm: activeSong?.bpm,
         createdAt,
         note,
       };
@@ -599,7 +598,6 @@ export default function LyricsScreen() {
       editText,
       lyricsVersions,
       songTitle,
-      tempoBpmText,
     ]
   );
 
@@ -742,9 +740,7 @@ export default function LyricsScreen() {
     }
 
     const sections = parseSongSections(editText);
-    const parsedBpm = tempoBpmText.trim()
-      ? Math.max(30, Math.min(300, parseInt(tempoBpmText, 10)))
-      : undefined;
+    const parsedBpm = activeSong?.bpm;
     const savedAt = Date.now();
 
     if (activeSong) {
@@ -793,7 +789,6 @@ export default function LyricsScreen() {
     selectedGenre,
     setActiveSong,
     songTitle,
-    tempoBpmText,
     updateSong,
     handleCreateVersionSnapshot,
   ]);
@@ -870,7 +865,7 @@ export default function LyricsScreen() {
         title: songTitle || activeSong?.title || 'Untitled',
         lyrics: editText,
         genre: getGenreProfile(selectedGenre).label,
-        bpm: tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm,
+        bpm: activeSong?.bpm,
         includeLineNumbers: false,
         includeHeaders: true,
       });
@@ -878,7 +873,7 @@ export default function LyricsScreen() {
         title: songTitle || activeSong?.title || 'Untitled',
         lyrics: editText,
         genre: getGenreProfile(selectedGenre).label,
-        bpm: tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm,
+        bpm: activeSong?.bpm,
         includeLineNumbers: true,
         includeHeaders: true,
       });
@@ -969,7 +964,7 @@ export default function LyricsScreen() {
         popup.print();
       }
     },
-    [activeSong?.bpm, activeSong?.title, editText, selectedGenre, songTitle, tempoBpmText]
+    [activeSong?.bpm, activeSong?.title, editText, selectedGenre, songTitle]
   );
 
   const handleImport = useCallback(() => {
@@ -1018,32 +1013,6 @@ export default function LyricsScreen() {
     updateSong(updated);
     setActiveSong(updated);
   };
-
-  const handleTapTempo = useCallback(() => {
-    const now = Date.now();
-    const taps = tapTempoRef.current;
-    const lastTap = taps.at(-1);
-    if (lastTap && now - lastTap > 2000) {
-      taps.length = 0;
-    }
-    taps.push(now);
-    while (taps.length > 8) {
-      taps.shift();
-    }
-
-    if (taps.length >= 2) {
-      const intervals: number[] = [];
-      for (let i = 1; i < taps.length; i += 1) {
-        intervals.push(taps[i] - taps[i - 1]);
-      }
-      const avg = intervals.reduce((sum, ms) => sum + ms, 0) / intervals.length;
-      if (avg > 0) {
-        const bpm = Math.round(60000 / avg);
-        const clamped = Math.max(30, Math.min(300, bpm));
-        setTempoBpmText(String(clamped));
-      }
-    }
-  }, []);
 
   const jumpToSectionAnchor = useCallback(
     (anchor: SectionAnchor) => {
@@ -1477,49 +1446,12 @@ export default function LyricsScreen() {
   };
 
   const renderTempoControls = () => (
-    <>
-      <View style={styles.tempoRow}>
-        <TextInput
-          value={tempoBpmText}
-          onChangeText={(value) => setTempoBpmText(value.replace(/[^0-9]/g, '').slice(0, 3))}
-          onBlur={() => {
-            if (!tempoBpmText.trim()) {
-              return;
-            }
-            const parsed = parseInt(tempoBpmText, 10);
-            if (!Number.isFinite(parsed)) {
-              setTempoBpmText('');
-              return;
-            }
-            const clamped = Math.max(30, Math.min(300, parsed));
-            if (clamped !== parsed) {
-              setTempoBpmText(String(clamped));
-            }
-          }}
-          placeholder="e.g. 120"
-          placeholderTextColor={Colors.textTertiary}
-          style={styles.tempoField}
-          keyboardType="number-pad"
-          accessibilityLabel="Tempo in beats per minute"
-          accessibilityHint="Sets the song tempo used for count-in while recording"
-        />
-        <Pressable
-          onPress={handleTapTempo}
-          style={styles.tapTempoButton}
-          accessibilityRole="button"
-          accessibilityLabel="Tap tempo"
-          accessibilityHint="Tap repeatedly to detect BPM"
-        >
-          <Feather name="activity" size={scaledIcon(12)} color={Colors.textSecondary} />
-          <Text style={styles.tapTempoText}>Tap</Text>
-        </Pressable>
-      </View>
+    <View accessibilityLabel="Producer tempo" style={styles.tempoRow}>
       <Text style={styles.tempoHint}>
-        Used for count-in tempo (and upcoming timing coaching).
+        {activeSong?.bpm ? `${activeSong.bpm} BPM · Set by your producer` : 'Your producer has not set a tempo yet.'}
       </Text>
-    </>
+    </View>
   );
-
   const renderInsertButtons = () => (
     <View style={styles.insertRow}>
       {INSERT_SECTION_OPTIONS.map((option) => (
@@ -1576,7 +1508,7 @@ export default function LyricsScreen() {
           const lineCount = song.lyrics.split('\n').filter((line) => line.trim()).length;
           const bpm =
             typeof song.bpm === 'number' && Number.isFinite(song.bpm)
-              ? Math.max(30, Math.min(300, Math.round(song.bpm)))
+              ? song.bpm
               : null;
 
           return (
@@ -1898,7 +1830,7 @@ export default function LyricsScreen() {
               const lineCount = song.lyrics.split('\n').filter((line) => line.trim()).length;
               const bpm =
                 typeof song.bpm === 'number' && Number.isFinite(song.bpm)
-                  ? Math.max(30, Math.min(300, Math.round(song.bpm)))
+                  ? song.bpm
                   : null;
 
               return (
@@ -2657,7 +2589,7 @@ export default function LyricsScreen() {
                         lyrics={editText}
                         songTitle={songTitle || activeSong?.title || 'Untitled'}
                         genreLabel={getGenreProfile(selectedGenre).label}
-                        bpm={tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm}
+                        bpm={activeSong?.bpm}
                         sessions={sessions}
                         activeSongId={activeSong?.id}
                         versions={lyricsVersions}
@@ -2745,7 +2677,7 @@ export default function LyricsScreen() {
                 lyrics={editText}
                 songTitle={songTitle || activeSong?.title || 'Untitled'}
                 genreLabel={getGenreProfile(selectedGenre).label}
-                bpm={tempoBpmText.trim() ? Number.parseInt(tempoBpmText, 10) : activeSong?.bpm}
+                bpm={activeSong?.bpm}
                 sessions={sessions}
                 activeSongId={activeSong?.id}
                 versions={lyricsVersions}

@@ -9,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useMetronome } from "@/lib/useMetronome";
+import { validBpm } from "@/lib/tempo";
 import Colors from "@/constants/colors";
 import { useNarration } from "@/lib/useNarration";
 import { useApp } from "@/lib/AppContext";
@@ -50,13 +50,6 @@ function nowMs(): number {
   const perf = (globalThis as { performance?: { now?: () => number } }).performance;
   if (perf?.now) return perf.now();
   return Date.now();
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (Number.isNaN(value)) return min;
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
 }
 
 function mean(values: number[]): number {
@@ -179,8 +172,7 @@ export default function EasePocketScreen() {
   });
   const [history, setHistory] = useState<Storage.EasePocketHistoryItem[]>([]);
 
-  const [bpmText, setBpmText] = useState<string>("");
-  const songBpm = typeof activeSong?.bpm === "number" && Number.isFinite(activeSong.bpm) ? activeSong.bpm : null;
+  const songBpm = validBpm(activeSong?.bpm);
 
   const [isRunning, setIsRunning] = useState(false);
   const [phase, setPhase] = useState<"idle" | "audible" | "silent" | "done">("idle");
@@ -214,17 +206,8 @@ export default function EasePocketScreen() {
 
   const rotation = useRef(new Animated.Value(0)).current;
 
-  const effectiveBpm = useMemo(() => {
-    const parsed = Number.parseInt(bpmText.trim(), 10);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return clamp(parsed, 40, 300);
-    }
-    if (songBpm) return clamp(songBpm, 20, 300);
-    if (prefs.lastBpmOverride) return clamp(prefs.lastBpmOverride, 40, 300);
-    return 120;
-  }, [bpmText, prefs.lastBpmOverride, songBpm]);
-
-  const beatMs = useMemo(() => 60000 / effectiveBpm, [effectiveBpm]);
+  const effectiveBpm = songBpm ?? 0;
+  const beatMs = effectiveBpm > 0 ? 60000 / effectiveBpm : 0;
   const barMs = useMemo(() => beatMs * prefs.beatsPerBar, [beatMs, prefs.beatsPerBar]);
 
   const currentGrid: Grid = useMemo(() => {
@@ -333,7 +316,6 @@ export default function EasePocketScreen() {
       setPrefs(loadedPrefs);
       setHistory(loadedHistory);
       setPrefsLoaded(true);
-      setBpmText(songBpm !== null ? String(songBpm) : String(loadedPrefs.lastBpmOverride || 120));
     })();
     return () => {
       cancelled = true;
@@ -343,7 +325,7 @@ export default function EasePocketScreen() {
   useEffect(() => {
     if (!prefsLoaded) return;
     const timeoutId = setTimeout(() => {
-      void Storage.saveEasePocketPrefs({ ...prefs, lastBpmOverride: effectiveBpm });
+      void Storage.saveEasePocketPrefs({ grid: prefs.grid, beatsPerBar: prefs.beatsPerBar });
     }, 250);
     return () => clearTimeout(timeoutId);
   }, [effectiveBpm, prefs, prefsLoaded]);
@@ -615,6 +597,8 @@ export default function EasePocketScreen() {
     stopClick,
   ]);
 
+  useEffect(() => { hardStop(); }, [songBpm, hardStop]);
+
   useEffect(() => {
     // Stop all timers if mode changes.
     hardStop();
@@ -642,12 +626,14 @@ export default function EasePocketScreen() {
       void finishTapMode();
       return;
     }
+    if (!songBpm) { setToast({visible:true,message:"Your producer has not set a BPM for this song yet."}); return; }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     void startTapMode();
-  }, [finishTapMode, isRunning, startTapMode]);
+  }, [finishTapMode, isRunning, songBpm, startTapMode]);
 
   const runConsonantMode = useCallback(async () => {
     if (isAnalyzing) return;
+    if (!songBpm) { setToast({visible:true,message:"Your producer has not set a BPM for this song yet."}); return; }
 
     if (!recording.isRecording) {
       setConsonantScore(null);
@@ -711,15 +697,11 @@ export default function EasePocketScreen() {
     prefs.beatsPerBar,
     prefs.grid,
     recording,
+    songBpm,
     toleranceMs,
   ]);
 
-  const bpmLabel = useMemo(() => {
-    if (songBpm && Math.round(songBpm) === effectiveBpm) {
-      return "BPM (Song)";
-    }
-    return "BPM (Practice)";
-  }, [effectiveBpm, songBpm]);
+  const bpmLabel = "Producer BPM";
 
   const canTap = isRunning && mode !== "consonant";
   const horizontalInset = responsive.contentPadding;
@@ -829,19 +811,10 @@ export default function EasePocketScreen() {
             {songBpm ? (
               <View style={styles.songBpmBadge}>
                 <Ionicons name="musical-note" size={scaledIcon(9)} color={Colors.textSecondary} />
-                <Text style={styles.songBpmText}>{Math.round(songBpm)} BPM</Text>
+                <Text style={styles.songBpmText}>{songBpm} BPM</Text>
               </View>
             ) : (
-              <Pressable
-                style={styles.songBpmBadge}
-                onPress={() => router.push("/(tabs)/lyrics")}
-                accessibilityRole="button"
-                accessibilityLabel="Set BPM"
-                accessibilityHint="Opens Lyrics to set Tempo (BPM)"
-              >
-                <Ionicons name="add-circle-outline" size={scaledIcon(9)} color={Colors.textSecondary} />
-                <Text style={styles.songBpmText}>Set BPM</Text>
-              </Pressable>
+              <View style={styles.songBpmBadge}><Text style={styles.songBpmText}>Tempo pending</Text></View>
             )}
           </View>
 
@@ -855,35 +828,8 @@ export default function EasePocketScreen() {
                 />
                 <Text style={styles.controlLabel}>{bpmLabel}</Text>
               </View>
-              <View style={styles.bpmRow}>
-                <Pressable
-                  style={styles.smallBtn}
-                  onPress={() => setBpmText(String(clamp(effectiveBpm - 1, 40, 300)))}
-                  accessibilityRole="button"
-                  accessibilityLabel="Decrease BPM"
-                >
-                  <Ionicons name="remove" size={scaledIcon(11)} color={Colors.textPrimary} />
-                </Pressable>
-                <TextInput
-                  value={String(effectiveBpm)}
-                  onChangeText={setBpmText}
-                  keyboardType="number-pad"
-                  style={styles.bpmInput}
-                  accessibilityLabel="BPM"
-                  accessibilityHint="Sets the practice tempo in beats per minute"
-                />
-                <Pressable
-                  style={styles.smallBtn}
-                  onPress={() => setBpmText(String(clamp(effectiveBpm + 1, 40, 300)))}
-                  accessibilityRole="button"
-                  accessibilityLabel="Increase BPM"
-                >
-                  <Ionicons name="add" size={scaledIcon(11)} color={Colors.textPrimary} />
-                </Pressable>
-              </View>
-              <Text style={styles.controlHint}>
-                {mode === "slow" ? "Slow Mastery supports down to 40 BPM." : "Tempo drives the grid + click."}
-              </Text>
+              <View style={styles.bpmRow}><Text style={styles.bpmInput} accessibilityLabel="Producer tempo">{songBpm ? `${songBpm} BPM` : 'Not set'}</Text></View>
+              <Text style={styles.controlHint}>Only your producer can change the song tempo.</Text>
             </View>
 
             <View style={styles.controlCard}>
@@ -1011,7 +957,7 @@ export default function EasePocketScreen() {
                           ? prefs.grid.toUpperCase()
                           : "REC"}
                 </Text>
-                <Text style={[styles.circleSub, { fontSize: centerSubSize }]}>{effectiveBpm} BPM</Text>
+                <Text style={[styles.circleSub, { fontSize: centerSubSize }]}>{songBpm ? `${songBpm} BPM` : "Tempo pending"}</Text>
               </View>
             </View>
           </View>

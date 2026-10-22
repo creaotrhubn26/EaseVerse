@@ -548,7 +548,7 @@ export default function ProfileScreen() {
         const incomingLyrics = item.lyrics.replace(/\r\n/g, '\n');
         const incomingBpm =
           typeof item.bpm === 'number' && Number.isFinite(item.bpm)
-            ? Math.max(30, Math.min(300, Math.round(item.bpm)))
+            ? Math.max(20, Math.min(400, item.bpm))
             : undefined;
 
         const snapshotLyrics = nextSnapshots[matchedSong.id]?.lyrics ?? matchedSong.lyrics;

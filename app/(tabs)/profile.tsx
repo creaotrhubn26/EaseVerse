@@ -28,6 +28,7 @@ import { parseSongSections } from '@/lib/lyrics-sections';
 import { fetchLearningRecommendations } from '@/lib/learning-client';
 import { useResponsiveLayout } from '@/lib/responsive';
 import { useAuth } from '@/lib/creatorhub-auth';
+import { CLOUD_PRACTICE_ANALYSIS_ENABLED } from '@/lib/release-features';
 import {
   buildLyricsSyncRoute,
   buildSongTitleCandidatesMap,
@@ -788,7 +789,7 @@ export default function ProfileScreen() {
           </Preference>
         </ProfileGroup>
         <ProfileGroup title="Recording & timing" summary={`${settings.countIn?settings.countIn+'-beat count-in':'No count-in'} · ${settings.lyricsFollowSpeed} lyric tracking`} icon="options-outline">
-          <Preference title="Cloud practice analysis" hint="Optional. When enabled, recordings, lyrics and practice history are sent to EaseVerse for analysis. Transcription may use OpenAI. Turn it off to keep new local takes out of cloud analysis. Sharing a studio take is a separate action.">
+          {CLOUD_PRACTICE_ANALYSIS_ENABLED&&<Preference title="Cloud practice analysis" hint="Optional. When enabled, recordings, lyrics and practice history are sent to EaseVerse for analysis. Transcription may use OpenAI. Turn it off to keep new local takes out of cloud analysis. Sharing a studio take is a separate action.">
             <Pressable accessibilityRole="switch" accessibilityLabel="Cloud practice analysis"
               accessibilityState={{checked:settings.cloudAnalysisEnabled===true}}
               {...(Platform.OS==='web'?{'aria-checked':settings.cloudAnalysisEnabled===true}:{})}
@@ -796,7 +797,7 @@ export default function ProfileScreen() {
               style={{minHeight:48,padding:14,borderRadius:12,backgroundColor:Colors.surface}}>
               <Text style={{color:Colors.textPrimary}}>{settings.cloudAnalysisEnabled?'On — cloud analysis enabled':'Off — local practice only'}</Text>
             </Pressable>
-          </Preference>
+          </Preference>}
           <Preference title="Live recognition" hint={settings.liveMode==='stability'?'Waits for more confident recognition before advancing.':'Updates sooner; recognition may be less certain.'}>
             <SegmentedControl<LiveMode> options={[{key:'stability',label:'Stability'},{key:'speed',label:'Speed'}]} value={settings.liveMode} onChange={v=>updateSettings({liveMode:v})}/>
           </Preference>

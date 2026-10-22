@@ -8,6 +8,7 @@ import {analyzeSessionRecording} from '@/lib/session-scoring-client';
 import {hasNoSharedLyricWords,matchLyricTranscript} from '@/shared/lyric-match';
 import {resolveSpeechRecognitionLang,resolveSttLanguageCode} from '@/lib/language';
 import type {Session} from '@/lib/types';
+import {CLOUD_PRACTICE_ANALYSIS_ENABLED} from '@/lib/release-features';
 
 export function PracticeAnalysisPanel({session,language,accentGoal,onResult}:{session:Session;language:string;accentGoal:string;onResult:(patch:Partial<Session>)=>Promise<void>}){
  const {getToken,isSignedIn}=useAuth();
@@ -56,9 +57,9 @@ export function PracticeAnalysisPanel({session,language,accentGoal,onResult}:{se
     <Text style={s.copy}>{capability?.reason??'Checking on-device transcription…'}</Text>
     {capability?.available&&<Pressable style={s.primary} onPress={()=>void analyse('local')} accessibilityRole="button" accessibilityLabel="Analyse lyrics on this device"><Text style={s.primaryText}>Analyse on this device</Text></Pressable>}
     {capability?.canDownload&&<Pressable style={s.secondary} onPress={()=>void download()} accessibilityRole="button"><Text style={s.link}>Download offline language</Text></Pressable>}
-    <Pressable style={s.secondary} onPress={()=>setConsent(value=>!value)} accessibilityRole="button" aria-expanded={consent} accessibilityState={{expanded:consent}} accessibilityLabel="Choose cloud lyric analysis"><Text style={s.link}>Use cloud analysis</Text></Pressable>
+    {CLOUD_PRACTICE_ANALYSIS_ENABLED&&<Pressable style={s.secondary} onPress={()=>setConsent(value=>!value)} accessibilityRole="button" aria-expanded={consent} accessibilityState={{expanded:consent}} accessibilityLabel="Choose cloud lyric analysis"><Text style={s.link}>Use cloud analysis</Text></Pressable>}
    </>}
-   {consent&&!busy&&<View style={s.consent}>
+   {CLOUD_PRACTICE_ANALYSIS_ENABLED&&consent&&!busy&&<View style={s.consent}>
     <Text style={s.copy}>Send this recording to OpenAI for transcription. EaseVerse compares the recognised words with your lyrics on its server. This is a one-time analysis; your automatic cloud setting stays unchanged. It does not share the take with your producer.</Text>
     {isSignedIn?<Pressable style={s.primary} onPress={()=>void analyse('cloud')} accessibilityRole="button" accessibilityLabel="Send recording for cloud lyric analysis"><Text style={s.primaryText}>Send and analyse this take</Text></Pressable>:<Pressable style={s.primary} onPress={()=>router.push('/(auth)/sign-in')} accessibilityRole="button"><Text style={s.primaryText}>Sign in to use cloud analysis</Text></Pressable>}
     <Pressable style={s.secondary} onPress={()=>setConsent(false)} accessibilityRole="button"><Text style={s.link}>Keep it on this device</Text></Pressable>

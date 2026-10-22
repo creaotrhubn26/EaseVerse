@@ -3,6 +3,7 @@ import type { SessionInsight } from '@/lib/types';
 import {matchLyricTranscript,type LyricMatch} from '@/shared/lyric-match';
 import { recordingBase64 } from './recording-base64';
 import { authedFetch } from './authed-fetch';
+import { CLOUD_PRACTICE_ANALYSIS_ENABLED } from './release-features';
 
 interface SessionScoringResponse {
   transcript: string;
@@ -22,6 +23,7 @@ export async function analyzeSessionRecording(params: {
   token?: string | null; signal?: AbortSignal; throwOnError?: boolean;
 }): Promise<SessionScoringResponse | null> {
   try {
+    if (!CLOUD_PRACTICE_ANALYSIS_ENABLED) throw new Error('Cloud analysis is not available in this version. Use on-device analysis where supported.');
     if (!params.recordingUri || !params.lyrics.trim()) throw new Error('Add lyrics before comparing this take.');
     if (params.durationSeconds > 180) throw new Error('Choose a take of 3 minutes or less for cloud analysis.');
     const audioBase64 = await recordingBase64(params.recordingUri);

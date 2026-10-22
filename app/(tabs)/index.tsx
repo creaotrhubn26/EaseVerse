@@ -35,6 +35,7 @@ import * as Storage from '@/lib/storage';
 import { resolveSpeechRecognitionLang, resolveSttLanguageCode } from '@/lib/language';
 import { useRecording } from '@/lib/useRecording';
 import { analyzeSessionRecording } from '@/lib/session-scoring-client';
+import { CLOUD_PRACTICE_ANALYSIS_ENABLED } from '@/lib/release-features';
 import { ingestSessionLearningEvent } from '@/lib/learning-client';
 import { matchLyricTranscript } from '@/shared/lyric-match';
 import type { LyricLine, SignalQuality, Session, Song } from '@/lib/types';
@@ -592,7 +593,7 @@ export default function SingScreen() {
         let resolvedInsights: Session['insights'] | null = null;
         let resolvedTranscript = liveTranscript.trim();
 
-        if (recordingUri && settings.cloudAnalysisEnabled) {
+        if (CLOUD_PRACTICE_ANALYSIS_ENABLED && recordingUri && settings.cloudAnalysisEnabled) {
           const scored = await analyzeSessionRecording({
             recordingUri,
             token: await getToken(),

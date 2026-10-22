@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Storage from "@/lib/storage";
 import { ingestEasePocketLearningEvent, ingestSessionLearningEvent } from "@/lib/learning-client";
 import type { Session } from "@/lib/types";
+import { CLOUD_PRACTICE_ANALYSIS_ENABLED } from './release-features';
 
 const LEARNING_BACKFILL_STATE_KEY = "@easeverse_learning_backfill_state_v1";
 const LEARNING_BACKFILL_VERSION = 1;
@@ -78,7 +79,7 @@ function shouldSkipBackfill(params: {
 export async function runLearningBackfill(params: {
   sessions: Session[];
 }): Promise<{ skipped: boolean; syncedSessions: number; syncedEasePocket: number }> {
-  if (!(await Storage.getSettings()).cloudAnalysisEnabled) return {skipped:true,syncedSessions:0,syncedEasePocket:0};
+  if (!CLOUD_PRACTICE_ANALYSIS_ENABLED || !(await Storage.getSettings()).cloudAnalysisEnabled) return {skipped:true,syncedSessions:0,syncedEasePocket:0};
   const userId = await Storage.getOrCreateLearningUserId();
   const [existingState, easePocketHistory] = await Promise.all([
     getBackfillState(),

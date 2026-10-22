@@ -6,6 +6,7 @@ const e2eApiKey = 'easeverse-e2e-local-only';
 process.env.EXPO_PUBLIC_API_URL ||= apiBaseUrl;
 process.env.EXPO_PUBLIC_API_KEY ||= e2eApiKey;
 process.env.E2E_API_BASE ||= apiBaseUrl;
+process.env.EXPO_PUBLIC_CLOUD_PRACTICE_ANALYSIS_ENABLED ||= '1';
 
 export default defineConfig({
   testDir: 'e2e',

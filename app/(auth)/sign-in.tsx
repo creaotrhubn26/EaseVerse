@@ -2,12 +2,15 @@ import React, { useState } from "react";
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/creatorhub-auth";
+import { safeCreatorHubAuthNextPath } from '@/lib/auth-return';
 
 export default function SignInScreen() {
+  const {next} = useLocalSearchParams<{next?: string}>();
+  const nextPath = safeCreatorHubAuthNextPath(next);
   const insets = useSafeAreaInsets();
   const { signIn, isSigningIn } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -16,8 +19,8 @@ export default function SignInScreen() {
     if (isSigningIn) return;
     setError(null);
     try {
-      const completed = await signIn();
-      if (completed && Platform.OS !== "web") router.replace("/(tabs)");
+      const completed = await signIn(nextPath ?? undefined);
+      if (completed && Platform.OS !== "web") router.replace((nextPath ?? '/(tabs)') as Href);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "CreatorHub login failed.");
     }

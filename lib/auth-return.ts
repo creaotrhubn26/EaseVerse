@@ -17,6 +17,7 @@ export function safeCreatorHubAuthNextPath(value: unknown): string | null {
     if (parsed.origin !== EASEVERSE_INTERNAL_ORIGIN) {
       return null;
     }
+    if (parsed.pathname === '/account-deletion') return '/account-deletion';
     if (parsed.pathname === "/integrations/creatorhub")
       return `${parsed.pathname}${parsed.search}`;
     if (/^\/sound-room\/invite\/inv_[A-Za-z0-9_-]{16,76}\/?$/.test(parsed.pathname))

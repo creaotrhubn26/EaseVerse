@@ -127,3 +127,48 @@ test('expired studio access leaves a persistent sign-in explanation',async({page
  await page.getByRole('button',{name:'Sign in to open studio recordings',exact:true}).click();
  await expect(page.getByText('CreatorHub login is temporarily unavailable',{exact:true})).toBeVisible();
 });
+
+for (const language of ['English', 'Norwegian']) {
+ for (const width of [320, 390, 768]) {
+  test(`current studio session stays identifiable in ${language} at ${width}px`, async ({page}) => {
+   const en=language==='English';
+   const projectName='Northern Lights – Artist and producer collaboration – Album sessions in Oslo';
+   const songTitle='Evening light – Acoustic version';
+   const makeStudioTake=(id:string,name:string)=>({id,filename:name,producerNote:'Hold the tone. Hold the pause before the next line.',audioUrl:'https://audio.example.invalid/vocal.wav',regions:[],consensus:{agree:0,disagree:0},status:'done',uploadedAt:'2026-10-22T09:40:00Z',durationSec:2,energyAvgDb:null,lyricsSnapshot:null});
+   const takeA=makeStudioTake('take-1','Chorus – Take 05.wav'),takeB=makeStudioTake('take-2','Verse 2 – Piano and vocal – Take 04.wav');
+   await page.setViewportSize({width,height:640});
+   await page.addInitScript(language=>localStorage.setItem('@lyricflow_settings',JSON.stringify({language})),language);
+   await page.route('**/api/**',route=>{
+    const url=new URL(route.request().url());
+    if(url.pathname==='/api/auth/session')return route.fulfill({json:{user:{id:'session-artist',email:'qa@example.invalid',name:'QA Artist'}}});
+    if(url.pathname==='/api/users/me')return route.fulfill({json:{userId:'session-artist',status:'approved'}});
+    if(url.pathname==='/api/booth')return route.fulfill({json:{trackId:'private-track-identifier',projectId:'qa-project',project:{id:'qa-project',name:projectName},lyrics:{title:songTitle,lyrics:'Hold the tone',bpm:92.5},takes:[takeA,takeB],referenceTrack:{url:'https://audio.example.invalid/reference.wav',name:'Evening light – Approved mix V3.wav'},recordingRequests:[]}});
+    if(url.pathname==='/api/studio-bookings')return route.fulfill({json:{packages:[],sessions:[]}});
+    if(url.pathname==='/api/takes/vote')return route.fulfill({json:{agree:0,disagree:0,votes:[],myVote:null}});
+    return route.fulfill({status:404,json:{error:'Isolated UI fixture'}});
+   });
+   const wav=Buffer.alloc(44+48000*2*2);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(48000,24);wav.writeUInt32LE(96000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
+   await page.route('https://audio.example.invalid/**',route=>route.fulfill({contentType:'audio/wav',body:wav}));
+   await page.goto('/booth/private-track-identifier?projectId=qa-project&takeId=take-2');
+   const intro=page.getByRole('button',{name:'Skip intro',exact:true});await expect(intro).toBeVisible();await intro.click();await expect(intro).toHaveCount(0);
+   const title=page.getByTestId('booth-session-title');
+   await expect(title).toHaveText(projectName);
+   await expect(page.getByTestId('booth-session-song')).toHaveText(`${en?'Song':'Sang'}: ${songTitle}`);
+   await expect(page.getByTestId('booth-session-recording')).toHaveText(takeB.filename);
+   await expect(page.getByTestId('booth-session-selection')).toContainText(en?'Selected take 2 of 2':'Valgt opptak 2 av 2');
+   await expect(page.getByTestId('booth-session-selection')).toContainText('2026');
+   expect(await title.evaluate(el=>({height:el.clientHeight,scrollHeight:el.scrollHeight,overflow:getComputedStyle(el).overflow}))).toMatchObject({overflow:'visible'});
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+   await page.getByRole('tab',{name:'Lyrics',exact:true}).click();await expect(title).toBeVisible();
+   await page.getByRole('tab',{name:'Takes',exact:true}).click();await page.getByRole('button',{name:`Open ${takeA.filename}`,exact:true}).click();
+   await expect(page.getByTestId('booth-session-recording')).toHaveText(takeA.filename);
+   await expect(title).toHaveText(projectName);
+   await page.getByRole('button',{name:'Reference mix',exact:true}).click();
+   await expect(page.getByTestId('booth-session-recording')).toHaveText('Evening light – Approved mix V3.wav');
+   await expect(title).toHaveText(projectName);
+   await expect(page.getByRole('button',{name:'Play',exact:true})).toBeEnabled();
+   const play=await page.getByRole('button',{name:'Play',exact:true}).boundingBox();expect(play!.height).toBeGreaterThanOrEqual(48);expect(play!.width).toBeGreaterThanOrEqual(48);
+   await page.screenshot({path:`outputs/mobile-store-release-20261021/session-context-${language}-${width}.png`,fullPage:true});
+  });
+ }
+}

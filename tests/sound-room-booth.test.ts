@@ -15,6 +15,7 @@ const link = {
   audio_review_project_id: context.audioReviewProjectId,
   creatorhub_project_id: "workspace-1",
   easeverse_project_id: "project-1",
+  project_name: "Nordlys – Album sessions",
 };
 const reference = {
   configured: true,
@@ -77,6 +78,8 @@ test("a project member gets the approved reference and lyrics before the first t
   );
   assert.equal(referenceCalls, 1);
   assert.equal(payload?.referenceTrack?.name, "Mix 3.wav");
+  assert.deepEqual(payload?.project, { id: 'project-1', name: 'Nordlys – Album sessions' });
+  assert.match(pool.calls[0].sql, /project.id=link.easeverse_project_id/);
   assert.deepEqual(payload?.takes, []);
   assert.match(pool.calls[0].sql, /member.user_id=\$1/);
   assert.deepEqual(pool.calls[0].values, ["artist", "track-1", "project-1"]);

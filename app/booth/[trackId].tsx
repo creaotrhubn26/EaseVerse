@@ -28,6 +28,7 @@ import { getApiUrl } from "@/lib/query-client";
 import { parseProducerNote, formatTimestamp } from "@/lib/parse-timestamps";
 import { useMetronome } from "@/lib/useMetronome";
 import { studioBpm, type StudioTempo } from "@/lib/tempo";
+import { useApp } from "@/lib/AppContext";
 import { currentPushEndpoint, subscribeToPush, unsubscribeFromPush } from "@/lib/push-client";
 import { castVote, clearVote, fetchVoteTally, type ConsensusVote } from "@/lib/takes-client";
 import { AUTH_CONFIGURED } from "@/lib/use-app-user";
@@ -76,6 +77,7 @@ type ReferenceComment = { id: string; body: string; seconds: number; endSeconds:
 type BoothPayload = {
   trackId: string;
   projectId?: string;
+  project?: { id: string; name: string | null } | null;
   lyrics: { title: string | null; lyrics: string | null; bpm: number | null; updatedAt: string } | null;
   referenceTrack: { url: string; name: string | null; durationSec: number | null; versionId?: string; expiresAt?: number; producerComments?: ReferenceComment[] } | null;
   tempo?: StudioTempo;
@@ -88,6 +90,9 @@ const BOOTH_TIP_KEY = "@easeverse_booth_intro_dismissed_v1";
 
 export default function BoothScreen() {
   const insets = useSafeAreaInsets();
+  const { settings } = useApp();
+  const en = settings.language !== 'Norwegian';
+  const t = (no: string, english: string) => en ? english : no;
   const { trackId, projectId, takeId } = useLocalSearchParams<{ trackId: string; projectId?: string; takeId?: string }>();
   const [requestPending,setRequestPending]=useState(false);
   usePreventRemove(requestPending,()=>Alert.alert('Unshared recording','Share the response or choose another recording before leaving.'));
@@ -209,6 +214,17 @@ export default function BoothScreen() {
         ? { id: selectedTake.id, url: selectedTake.audioUrl, name: selectedTake.filename }
         : data?.referenceTrack && !missingRequestedTake ? { id: 'reference', url: data.referenceTrack.url, name: data.referenceTrack.name || 'Reference mix' } : null;
   const isReference = activeAudio?.id === 'reference';
+  const projectName = data?.project?.name?.trim();
+  const songTitle = data?.lyrics?.title?.trim();
+  const sessionTitle = projectName || songTitle || (loading ? t('Laster studioøkten…', 'Loading studio session…') : t('Studioøkt', 'Studio session'));
+  const takeIndex = selectedTake ? (data?.takes.findIndex(take => take.id === selectedTake.id) ?? -1) + 1 : 0;
+  const recordedDate = selectedTake ? new Date(selectedTake.uploadedAt) : null;
+  const recordedAt = recordedDate && Number.isFinite(recordedDate.getTime())
+    ? new Intl.DateTimeFormat(en ? 'en-GB' : 'nb-NO', {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(recordedDate)
+    : null;
+  const audioContextLabel = isReference ? t('Referansemiks', 'Reference mix')
+    : activeAudio?.id === `memo-${selectedTake?.id}` ? t('Produsentens stemmenotat', 'Producer voice note')
+    : t(`Valgt opptak ${takeIndex} av ${data?.takes.length ?? 0}`, `Selected take ${takeIndex} of ${data?.takes.length ?? 0}`) + (recordedAt ? ` · ${recordedAt}` : '');
   const referenceComments = data?.referenceTrack?.producerComments || [];
   const hasFeedback = isReference ? referenceComments.length > 0 : Boolean(selectedTake?.producerNote || selectedTake?.producerMemoUrl || selectedTake?.regions.length);
   const feedbackKey = isReference ? JSON.stringify([data?.projectId, data?.referenceTrack?.versionId, referenceComments]) : JSON.stringify([data?.projectId, data?.trackId, selectedTake?.id, selectedTake?.producerNote, selectedTake?.producerMemoUrl, selectedTake?.regions]);
@@ -225,8 +241,8 @@ export default function BoothScreen() {
         <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
       </Pressable>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.headerEyebrow}>EaseVerse · Vocal booth</Text>
-        <Text style={styles.headerTitle} numberOfLines={1}>{data?.lyrics?.title || trackId}</Text>
+        <Text style={styles.headerEyebrow}>EaseVerse</Text>
+        <Text style={styles.headerTitle}>Sound Room</Text>
       </View>
       {auth.user?.picture ? <Image source={{ uri: new URL(auth.user.picture, getApiUrl()).href }} accessibilityLabel={auth.user.name || 'Artist'} style={{ width: 36, height: 36, borderRadius: 18 }} /> : null}
       <Pressable onPress={() => {
@@ -240,6 +256,18 @@ export default function BoothScreen() {
         <Text style={[styles.bpm, clickStatus === 'playing' && {color:Colors.background}]}>{effectiveBpm === null ? 'BPM —' : `${effectiveBpm} BPM`}</Text>
       </Pressable>
       {Platform.OS === 'web' && typeof Notification !== 'undefined' ? <Pressable onPress={togglePush} disabled={pushBusy} style={styles.headerButton} accessibilityRole="button" accessibilityLabel={pushOn ? 'Disable push notifications' : 'Enable push notifications'}><Ionicons name={pushOn ? 'notifications' : 'notifications-outline'} size={20} color={Colors.textSecondary} /></Pressable> : null}
+    </View>
+    <View style={styles.sessionContext} accessibilityLabel={t('Nåværende studioøkt', 'Current studio session')}>
+      <Text style={styles.sessionEyebrow}>{t('DU ER I STUDIOØKTEN', 'CURRENT STUDIO SESSION')}</Text>
+      <Text accessibilityRole="header" testID="booth-session-title" style={styles.sessionTitle}>{sessionTitle}</Text>
+      {projectName && songTitle && projectName !== songTitle ? <Text testID="booth-session-song" style={styles.sessionSong}>{t('Sang', 'Song')}: {songTitle}</Text> : null}
+      {activeAudio ? <View style={styles.sessionRecording}>
+        <Ionicons name={isReference ? 'musical-notes-outline' : 'mic-outline'} size={16} color={Colors.gradientMid} />
+        <View style={{flex:1,minWidth:0}}>
+          <Text testID="booth-session-selection" style={styles.sessionRecordingLabel}>{audioContextLabel}</Text>
+          <Text testID="booth-session-recording" style={styles.sessionRecordingName}>{activeAudio.name}</Text>
+        </View>
+      </View> : null}
     </View>
     <View style={styles.panelTabs} accessibilityRole="tablist">
       {(['lyrics', 'feedback', 'takes', 'requests'] as const).map(item => <Pressable key={item} disabled={requestPending && item!=='requests'} onPress={() => setPanel(item)} accessibilityRole="tab" accessibilityState={{ selected: panel === item }} aria-selected={panel === item} accessibilityLabel={item === 'lyrics' ? 'Lyrics' : item === 'feedback' ? 'Producer feedback' : item === 'requests' ? 'Recording requests' : 'Takes'} style={[styles.panelTab, panel === item && styles.panelTabActive]}>
@@ -564,7 +592,14 @@ const styles = StyleSheet.create({
   disagreeInput: { minHeight: 80, padding: 12, backgroundColor: Colors.background, borderRadius: 10, borderWidth: 1, borderColor: Colors.borderGlass, color: Colors.textPrimary, fontSize: 15 },
 
   screen: { flex: 1, backgroundColor: Colors.background, paddingHorizontal: 16 },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  sessionContext: { paddingBottom: 12, gap: 5 },
+  sessionEyebrow: { color: Colors.gradientMid, fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.8 },
+  sessionTitle: { color: Colors.textPrimary, fontFamily: 'Inter_700Bold', fontSize: 21, lineHeight: 27, flexShrink: 1 },
+  sessionSong: { color: Colors.textSecondary, fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19 },
+  sessionRecording: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 5 },
+  sessionRecordingLabel: { color: Colors.textTertiary, fontFamily: 'Inter_500Medium', fontSize: 11, lineHeight: 16 },
+  sessionRecordingName: { color: Colors.textSecondary, fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 17 },
   headerEyebrow: {
     color: Colors.textTertiary,
     fontFamily: "Inter_600SemiBold",
@@ -572,7 +607,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
-  headerTitle: { color: Colors.textPrimary, fontFamily: "Inter_700Bold", fontSize: 18, marginTop: 1 },
+  headerTitle: { color: Colors.textPrimary, fontFamily: "Inter_700Bold", fontSize: 16, lineHeight: 20, marginTop: 1 },
   bpm: { color: Colors.gradientMid, fontFamily: "Inter_700Bold", fontSize: 13 },
   scroll: { gap: 16, paddingVertical: 16, paddingBottom: 24 },
   lyricsCard: {

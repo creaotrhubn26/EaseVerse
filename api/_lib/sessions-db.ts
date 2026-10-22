@@ -27,7 +27,12 @@ async function ensureSchema(): Promise<void> {
       status TEXT NOT NULL DEFAULT 'active'
     );
     CREATE INDEX IF NOT EXISTS live_sessions_project_idx ON live_sessions (project_id, started_at DESC);
-    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS bpm INTEGER;
+    ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS bpm NUMERIC(7,3);
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='live_sessions' AND column_name='bpm' AND data_type='integer') THEN
+        ALTER TABLE live_sessions ALTER COLUMN bpm TYPE NUMERIC(7,3) USING bpm::numeric;
+      END IF;
+    END $$;
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS recording_armed_at TIMESTAMPTZ;
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS recording_starts_at TIMESTAMPTZ;
     ALTER TABLE live_sessions ADD COLUMN IF NOT EXISTS recording_stopped_at TIMESTAMPTZ;
@@ -399,7 +404,7 @@ function mapSession(row: SessionDbRow): LiveSessionRow {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     status: row.status,
-    bpm: row.bpm,
+    bpm: row.bpm == null ? null : Number(row.bpm),
     recordingArmedAt: row.recording_armed_at,
     recordingStartsAt: row.recording_starts_at,
     recordingStoppedAt: row.recording_stopped_at,

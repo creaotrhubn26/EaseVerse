@@ -64,3 +64,16 @@ test('Sing metronome remains audible through count-in and recording and stops wh
   await expect(page.getByRole('heading',{name:'Session Review',exact:true})).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>(window as any).__metronomeAudio.at(-1)?.closed)).toBe(true);
 });
+
+
+test('a song without BPM explains the missing tempo and stays on Sing', async ({page})=>{
+  await page.route('**/api/**',route=>route.fulfill({status:401,json:{error:'Isolated local QA'}}));
+  await page.addInitScript(()=>{
+    localStorage.setItem('@lyricflow_songs',JSON.stringify([{id:'no-tempo-qa',title:'No tempo QA',lyrics:'Hold the tone',sections:[],genre:'pop',createdAt:1,updatedAt:1}]));
+  });
+  await page.goto('/');await page.getByRole('button',{name:'Skip intro',exact:true}).click();
+  await page.getByRole('button',{name:'Metronome',exact:true}).click();
+  await expect(page.getByText('This song has no BPM yet. Open your producer’s song from Sessions, or set a practice BPM in Lyrics.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('tab',{name:'Sing tab',exact:true})).toHaveAttribute('aria-selected','true');
+  await expect(page.getByTestId('record-button')).toBeVisible();
+});

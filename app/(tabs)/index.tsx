@@ -58,6 +58,7 @@ const recordControlIconSource = require('@/assets/images/sing-record-v1.png');
 const stopControlIconSource = require('@/assets/images/sing-stop-v1.png');
 const metronomeControlIconSource = require('@/assets/images/sing-metronome-v1.png');
 const markerControlIconSource = require('@/assets/images/sing-marker-v1.png');
+const missingTempoMessage = 'This song has no BPM yet. Open your producer’s song from Sessions, or set a practice BPM in Lyrics.';
 
 function TransportIcon({ source, size, active, dimmed }: {
   source: ImageSourcePropType; size: number; active: boolean; dimmed?: boolean;
@@ -823,7 +824,8 @@ export default function SingScreen() {
       <Toast
         visible={toast.visible}
         message={toast.message}
-        variant="error"
+        variant={toast.message === missingTempoMessage ? "info" : "error"}
+        duration={toast.message === missingTempoMessage ? 8000 : 2200}
         onHide={() => setToast((current) => ({ ...current, visible: false }))}
       />
       <View style={[styles.singHeader, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
@@ -1079,7 +1081,7 @@ export default function SingScreen() {
               onPress={() => {
                 if (!bpmValue) {
                   Haptics.selectionAsync();
-                  router.push('/(tabs)/lyrics');
+                  setToast({ visible: true, message: missingTempoMessage });
                   return;
                 }
 
@@ -1099,7 +1101,7 @@ export default function SingScreen() {
               accessibilityHint={
                 bpmValue
                   ? `Toggles the metronome click at ${bpmValue} BPM`
-                  : 'Set a BPM in Lyrics to enable the metronome'
+                  : 'Explains how to choose a song with a tempo without leaving this screen'
               }
               accessibilityState={{ selected: settings.metronomeEnabled }}
             >
@@ -1109,7 +1111,7 @@ export default function SingScreen() {
                 active={settings.metronomeEnabled}
                 dimmed={false}
               />
-              <Text style={styles.transportLabel}>Metronome</Text>
+              <Text style={styles.transportLabel}>{bpmValue ? `${bpmValue} BPM` : 'Set tempo'}</Text>
             </Pressable>
           )}
         </View>

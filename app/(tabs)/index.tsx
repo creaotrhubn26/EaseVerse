@@ -6,7 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { AudioModule, useAudioPlayer } from 'expo-audio';
+import { useMetronome } from '@/lib/useMetronome';
+import { validBpm } from '@/lib/tempo';
 import { useAssets } from 'expo-asset';
 import Colors from '@/constants/colors';
 import { getGenreProfile, getGenreCoachHints, getWordTipForGenre } from '@/constants/genres';
@@ -76,7 +77,10 @@ export default function SingScreen() {
   const { activeSong, songs, sessions, setActiveSong, addSession, addSong, settings, updateSettings, updateSong } =
     useApp();
   const recording = useRecording();
-  const metronomePlayer = useAudioPlayer(require('@/assets/sounds/metronome-click.wav'));
+  const {start: startClick, stop: stopMetronome, error: metronomeError} = useMetronome();
+  const [metronomePreview, setMetronomePreview] = useState(false);
+  const [preparingRecording, setPreparingRecording] = useState(false);
+  const recordPressBusy = useRef(false);
   const [quality, setQuality] = useState<SignalQuality>('good');
   const [coachHint, setCoachHint] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('Ready to sing');
@@ -147,9 +151,6 @@ export default function SingScreen() {
   const liveRecognizerRef = useRef<any>(null);
   const liveRecognizerActiveRef = useRef(false);
   const liveRecognizerRestartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const metronomeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const metronomeBeatMsRef = useRef<number | null>(null);
-  const metronomeBeatRef = useRef(0);
 
   const isRecording = recording.isRecording;
   const isPaused = recording.isPaused;
@@ -183,12 +184,8 @@ export default function SingScreen() {
     () => lyricsText.split('\n').filter(l => l.trim()),
     [lyricsText]
   );
-  const bpm = activeSong?.bpm;
-  const bpmValue =
-    typeof bpm === 'number' && Number.isFinite(bpm)
-      ? Math.max(30, Math.min(300, Math.round(bpm)))
-      : null;
-  const beatMs = bpmValue ? Math.round(60000 / bpmValue) : 700;
+  const bpmValue = validBpm(activeSong?.bpm);
+  const beatMs = bpmValue ? 60000 / bpmValue : 700;
   const genre = activeSong?.genre || 'pop';
   const genreProfile = useMemo(() => getGenreProfile(genre), [genre]);
   const genreHints = useMemo(() => getGenreCoachHints(genre), [genre]);
@@ -234,86 +231,32 @@ export default function SingScreen() {
   const activeLineIndex = liveProgress.activeLineIndex;
   const activeWordIndex = liveProgress.activeWordIndex;
 
-  const stopMetronome = useCallback(() => {
-    if (metronomeIntervalRef.current) {
-      clearInterval(metronomeIntervalRef.current);
-      metronomeIntervalRef.current = null;
-    }
-    metronomeBeatMsRef.current = null;
-    metronomeBeatRef.current = 0;
-  }, []);
-
-  const playMetronomeTick = useCallback(
-    (accent: boolean) => {
-      // Per-beat haptic is opt-in (settings.metronomeHaptics) — the audible
-      // click is always the primary cue. Keeps the metronome from buzzing on
-      // every beat unless the user explicitly turns vibration on.
-      if (Platform.OS !== 'web' && settings.metronomeHaptics) {
-        void Haptics.selectionAsync();
-      }
-
-      try {
-        metronomePlayer.volume = accent ? 0.42 : 0.28;
-        void metronomePlayer.seekTo(0).catch(() => undefined);
-        metronomePlayer.play();
-      } catch {
-        // Ignore playback errors; the click is the primary metronome cue.
-      }
-    },
-    [metronomePlayer, settings.metronomeHaptics]
-  );
-
-  const startMetronome = useCallback(
-    async (options?: { immediate?: boolean }) => {
-      stopMetronome();
-      if (!bpmValue || isPaused || isAnalyzing) {
-        return;
-      }
-
-      try {
-        await AudioModule.setAudioModeAsync({ playsInSilentMode: true });
-      } catch {
-        // Ignore audio mode failures; click may still work on many platforms.
-      }
-
-      metronomeBeatRef.current = 0;
-      const immediate = options?.immediate ?? true;
-      if (immediate) {
-        metronomeBeatRef.current = 1;
-        playMetronomeTick(true);
-      }
-
-      metronomeBeatMsRef.current = beatMs;
-      metronomeIntervalRef.current = setInterval(() => {
-        metronomeBeatRef.current = (metronomeBeatRef.current % 4) + 1;
-        playMetronomeTick(metronomeBeatRef.current === 1);
-      }, beatMs);
-    },
-    [
-      beatMs,
-      bpmValue,
-      isAnalyzing,
-      isPaused,
-      playMetronomeTick,
-      stopMetronome,
-    ]
-  );
+  const startMetronome = useCallback(async () => {
+    if (bpmValue !== null) await startClick(bpmValue);
+  }, [bpmValue, startClick]);
 
   useEffect(() => {
-    // Only run the metronome while actively recording. Without the isRecording
-    // gate (the sibling pitch/tracking effects all have it) the click + per-beat
-    // Haptics.selectionAsync fired continuously just from sitting idle on a song
-    // with a BPM and the metronome setting on — a phone buzzing every beat.
-    if (!screenFocused || !isRecording || !settings.metronomeEnabled || !bpmValue || isPaused || isAnalyzing) {
-      stopMetronome();
-      return;
+    if (!screenFocused) {
+      setMetronomePreview(false);
+      cancelCountInRef.current = true;
     }
+    const shouldRun = screenFocused && settings.metronomeEnabled && bpmValue !== null &&
+      !isPaused && !isAnalyzing && (metronomePreview || preparingRecording || isRecording);
+    if (shouldRun) void startMetronome().catch(() => setMetronomePreview(false));
+    else stopMetronome();
+  }, [bpmValue, isAnalyzing, isPaused, isRecording, metronomePreview, preparingRecording, screenFocused, settings.metronomeEnabled, startMetronome, stopMetronome]);
 
-    if (!metronomeIntervalRef.current || metronomeBeatMsRef.current !== beatMs) {
-      void startMetronome({ immediate: false });
-    }
-    return () => stopMetronome();
-  }, [beatMs, bpmValue, isAnalyzing, isPaused, isRecording, screenFocused, settings.metronomeEnabled, startMetronome, stopMetronome]);
+  useEffect(() => {
+    if (metronomeError) setToast({visible:true, message:metronomeError});
+  }, [metronomeError]);
+
+  // Haptics are an optional tactile cue; the audio runs on its own native clock.
+  useEffect(() => {
+    if (Platform.OS === 'web' || !settings.metronomeHaptics || !settings.metronomeEnabled ||
+      !screenFocused || !isRecording || isPaused || bpmValue === null) return;
+    const timer = setInterval(() => { void Haptics.selectionAsync(); }, beatMs);
+    return () => clearInterval(timer);
+  }, [beatMs, bpmValue, isPaused, isRecording, screenFocused, settings.metronomeEnabled, settings.metronomeHaptics]);
 
   useEffect(() => {
     if (lyricsText) {
@@ -692,8 +635,10 @@ export default function SingScreen() {
     if (countInRemaining !== null) {
       cancelCountInRef.current = true;
       setCountInRemaining(null);
+      stopMetronome();
       return;
     }
+    if (recordPressBusy.current) return;
 
     if (!isRecording) {
       const isAutomatedBrowser =
@@ -711,15 +656,19 @@ export default function SingScreen() {
         return;
       }
 
+      recordPressBusy.current = true;
+      setPreparingRecording(true);
+      setMetronomePreview(false);
+      cancelCountInRef.current = false;
+      try {
       setLiveTranscript('');
       coachHintIndexRef.current = 0;
 
       if (settings.metronomeEnabled && bpmValue) {
-        await startMetronome({ immediate: true });
+        await startMetronome();
       }
 
       if (settings.countIn > 0) {
-        cancelCountInRef.current = false;
         for (let beat = settings.countIn; beat > 0; beat -= 1) {
           setCountInRemaining(beat);
           if (!settings.metronomeEnabled || !bpmValue) {
@@ -727,15 +676,21 @@ export default function SingScreen() {
           }
           await new Promise((resolve) => setTimeout(resolve, beatMs));
           if (cancelCountInRef.current) {
-            cancelCountInRef.current = false;
             return;
           }
         }
       }
 
+      if (cancelCountInRef.current) return;
       setCountInRemaining(null);
       const started = await recording.start();
-      if (!started) {
+      if (!started) stopMetronome();
+      } catch (error) {
+        stopMetronome();
+        setToast({visible:true, message:error instanceof Error ? error.message : 'Could not start recording.'});
+      } finally {
+        recordPressBusy.current = false;
+        setPreparingRecording(false);
         setCountInRemaining(null);
       }
     } else {
@@ -1132,8 +1087,10 @@ export default function SingScreen() {
                 updateSettings({ metronomeEnabled: next });
                 Haptics.selectionAsync();
                 if (next) {
-                  void startMetronome({ immediate: true });
+                  setMetronomePreview(true);
+                  void startMetronome().catch(() => setMetronomePreview(false));
                 } else {
+                  setMetronomePreview(false);
                   stopMetronome();
                 }
               }}

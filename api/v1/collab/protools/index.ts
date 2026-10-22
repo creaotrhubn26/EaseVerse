@@ -87,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const ownerUserId = actor.kind === "user" ? actor.ownerUserId : requestedOwner ?? "__service__";
       const bpmValue = Number(body?.bpm);
       const bpm = Number.isFinite(bpmValue) && bpmValue >= 20 && bpmValue <= 400
-        ? Math.round(bpmValue)
+        ? bpmValue
         : undefined;
       const context = integrationContext(body?.integrationContext);
       const rec: ProToolsRecord = {

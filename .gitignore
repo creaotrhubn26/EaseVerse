@@ -62,3 +62,11 @@ ios-creds/
 
 # Local simulator build output
 ios-build/
+
+# Keep local Expo module source; only top-level native projects are generated.
+!modules/easeverse-metronome/ios/
+!modules/easeverse-metronome/ios/**
+!modules/easeverse-metronome/android/
+!modules/easeverse-metronome/android/**
+modules/easeverse-metronome/android/.gradle/
+modules/easeverse-metronome/android/build/

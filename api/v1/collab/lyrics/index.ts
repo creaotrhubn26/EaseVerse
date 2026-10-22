@@ -33,7 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         projectId: b?.projectId ? String(b.projectId).slice(0, 160) : undefined,
         title: title.slice(0, 240),
         artist: b?.artist ? String(b.artist).slice(0, 160) : undefined,
-        bpm: Number.isFinite(Number(b?.bpm)) ? Math.round(Number(b.bpm)) : undefined,
+        bpm: Number.isFinite(Number(b?.bpm)) ? Number(b.bpm) : undefined,
         lyrics: lyrics.slice(0, 20000),
         collaborators: Array.isArray(b?.collaborators) ? b.collaborators.filter((x: unknown) => typeof x === "string").slice(0, 40) : [],
         source: b?.source ? String(b.source).slice(0, 120) : "external",

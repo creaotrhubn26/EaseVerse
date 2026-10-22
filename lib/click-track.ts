@@ -3,6 +3,7 @@
 // JS event loop is busy. Accented downbeat (higher pitch) every N beats.
 
 export type ClickHandle = {
+  ready: Promise<void>;
   stop: () => void;
   isRunning: () => boolean;
 };
@@ -12,19 +13,20 @@ export type ClickOptions = {
   beatsPerBar?: number;
   accentDownbeat?: boolean;
   volume?: number;
+  onStopped?: (message: string) => void;
 };
 
 export function startClick(opts: ClickOptions): ClickHandle {
   if (typeof window === "undefined") {
-    return { stop: () => undefined, isRunning: () => false };
+    throw new Error('Metronome audio is unavailable on this platform.');
   }
   const ctx = new (window.AudioContext ||
     (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
   const beatsPerBar = Math.max(1, Math.min(12, opts.beatsPerBar ?? 4));
-  const interval = 60 / Math.max(20, Math.min(300, opts.bpm));
+  const interval = 60 / Math.max(20, Math.min(400, opts.bpm));
   const lookahead = 0.1; // seconds to schedule ahead of currentTime
   const scheduleAheadTime = 0.25;
-  let nextTime = ctx.currentTime + 0.1;
+  let nextTime = ctx.currentTime + 0.025;
   let beat = 0;
   let running = true;
 
@@ -53,12 +55,16 @@ export function startClick(opts: ClickOptions): ClickHandle {
     timer = setTimeout(scheduler, lookahead * 1000);
   }
 
-  let timer: ReturnType<typeof setTimeout> = setTimeout(scheduler, 0);
+  let timer: ReturnType<typeof setTimeout>;
+  const ready=ctx.resume().then(()=>{if(running){if(ctx.state!=='running')throw new Error('Tap again to allow metronome audio.');nextTime=ctx.currentTime+0.025;timer=setTimeout(scheduler,0);}});
+  ctx.onstatechange=()=>{if(running&&ctx.state!=='running'){opts.onStopped?.('Audio was interrupted. Tap the metronome to restart.');}};
 
   return {
+    ready,
     stop() {
       running = false;
       clearTimeout(timer);
+      ctx.onstatechange=null;
       void ctx.close();
     },
     isRunning() {

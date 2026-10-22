@@ -78,17 +78,21 @@ async function ensureLyricsTable(p: Pool): Promise<void> {
   if (!lyricsReady) lyricsReady = (async () => {
     await p.query(`CREATE TABLE IF NOT EXISTS collab_lyrics_drafts (
       external_track_id VARCHAR(160) PRIMARY KEY, project_id VARCHAR(160), title VARCHAR(240) NOT NULL,
-      artist VARCHAR(160), bpm INTEGER, lyrics TEXT NOT NULL, collaborators JSONB NOT NULL DEFAULT '[]'::jsonb,
+      artist VARCHAR(160), bpm NUMERIC(7,3), lyrics TEXT NOT NULL, collaborators JSONB NOT NULL DEFAULT '[]'::jsonb,
       source VARCHAR(120) NOT NULL DEFAULT 'external', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());`);
-    await p.query(`ALTER TABLE collab_lyrics_drafts ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 1;`);
+    await p.query(`DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='collab_lyrics_drafts' AND column_name='bpm' AND data_type='integer') THEN
+        ALTER TABLE collab_lyrics_drafts ALTER COLUMN bpm TYPE NUMERIC(7,3) USING bpm::numeric;
+      END IF;
+    END $$; ALTER TABLE collab_lyrics_drafts ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 1;`);
     await p.query(`CREATE INDEX IF NOT EXISTS idx_collab_lyrics_drafts_project_id ON collab_lyrics_drafts(project_id);`);
     await p.query(`CREATE INDEX IF NOT EXISTS idx_collab_lyrics_drafts_source ON collab_lyrics_drafts(source);`);
   })();
   return lyricsReady;
 }
 function mapLyrics(row: any): CollabLyricsRecord {
-  const bpm = row.bpm == null ? undefined : (Number.isFinite(Number(row.bpm)) ? Math.round(Number(row.bpm)) : undefined);
+  const bpm = row.bpm == null ? undefined : (Number.isFinite(Number(row.bpm)) ? Number(row.bpm) : undefined);
   return {
     externalTrackId: String(row.external_track_id), projectId: row.project_id ? String(row.project_id) : undefined,
     title: String(row.title), artist: row.artist ? String(row.artist) : undefined, bpm, lyrics: String(row.lyrics),
@@ -270,13 +274,18 @@ async function ensurePtTable(p: Pool): Promise<void> {
       owner_user_id VARCHAR(160) NOT NULL DEFAULT '__service__',
       external_track_id VARCHAR(160) NOT NULL, project_id VARCHAR(160) NOT NULL DEFAULT '__default__',
       schema_version INTEGER NOT NULL DEFAULT 1, event_id VARCHAR(240), revision BIGINT NOT NULL DEFAULT 0,
-      source VARCHAR(120) NOT NULL DEFAULT 'protools-companion', bpm INTEGER, key_signature VARCHAR(32),
+      source VARCHAR(120) NOT NULL DEFAULT 'protools-companion', bpm NUMERIC(7,3), key_signature VARCHAR(32),
       time_signature VARCHAR(24), integration_context JSONB NOT NULL DEFAULT '{}'::jsonb,
       markers JSONB NOT NULL DEFAULT '[]'::jsonb, take_scores JSONB NOT NULL DEFAULT '[]'::jsonb,
       pronunciation_feedback JSONB NOT NULL DEFAULT '[]'::jsonb, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (owner_user_id, external_track_id, project_id));`);
     await p.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='collab_protools_sync' AND column_name='bpm' AND data_type='integer') THEN
+          ALTER TABLE collab_protools_sync ALTER COLUMN bpm TYPE NUMERIC(7,3) USING bpm::numeric;
+        END IF;
+      END $$;
       ALTER TABLE collab_protools_sync ADD COLUMN IF NOT EXISTS owner_user_id VARCHAR(160) NOT NULL DEFAULT '__service__';
       ALTER TABLE collab_protools_sync ADD COLUMN IF NOT EXISTS schema_version INTEGER NOT NULL DEFAULT 1;
       ALTER TABLE collab_protools_sync ADD COLUMN IF NOT EXISTS event_id VARCHAR(240);
@@ -308,7 +317,7 @@ async function ensurePtTable(p: Pool): Promise<void> {
 }
 
 function mapPt(row: any): ProToolsRecord {
-  const bpm = row.bpm == null ? undefined : (Number.isFinite(Number(row.bpm)) ? Math.round(Number(row.bpm)) : undefined);
+  const bpm = row.bpm == null ? undefined : (Number.isFinite(Number(row.bpm)) ? Number(row.bpm) : undefined);
   const rawContext = jsonObject(row.integration_context);
   const integrationContext: ProToolsIntegrationContext = {
     creatorhubProjectId: optionalString(rawContext.creatorhubProjectId, 160),

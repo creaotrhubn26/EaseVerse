@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Image, Pressable, StyleSheet, View, type ImageSourcePropType } from 'react-native';
+import { useAssets } from 'expo-asset';
+import { Image, Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -9,8 +10,6 @@ import Animated, {
   interpolate,
   Easing,
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 
@@ -27,8 +26,9 @@ export default function RecordButton({
   isPaused,
   onPress,
   size = 80,
-  iconSource = require('@/assets/images/record_icon.png'),
+  iconSource = require('@/assets/images/sing-record-v1.png'),
 }: RecordButtonProps) {
+  useAssets([require('@/assets/images/sing-pause-v1.png'), require('@/assets/images/sing-resume-v1.png')]);
   const pulseAnim = useSharedValue(0);
   const pressScale = useSharedValue(1);
   const touchPulseAnim = useSharedValue(0);
@@ -108,7 +108,7 @@ export default function RecordButton({
         <Pressable
           onPress={handlePress}
           onPressIn={handlePressIn}
-          style={[styles.pressable, !isRecording && styles.pressableIdle]}
+          style={[styles.pressable, { borderRadius: size / 2 }, !isRecording && styles.pressableIdle]}
           testID="record-button"
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
@@ -126,21 +126,16 @@ export default function RecordButton({
               accessible={false}
             />
           ) : (
-            <LinearGradient
-              colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[styles.button, { width: size, height: size, borderRadius: size / 2 }]}
-            >
-              {isPaused ? (
-                <Ionicons name="play" size={size * 0.4} color="#fff" style={{ marginLeft: 4 }} />
-              ) : (
-                <Ionicons name="pause" size={size * 0.4} color="#fff" />
-              )}
-            </LinearGradient>
+            <View style={[styles.button, { width: size, height: size, borderRadius: size / 2 }]}>
+              <Image source={isPaused
+                ? require('@/assets/images/sing-resume-v1.png')
+                : require('@/assets/images/sing-pause-v1.png')}
+                style={{width: size * 0.66, height: size * 0.66}} resizeMode="contain" accessible={false} />
+            </View>
           )}
         </Pressable>
       </Animated.View>
+      <Text style={styles.caption}>{!isRecording ? 'Record' : isPaused ? 'Resume' : 'Pause'}</Text>
     </View>
   );
 }
@@ -162,7 +157,11 @@ const styles = StyleSheet.create({
     boxShadow: 'none',
     elevation: 0,
   },
+  caption: { position: 'absolute', bottom: -1, color: Colors.textSecondary, fontSize: 11, fontFamily: 'Inter_600SemiBold' },
   button: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.accentBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },

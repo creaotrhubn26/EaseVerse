@@ -6,6 +6,7 @@
 [build.environment]
   NODE_VERSION = "22.23.2"
   EXPO_PUBLIC_API_URL = "https://easeverse.netlify.app"
+  EXPO_PUBLIC_CLOUD_PRACTICE_ANALYSIS_ENABLED = "0"
   EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET = "1"
 
 [functions]
@@ -26,3 +27,9 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+[[headers]]
+  for = "/.well-known/apple-app-site-association"
+  [headers.values]
+    Content-Type = "application/json"
+    Cache-Control = "public, max-age=300"

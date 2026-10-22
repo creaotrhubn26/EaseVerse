@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -17,11 +17,14 @@ function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number })
   const { user, isLoaded } = useUser();
   const { signOut } = useAuth();
   const [signingOut, setSigningOut] = React.useState(false);
+  const [photoFailed,setPhotoFailed]=React.useState(false);
+  const [error,setError]=React.useState('');
+  React.useEffect(()=>{setPhotoFailed(false);setError('');},[user?.id,user?.picture]);
 
   if (!isLoaded) {
     return (
       <View style={[styles.card, { marginHorizontal: horizontalMargin }]}>
-        <ActivityIndicator color={Colors.textTertiary} />
+        <ActivityIndicator accessibilityLabel="Loading account" color={Colors.textTertiary} />
       </View>
     );
   }
@@ -35,10 +38,10 @@ function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number })
           </View>
           <View style={styles.headerText}>
             <Text style={styles.title}>You&apos;re signed out</Text>
-            <Text style={styles.subtitle}>Sign in to sync sessions across devices.</Text>
+            <Text style={styles.subtitle}>Connect to Sound Room for shared studio projects. Your local recordings stay on this device.</Text>
           </View>
         </View>
-        <Pressable onPress={() => router.push('/(auth)/sign-in')} accessibilityRole="button">
+        <Pressable onPress={() => router.push('/(auth)/sign-in')} accessibilityRole="button" accessibilityLabel="Sign in to CreatorHub">
           <LinearGradient
             colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd] as const}
             start={{ x: 0, y: 0 }}
@@ -53,7 +56,7 @@ function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number })
           style={styles.secondaryButton}
           accessibilityRole="button"
         >
-          <Text style={styles.secondaryButtonText}>Create account</Text>
+          <Text style={styles.secondaryButtonText}>Invited by your producer?</Text>
         </Pressable>
       </View>
     );
@@ -66,13 +69,13 @@ function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number })
     <View style={[styles.card, { marginHorizontal: horizontalMargin }]}>
       <View style={styles.headerRow}>
         <View style={styles.avatarPlaceholder}>
-          <Ionicons name="person-circle" size={28} color={Colors.gradientStart} />
+          {user.picture&&!photoFailed?<Image source={{uri:user.picture}} style={styles.avatarImage} onError={()=>setPhotoFailed(true)} accessible={false}/>:<Text style={styles.initial}>{displayName.trim().charAt(0).toUpperCase()}</Text>}
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={styles.title} numberOfLines={2}>
             {displayName}
           </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={styles.subtitle} numberOfLines={2}>
             {user.email}
           </Text>
         </View>
@@ -80,14 +83,15 @@ function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number })
       <Pressable
         onPress={async () => {
           if (signingOut) return;
-          setSigningOut(true);
+          setSigningOut(true);setError('');
           try {
             await signOut();
-          } finally {
+          } catch {setError('Could not confirm sign-out. Please try again.');} finally {
             setSigningOut(false);
           }
         }}
         disabled={signingOut}
+        accessibilityLabel="Sign out of CreatorHub"
         style={styles.secondaryButton}
         accessibilityRole="button"
       >
@@ -97,13 +101,14 @@ function AccountSectionInner({ horizontalMargin }: { horizontalMargin: number })
           <Text style={styles.secondaryButtonText}>Sign out</Text>
         )}
       </Pressable>
+      {!!error&&<Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    marginTop: 12,
+    marginTop: 0,
     padding: 16,
     borderRadius: 18,
     backgroundColor: Colors.surface,
@@ -120,7 +125,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerText: { flex: 1 },
+  avatarImage:{width:40,height:40,borderRadius:20},initial:{color:Colors.gradientMid,fontSize:20,fontFamily:'Inter_700Bold'},error:{color:Colors.dangerUnderline,fontSize:13,lineHeight:20},
+  headerText: { flex: 1,minWidth:0 },
   title: {
     color: Colors.textPrimary,
     fontFamily: 'Inter_700Bold',
@@ -130,15 +136,20 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     fontFamily: 'Inter_500Medium',
     fontSize: 12,
-    marginTop: 2,
+    lineHeight:19,
+    marginTop: 4,
   },
   primaryButton: {
+    minHeight:48,
+    justifyContent:'center',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
   },
-  primaryButtonText: { color: '#fff', fontFamily: 'Inter_700Bold', fontSize: 14 },
+  primaryButtonText: { color: Colors.background, fontFamily: 'Inter_700Bold', fontSize: 14 },
   secondaryButton: {
+    minHeight:48,
+    justifyContent:'center',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',

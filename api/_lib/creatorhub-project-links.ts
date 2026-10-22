@@ -178,3 +178,61 @@ export async function updateCreatorHubReferenceMix(args: {
 }
 
 export { ensureSchema as ensureCreatorHubProjectLinksSchema };
+
+/** Invitation was verified against the CreatorHub account before this call.
+ * Retry-safe; never grants producer rights or overwrites an existing role. */
+export async function acceptSoundRoomProjectInvitation(
+  context: {
+    ownerUserId: string;
+    audioReviewProjectId: string;
+    externalTrackId: string | null;
+    easeverseAccess: boolean;
+    profile: { role: string };
+  },
+  actorUserId: string,
+  email: string,
+): Promise<{ projectId: string; trackId: string | null } | null> {
+  const p = getPool();
+  if (!p) throw new Error("Project synchronization unavailable");
+  await ensureSchema();
+  const result = await p.query(
+    `SELECT easeverse_project_id FROM creatorhub_project_links
+     WHERE owner_user_id=$1 AND audio_review_project_id=$2
+       AND external_track_id IS NOT DISTINCT FROM $3 LIMIT 1`,
+    [context.ownerUserId, context.audioReviewProjectId, context.externalTrackId],
+  );
+  const projectId = result.rows[0]?.easeverse_project_id;
+  if (!projectId) return null;
+  if (context.easeverseAccess) {
+    const role = /observer|observat/i.test(context.profile.role) ? "observer"
+      : /vokal|vocal|artist|sanger/i.test(context.profile.role) ? "vocalist"
+      : /mix|miks|teknik/i.test(context.profile.role) ? "mix_engineer" : "band_member";
+    await p.query(
+      `INSERT INTO project_members (project_id,user_id,email,role,invited_by_user_id)
+       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (project_id,user_id) DO NOTHING`,
+      [projectId, actorUserId, email, role, context.ownerUserId],
+    );
+  }
+  const member = await getProjectMembership(projectId, actorUserId);
+  return member ? { projectId, trackId: context.externalTrackId } : null;
+}
+
+/** Only a personal membership issued by the owner of a linked Sound Room
+ * project unlocks the artist workspace. Personal/unlinked projects and the
+ * producer's own project cannot bypass prototype approval. */
+export async function getInvitedStudioProjects(userId: string): Promise<string[]> {
+  const p = getPool();
+  if (!p) throw new Error("Project access unavailable");
+  await ensureSchema();
+  const { rows } = await p.query<{ project_id: string }>(
+    `SELECT DISTINCT m.project_id FROM project_members m
+     JOIN projects p ON p.id=m.project_id
+     JOIN creatorhub_project_links l ON l.easeverse_project_id=p.id AND l.owner_user_id=p.owner_user_id
+     WHERE m.user_id=$1 AND m.user_id<>p.owner_user_id
+       AND m.invited_by_user_id=p.owner_user_id
+       AND m.role IN ('vocalist','band_member','mix_engineer','observer')
+       AND l.audio_review_project_id IS NOT NULL
+     ORDER BY m.project_id LIMIT 100`, [userId],
+  );
+  return rows.map(row => row.project_id);
+}

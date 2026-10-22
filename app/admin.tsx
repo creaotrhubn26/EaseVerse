@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/creatorhub-auth";
 import Colors from "@/constants/colors";
 import { AUTH_CONFIGURED, useAppUser, type AppUser } from "@/lib/use-app-user";
 import { authedFetch } from "@/lib/authed-fetch";
+import type { DeletionRequest } from '@/api/_lib/account-deletion-db';
 
 type AdminUsageRow = {
   userId: string | null;
@@ -55,6 +56,7 @@ function AdminScreenInner() {
   const { user, loading } = useAppUser();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [usage, setUsage] = useState<AdminUsageRow[]>([]);
+  const [deletions, setDeletions] = useState<DeletionRequest[]>([]);
   const [window, setWindow] = useState<"day" | "week" | "month">("month");
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,9 +64,10 @@ function AdminScreenInner() {
   const load = useCallback(async () => {
     try {
       const token = await getToken();
-      const [usersRes, usageRes] = await Promise.all([
+      const [usersRes, usageRes, deletionsRes] = await Promise.all([
         authedFetch("/api/admin/users", token, { method: "GET" }),
         authedFetch(`/api/admin/usage?window=${window}`, token, { method: "GET" }),
+        authedFetch('/api/admin/deletion-requests', token, {method: 'GET'}),
       ]);
       if (!usersRes.ok) throw new Error(`users: ${usersRes.status}`);
       if (!usageRes.ok) throw new Error(`usage: ${usageRes.status}`);
@@ -72,6 +75,9 @@ function AdminScreenInner() {
       const usageJson = (await usageRes.json()) as { perUser: AdminUsageRow[] };
       setUsers(usersJson.users);
       setUsage(usageJson.perUser);
+      if (!deletionsRes.ok) throw new Error('Account-deletion queue could not load. Retry before processing requests.');
+      setDeletions((await deletionsRes.json()).requests);
+      setError(null);
     } catch (err) {
       setError((err as Error).message || "Load failed");
     }
@@ -174,7 +180,12 @@ function AdminScreenInner() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <ChangelogComposer getToken={getToken} />
-
+      <Text style={styles.section}>Account deletion requests ({deletions.length})</Text>
+      <Text style={styles.subtitle}>These are pending requests, not completed deletions. Verify ownership and fulfil deletion across EaseVerse storage and the shared CreatorHub account. Do not mark a user as banned in place of deletion.</Text>
+      {deletions.map(request=><View key={request.id} style={styles.userCard}>
+        <Text selectable style={styles.userEmail}>{request.email}</Text>
+        <Text selectable style={styles.userMeta}>{request.id} · {new Date(request.requestedAt).toLocaleString()}</Text>
+      </View>)}
 
       <Text style={styles.section}>Users ({users.length})</Text>
       {users.map((u) => {

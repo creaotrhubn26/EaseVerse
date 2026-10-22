@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { StyleSheet, View, Pressable, Animated, Text } from 'react-native';
+import { StyleSheet, View, Pressable, Animated, Text, Platform } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -45,8 +45,8 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
         }}
         style={styles.deleteAction}
         accessibilityRole="button"
-        accessibilityLabel="Delete session"
-        accessibilityHint="Removes this recording from your sessions"
+        accessibilityLabel={`Delete recording ${session.title}`}
+        accessibilityHint="Asks for confirmation before removing this recording"
       >
         <Animated.View style={[styles.deleteContent, { transform: [{ scale }], opacity }]}>
           <Ionicons name="trash-outline" size={actionIconSize} color="#fff" />
@@ -81,8 +81,8 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
         }}
         style={styles.favoriteAction}
         accessibilityRole="button"
-        accessibilityLabel={session.favorite ? 'Remove favorite' : 'Mark as favorite'}
-        accessibilityHint="Adds or removes this session from flagged sessions"
+        accessibilityLabel={session.favorite ? `Remove ${session.title} from favorites` : `Add ${session.title} to favorites`}
+        accessibilityHint="Adds or removes this recording from favorites"
         accessibilityState={{ selected: session.favorite }}
       >
         <Animated.View style={[styles.favoriteContent, { transform: [{ scale }], opacity }]}>
@@ -93,12 +93,15 @@ export default function SwipeableSessionCard({ session, onPress, onFavorite, onD
               color="#fff"
             />
           </View>
-          <Text style={styles.actionLabel}>{session.favorite ? 'Unfave' : 'Fave'}</Text>
+          <Text style={styles.actionLabel}>{session.favorite ? 'Remove' : 'Favorite'}</Text>
         </Animated.View>
       </Pressable>
     );
   };
 
+  if (Platform.OS === 'web') {
+    return <SessionCard session={session} onPress={onPress} onFavorite={onFavorite} onDelete={onDelete} />;
+  }
   return (
     <Swipeable
       ref={swipeableRef}

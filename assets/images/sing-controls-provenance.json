@@ -1,0 +1,43 @@
+{
+  "tool": "OpenAI built-in ImageGen",
+  "createdAt": "2026-10-21",
+  "purpose": "Transparent EaseVerse Sing transport icons. Raster assets optimized to 256px; semantics and hit targets remain native UI.",
+  "assets": [
+    {
+      "key": "record",
+      "prompt": "Create one production-ready raster UI glyph for EaseVerse, a premium professional dark music recording app. Square 1:1 canvas, genuinely transparent background. Single centered symbol only, occupying 76% of canvas with balanced equal padding. Flat front-facing view, precisely balanced geometry, crisp antialiased edges, optically consistent thick strokes, subtle tactile satin finish only inside the shape. Designed to remain unmistakable at 24 to 48 CSS pixels. Restrained modern audio-software control style. No enclosing button tile, no background, no drop shadow, no glow, no glass, no perspective, no letters, no labels, no words, no extra shapes, no watermark. Exact symbol: One solid circular recording dot inside one thin concentric circular ring. The dot is large and unequivocally RECORD. Warm recording red #FF5C45 with a restrained amber rim highlight.",
+      "path": "assets/images/sing-record-v1.png",
+      "sourceFile": "exec-1fc3ac82-b289-4e9e-a414-8c7f5d0fa371.png"
+    },
+    {
+      "key": "pause",
+      "prompt": "Create one production-ready raster UI glyph for EaseVerse, a premium professional dark music recording app. Square 1:1 canvas, genuinely transparent background. Single centered symbol only, occupying 76% of canvas with balanced equal padding. Flat front-facing view, precisely balanced geometry, crisp antialiased edges, optically consistent thick strokes, subtle tactile satin finish only inside the shape. Designed to remain unmistakable at 24 to 48 CSS pixels. Restrained modern audio-software control style. No enclosing button tile, no background, no drop shadow, no glow, no glass, no perspective, no letters, no labels, no words, no extra shapes, no watermark. Exact symbol: Exactly two parallel upright rectangular pause bars with gently rounded corners. Warm ivory #FFF2DF with restrained amber highlights.",
+      "path": "assets/images/sing-pause-v1.png",
+      "sourceFile": "exec-7e92e3da-2cc2-4f53-af48-e648a7123daa.png"
+    },
+    {
+      "key": "resume",
+      "prompt": "Create one production-ready raster UI glyph for EaseVerse, a premium professional dark music recording app. Square 1:1 canvas, genuinely transparent background. Single centered symbol only, occupying 76% of canvas with balanced equal padding. Flat front-facing view, precisely balanced geometry, crisp antialiased edges, optically consistent thick strokes, subtle tactile satin finish only inside the shape. Designed to remain unmistakable at 24 to 48 CSS pixels. Restrained modern audio-software control style. No enclosing button tile, no background, no drop shadow, no glow, no glass, no perspective, no letters, no labels, no words, no extra shapes, no watermark. Exact symbol: Exactly one right-pointing equilateral play triangle with subtly rounded corners. Warm ivory #FFF2DF with restrained amber highlights.",
+      "path": "assets/images/sing-resume-v1.png",
+      "sourceFile": "exec-64d8cbcb-1148-45f2-a538-5e6ff5dc4514.png"
+    },
+    {
+      "key": "stop",
+      "prompt": "Create one production-ready raster UI glyph for EaseVerse, a premium professional dark music recording app. Square 1:1 canvas, genuinely transparent background. Single centered symbol only, occupying 76% of canvas with balanced equal padding. Flat front-facing view, precisely balanced geometry, crisp antialiased edges, optically consistent thick strokes, subtle tactile satin finish only inside the shape. Designed to remain unmistakable at 24 to 48 CSS pixels. Restrained modern audio-software control style. No enclosing button tile, no background, no drop shadow, no glow, no glass, no perspective, no letters, no labels, no words, no extra shapes, no watermark. Exact symbol: Exactly one solid square stop symbol with gently rounded corners. Warm ivory #FFF2DF with restrained amber highlights.",
+      "path": "assets/images/sing-stop-v1.png",
+      "sourceFile": "exec-101b5f10-8c3a-4715-9f4e-19aafa4df67e.png"
+    },
+    {
+      "key": "marker",
+      "prompt": "Create one production-ready raster UI glyph for EaseVerse, a premium professional dark music recording app. Square 1:1 canvas, genuinely transparent background. Single centered symbol only, occupying 76% of canvas with balanced equal padding. Flat front-facing view, precisely balanced geometry, crisp antialiased edges, optically consistent thick strokes, subtle tactile satin finish only inside the shape. Designed to remain unmistakable at 24 to 48 CSS pixels. Restrained modern audio-software control style. No enclosing button tile, no background, no drop shadow, no glow, no glass, no perspective, no letters, no labels, no words, no extra shapes, no watermark. Exact symbol: One upright timeline marker: a clean slender vertical stem with a small right-pointing pennant attached at the top. Warm ivory stem and warm amber #FF9A50 pennant. Recognizable bookmark/recording marker silhouette.",
+      "path": "assets/images/sing-marker-v1.png",
+      "sourceFile": "exec-c3318c49-3bf3-4360-8aed-027e2cabc9df.png"
+    },
+    {
+      "key": "metronome",
+      "prompt": "Create one production-ready raster UI glyph for EaseVerse, a premium professional dark music recording app. Square 1:1 canvas, genuinely transparent background. Single centered symbol only, occupying 76% of canvas with balanced equal padding. Flat front-facing view, precisely balanced geometry, crisp antialiased edges, optically consistent thick strokes, subtle tactile satin finish only inside the shape. Designed to remain unmistakable at 24 to 48 CSS pixels. Restrained modern audio-software control style. No enclosing button tile, no background, no drop shadow, no glow, no glass, no perspective, no letters, no labels, no words, no extra shapes, no watermark. Exact symbol: One compact iconic mechanical metronome: an upright tapered triangular outline, flat base, and one clearly visible tilted pendulum arm with a small weight. Minimal unmistakable silhouette. Warm ivory #FFF2DF outline and amber #FF9A50 pendulum.",
+      "path": "assets/images/sing-metronome-v1.png",
+      "sourceFile": "exec-a5ff4db9-22f0-4c31-84da-a70446b29420.png"
+    }
+  ]
+}

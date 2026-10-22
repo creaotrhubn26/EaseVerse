@@ -1,0 +1,21 @@
+{
+  "tool": "OpenAI built-in imagegen",
+  "createdAt": "2026-10-21",
+  "assets": [
+    {
+      "path": "assets/images/studio-preparation-amber-v1.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: editorial illustration for EaseVerse mobile vocal warmup and studio preparation. A beautifully restrained tactile 3D still life: an unbranded studio microphone and soft folded ribbon forming one gentle breath-like curve, warm amber light over charcoal-black background, fine matte material, premium contemporary music app aesthetic. Wide 3:2 composition, subject slightly right of center, generous clean negative space. Calm, intimate, grounded in a real recording studio. No people, no lettering, no logos, no UI, no waveform, no glowing neon rings, no medical or anatomical imagery. This illustration supports a functional native UI; do not render buttons or text.",
+      "use": "Sing start screen and producer warmup overview; decorative, no UI baked into image."
+    },
+    {
+      "path": "assets/images/lyrics-notebook-amber-v1.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: small editorial artwork beside the Lyrics heading in EaseVerse, a premium dark music writing app. Square composition, a close-up still life of a matte charcoal songwriting notebook, one elegantly sharpened amber-orange pencil resting diagonally across a blank page, a soft folded corner, tactile paper and restrained warm studio lighting. Subject centered and legible at a small display size. Dark charcoal background matches #0E0F14, warm amber accent. Clean, grounded, intimate, quietly creative. No lettering, no lyrics, no logo, no watermark, no UI, no borders, no neon, no floating particles, no music notes, no human hands.",
+      "use": "Small decorative artwork beside the Lyrics heading, excluded from accessibility navigation."
+    },
+    {
+      "path": "assets/images/sessions-headphones-amber-v1.jpg",
+      "prompt": "Use case: stylized-concept. Asset type: editorial artwork for the Sessions recording library in EaseVerse, a premium dark music app. A close-up still life of elegant unbranded over-ear studio headphones resting on a charcoal felt desk, a neatly coiled audio cable and warm amber side lighting. Quietly tactile, realistic materials, intimate small recording studio atmosphere. Wide 3:2 composition, headphones centered with clean dark breathing room around them. Background matches deep charcoal #0E0F14. Rich detail but a restrained warm orange accent, consistent with a professional music writing app. No text, no logo, no watermark, no UI, no fake waveforms, no active recording lights, no people or hands, no neon, no decorative particles. The illustration is decorative, not a functional control.",
+      "use": "Sessions heading and empty local library, decorative and excluded from accessibility navigation."
+    }
+  ]
+}

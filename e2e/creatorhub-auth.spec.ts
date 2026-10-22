@@ -29,6 +29,7 @@ test("cookie-only sign-in reaches private uploads and preserves server authoriza
   await page.goto("/profile");
   await expect.poll(() => registered).toBe(true);
   await page.goto("/sessions");
+  await page.getByRole("button", {name:"Studio takes",exact:true}).click();
   await page.getByRole("combobox").selectOption("cookie-project");
   await expect(page.getByRole('button', { name: 'View lyrics and producer feedback' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mark take Keeper' })).toHaveCount(0);
@@ -62,7 +63,7 @@ test("starts sign-in with the shared CreatorHub Workspace OAuth flow", async ({ 
   await page.goto("/sign-in");
   const skip = page.getByRole("button", { name: "Skip intro" });
   if (await skip.isVisible()) await skip.click();
-  await page.getByRole("button", { name: "Continue with CreatorHub" }).click();
+  await page.getByRole("button", { name: "Continue with Google" }).click();
 
   await expect(page).toHaveURL(/accounts\.google\.com\/o\/oauth2\/v2\/auth/);
   expect(startPayload).toEqual({ platform: "web" });

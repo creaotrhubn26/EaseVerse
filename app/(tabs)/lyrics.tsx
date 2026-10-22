@@ -9,6 +9,7 @@ import {
   ScrollView,
   Platform,
   Modal,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -312,9 +313,10 @@ export default function LyricsScreen() {
   const tapTempoRef = useRef<number[]>([]);
   const findCursorRef = useRef(0);
   const editorRef = useRef<TextInput | null>(null);
+  const openedSongId = useRef(activeSong?.id ?? null);
   const findInputRef = useRef<TextInput | null>(null);
 
-  const webTopInset = Platform.OS === 'web' ? 67 : 0;
+  const webTopInset = 0; // Safe-area insets already account for the device chrome.
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
   const horizontalInset = responsive.contentPadding;
   const contentMaxWidth = responsive.contentMaxWidth;
@@ -365,13 +367,14 @@ export default function LyricsScreen() {
   const isDesktopWriterLayout = isDesktopWorkspace && activeTab === 'writer';
   const showDesktopThreePane = isDesktopWorkspace && (activeTab !== 'write' || !focusMode);
   const isMobileLyricsLayout = !isDesktopWorkspace;
-  const isMobileWriteLayout = isMobileLyricsLayout && activeTab === 'write';
   const showTopComposerControls =
     !isDesktopWorkspace && !mobileLyricsFocus;
   const showTopLibrary =
     !isDesktopWorkspace && !mobileLyricsFocus;
   const pencilSessionKey = activeSong?.id || 'draft';
+  const isBlankDraft = !activeSong && !songTitle.trim() && !editText.trim();
   const saveIndicatorLabel = useMemo(() => {
+    if (isBlankDraft) return 'New draft';
     if (saveIndicatorState === 'saving') {
       return 'Saving...';
     }
@@ -382,8 +385,9 @@ export default function LyricsScreen() {
       return 'Save issue';
     }
     return 'Saved';
-  }, [saveIndicatorState]);
+  }, [saveIndicatorState, isBlankDraft]);
   const lastSavedLabel = useMemo(() => {
+    if (isBlankDraft) return 'Autosaves as you write';
     if (!lastSavedAt) {
       return 'Not saved yet';
     }
@@ -391,7 +395,7 @@ export default function LyricsScreen() {
       hour: 'numeric',
       minute: '2-digit',
     })}`;
-  }, [lastSavedAt]);
+  }, [lastSavedAt, isBlankDraft]);
   const lastSyncedLabel = useMemo(() => {
     if (!lastSyncedAt) {
       return 'No sync history';
@@ -453,15 +457,19 @@ export default function LyricsScreen() {
   );
 
   React.useEffect(() => {
+    const changedSong = openedSongId.current !== (activeSong?.id ?? null);
+    openedSongId.current = activeSong?.id ?? null;
     setEditText(activeSong?.lyrics || '');
     setSongTitle(activeSong?.title || '');
     setSelectedGenre(activeSong?.genre || 'pop');
     setTempoBpmText(activeSong?.bpm ? String(activeSong.bpm) : '');
     setSaveIndicatorState('saved');
     setLastSavedAt(activeSong?.updatedAt ?? null);
-    setEditorSelection({ start: 0, end: 0 });
-    setFindMatchIndex(-1);
-    findCursorRef.current = 0;
+    if (changedSong) {
+      setEditorSelection({ start: 0, end: 0 });
+      setFindMatchIndex(-1);
+      findCursorRef.current = 0;
+    }
   }, [
     activeSong?.id,
     activeSong?.lyrics,
@@ -728,7 +736,7 @@ export default function LyricsScreen() {
   }, [pendingTitle]);
 
   const performSave = useCallback((options?: { silent?: boolean }): boolean => {
-    if (!editText.trim()) {
+    if (!editText.trim() && !activeSong) {
       setSaveIndicatorState('unsaved');
       return true;
     }
@@ -785,7 +793,6 @@ export default function LyricsScreen() {
     selectedGenre,
     setActiveSong,
     songTitle,
-    songs,
     tempoBpmText,
     updateSong,
     handleCreateVersionSnapshot,
@@ -798,10 +805,12 @@ export default function LyricsScreen() {
     }
 
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    if (!editText.trim()) {
+    if (!editText.trim() && !activeSong) {
       setSaveIndicatorState('unsaved');
       return;
     }
+    // Saving updates activeSong too. Do not schedule another save for that update.
+    if (!draftDirty) return;
 
     autosaveTimerRef.current = setTimeout(() => {
       setSaveIndicatorState('saving');
@@ -815,7 +824,7 @@ export default function LyricsScreen() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [editText, songTitle, selectedGenre, tempoBpmText, performSave]);
+  }, [editText, songTitle, selectedGenre, tempoBpmText, activeSong, draftDirty, performSave]);
 
   const updateEditorContent = useCallback(
     (nextText: string, nextSelection: TextSelection) => {
@@ -875,6 +884,15 @@ export default function LyricsScreen() {
       });
 
       const targetText = mode === 'copy-rehearsal' ? rehearsalText : cleanText;
+
+      if (Platform.OS !== 'web') {
+        try {
+          await Share.share({ title: songTitle || 'Lyrics', message: targetText });
+        } catch {
+          setToast({ visible: true, message: 'Could not open sharing. Please try again.', variant: 'error' });
+        }
+        return;
+      }
 
       if (mode === 'copy-clean' || mode === 'copy-rehearsal') {
         if (
@@ -1383,12 +1401,10 @@ export default function LyricsScreen() {
     if (!draftDirty) {
       return true;
     }
-    if (!editText.trim()) {
-      return true;
-    }
+    if (!editText.trim() && !activeSong) return true;
     setSaveIndicatorState('saving');
     return performSave();
-  }, [draftDirty, editText, performSave]);
+  }, [draftDirty, editText, activeSong, performSave]);
 
   const handleSelectSongCard = useCallback((song: Song | null) => {
     const saved = persistCurrentDraftBeforeSwitch();
@@ -1729,16 +1745,20 @@ export default function LyricsScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-      <LogoHeader />
+      {isDesktopWorkspace && <LogoHeader />}
       <View style={[styles.header, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <View style={styles.headerMain}>
-          <Text style={styles.headerTitle} accessibilityRole="header">Lyrics</Text>
+          <View style={styles.lyricsHeadingRow}>
+            <Image source={require('@/assets/images/lyrics-notebook-amber-v1.jpg')}
+              style={styles.lyricsHeadingArt} accessible={false} resizeMode="cover" />
+            <Text style={styles.headerTitle} accessibilityRole="header">Lyrics</Text>
+          </View>
           <View style={styles.headerMetaRow} accessibilityLiveRegion="polite">
             <View
-              style={[styles.saveBadge, saveIndicatorBadgeStyle]}
+              style={[styles.saveBadge, saveIndicatorBadgeStyle, isBlankDraft && styles.saveBadgeNeutral]}
               testID="lyrics-save-indicator"
             >
-              <View style={[styles.saveBadgeDot, { backgroundColor: saveIndicatorDotColor }]} />
+              <View style={[styles.saveBadgeDot, { backgroundColor: isBlankDraft ? Colors.textTertiary : saveIndicatorDotColor }]} />
               <Text style={styles.saveBadgeText}>{saveIndicatorLabel}</Text>
             </View>
             <Text style={styles.headerMetaText} testID="lyrics-last-saved">
@@ -1754,7 +1774,7 @@ export default function LyricsScreen() {
           accessibilityLabel="Create new song draft"
           accessibilityHint="Switches to a new empty lyrics card"
         >
-          <Ionicons name="add-circle-outline" size={scaledIcon(18)} color={Colors.gradientStart} />
+          <Ionicons name="add" size={21} color={Colors.gradientMid} /><Text style={styles.newSongText}>New</Text>
         </Pressable>
       </View>
 
@@ -1768,35 +1788,79 @@ export default function LyricsScreen() {
       )}
 
       {isMobileLyricsLayout && (
-        <View style={[styles.mobileFocusBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
-          <View style={styles.mobileFocusLabelGroup}>
-            <Text style={styles.mobileFocusLabel}>Lyrics Focus</Text>
-            <Text style={styles.mobileFocusHint}>
-              {mobileLyricsFocus ? 'Content-first layout' : 'Tools + library visible'}
-            </Text>
-          </View>
-          <Pressable
-            style={[styles.mobileFocusToggle, mobileLyricsFocus && styles.mobileFocusToggleActive]}
-            onPress={() => {
-              setMobileLyricsFocus((value) => !value);
-            }}
-            accessibilityRole="switch"
-            accessibilityLabel="Toggle mobile lyrics focus mode"
-            accessibilityHint="Hides extra panels so the active lyrics tab stays front and center"
-            accessibilityState={{ checked: mobileLyricsFocus }}
-          >
-            <Text
-              style={[
-                styles.mobileFocusToggleText,
-                mobileLyricsFocus && styles.mobileFocusToggleTextActive,
-              ]}
-            >
-              {mobileLyricsFocus ? 'Focused' : 'Expanded'}
-            </Text>
+        <View style={[styles.mobileToolbar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
+          <Text style={styles.mobileToolbarHint}>Your words, at your pace.</Text>
+          <Pressable onPress={() => setMobileLyricsFocus(value => !value)}
+            accessibilityRole="button" accessibilityLabel="Song settings"
+            accessibilityState={{ expanded: !mobileLyricsFocus }} aria-expanded={!mobileLyricsFocus}
+            style={styles.songSettingsButton}>
+            <Ionicons name="options-outline" size={18} color={Colors.gradientMid} />
+            <Text style={styles.songSettingsText}>{mobileLyricsFocus ? 'Settings' : 'Hide settings'}</Text>
           </Pressable>
         </View>
       )}
 
+      {!(isDesktopWriteLayout && focusMode) && (
+        <View accessibilityRole="tablist" style={[styles.tabBar, styles.tabBarContent, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
+
+          {tabs.map(tab => (
+            <Pressable
+              key={tab.key}
+              style={[styles.tab, isMobileLyricsLayout && styles.mobileTab, activeTab === tab.key && styles.tabActive]}
+              onPress={() => {
+                setActiveTab(tab.key);
+              }}
+              accessibilityRole="tab"
+              accessibilityLabel={`${tab.label} tab`}
+              accessibilityState={{ selected: activeTab === tab.key }}
+              aria-selected={activeTab === tab.key}
+              {...(Platform.OS === 'web' ? {
+                tabIndex: activeTab === tab.key ? 0 : -1,
+                onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+                  const current = tabs.findIndex(item => item.key === tab.key);
+                  const next = event.key === 'ArrowRight' ? (current + 1) % tabs.length
+                    : event.key === 'ArrowLeft' ? (current + tabs.length - 1) % tabs.length
+                    : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+                    : event.key === 'Enter' || event.key === ' ' ? current : -1;
+                  if (next < 0) return;
+                  event.preventDefault();
+                  setActiveTab(tabs[next].key);
+                  const target = event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[next];
+                  target?.focus();
+                },
+              } : {})}
+            >
+              {!isMobileLyricsLayout && <Feather
+                name={tab.icon}
+                size={scaledIcon(12)}
+                color={activeTab === tab.key ? Colors.gradientStart : Colors.textTertiary}
+              />}
+              <Text
+                style={[
+                  styles.tabText,
+                  isMobileLyricsLayout && styles.mobileTabText,
+                  activeTab === tab.key && styles.tabTextActive,
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      <ScrollView
+        style={[styles.content, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 110 }}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+        showsVerticalScrollIndicator={false}
+        scrollEnabled
+      >
+        {isMobileLyricsLayout && <View style={styles.mobileTitleBlock}>
+          <Text style={styles.fieldLabel}>SONG TITLE</Text>{renderTitleField()}
+        </View>}
       {showTopLibrary && (
         <View style={[styles.librarySection, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <View style={styles.libraryHeader}>
@@ -1880,10 +1944,6 @@ export default function LyricsScreen() {
 
       {showTopComposerControls && (
         <>
-          <View style={[styles.titleInput, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
-            {renderTitleField()}
-          </View>
-
           <View style={[styles.genreSection, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
             <Text style={styles.genreSectionLabel}>Genre</Text>
             {renderGenreChips(true)}
@@ -1934,49 +1994,6 @@ export default function LyricsScreen() {
         </View>
       )}
 
-      {!(isDesktopWriteLayout && focusMode) && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={[styles.tabBar, sectionWrapStyle]}
-          contentContainerStyle={[styles.tabBarContent, { paddingHorizontal: horizontalInset }]}
-        >
-          {tabs.map(tab => (
-            <Pressable
-              key={tab.key}
-              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-              onPress={() => {
-                setActiveTab(tab.key);
-              }}
-              accessibilityRole="tab"
-              accessibilityLabel={`${tab.label} tab`}
-              accessibilityState={{ selected: activeTab === tab.key }}
-            >
-              <Feather
-                name={tab.icon}
-                size={scaledIcon(12)}
-                color={activeTab === tab.key ? Colors.gradientStart : Colors.textTertiary}
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab.key && styles.tabTextActive,
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-
-      <ScrollView
-        style={[styles.content, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 24 }}
-        keyboardDismissMode="interactive"
-        showsVerticalScrollIndicator={false}
-        scrollEnabled
-      >
         {activeTab === 'write' && (
           <View style={styles.writeTab}>
             {isDesktopWriteLayout ? (
@@ -2311,6 +2328,20 @@ export default function LyricsScreen() {
                       }}
                     />
                   )}
+                </View>
+                <View style={styles.mobileEditorFooter}>
+                  <Text style={styles.mobileToolbarHint}>
+                    {editText.split('\n').filter(line => line.trim()).length} lines
+                  </Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Rehearse lyrics in Sing"
+                    disabled={!editText.trim()}
+                    accessibilityHint="Saves these lyrics and opens the singing screen"
+                    style={[styles.songSettingsButton, !editText.trim() && { opacity: 0.45 }]}
+                    onPress={() => { if (performSave({ silent: true })) router.push('/(tabs)'); }}>
+                    <Ionicons name="mic-outline" size={18} color={Colors.gradientMid} />
+                    <Text style={styles.songSettingsText}>Rehearse in Sing</Text>
+                    <Ionicons name="arrow-forward" size={16} color={Colors.gradientMid} />
+                  </Pressable>
                 </View>
                 {isNativeIpad && paperModeEnabled && (
                   <Text style={styles.paperHintText}>
@@ -2826,6 +2857,8 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontFamily: 'Inter_700Bold',
   },
+  lyricsHeadingRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  lyricsHeadingArt: { width: 40, height: 40, borderRadius: 12 },
   headerMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2872,8 +2905,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter_600SemiBold',
   },
+  newSongText: { fontSize: 13, color: Colors.gradientMid, fontFamily: 'Inter_600SemiBold' },
+  saveBadgeNeutral: { borderColor: Colors.borderGlass, backgroundColor: Colors.surfaceGlass },
+  mobileToolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 },
+  mobileToolbarHint: { flex: 1, fontSize: 12, color: Colors.textTertiary },
+  songSettingsButton: { minHeight: 44, flexDirection: 'row', gap: 7, alignItems: 'center', paddingHorizontal: 10, borderRadius: 12, backgroundColor: Colors.surfaceGlass },
+  songSettingsText: { fontSize: 12, color: Colors.textSecondary },
+  mobileTitleBlock: { gap: 8, marginBottom: 16 },
+  mobileEditorFooter: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  fieldLabel: { fontSize: 10, letterSpacing: 1.2, color: Colors.textTertiary, fontFamily: 'Inter_600SemiBold' },
+  mobileTab: { flex: 1, minWidth: 0, minHeight: 44, paddingHorizontal: 0, justifyContent: 'center' },
+  mobileTabText: { fontSize: 12 },
   newSongButton: {
-    minWidth: 44,
+    flexDirection: 'row', gap: 4,
+    minWidth: 60,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3202,6 +3247,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tab: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -3626,7 +3672,7 @@ const styles = StyleSheet.create({
     minHeight: 540,
   },
   lyricsEditorMobileFocus: {
-    minHeight: 420,
+    minHeight: 360,
   },
   sectionNavigatorList: {
     maxHeight: 180,

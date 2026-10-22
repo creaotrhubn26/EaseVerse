@@ -40,7 +40,7 @@ export async function soundRoomStorage(
   options: { apiUrl?: string; apiKey?: string; fetchImpl?: typeof fetch } = {},
 ): Promise<Record<string, any>> {
   if (
-    !/^(initiate|reviews|collaboration|collaboration-files|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/(parts|resume|complete|playback|review))$/i.test(
+    !/^(initiate|reviews|collaboration|collaboration-files|warmups|warmup-complete|studio-overview|studio-upgrade-request|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/(parts|resume|complete|playback|review))$/i.test(
       operation,
     )
   )

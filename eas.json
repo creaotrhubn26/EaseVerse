@@ -25,6 +25,7 @@
       "node": "22.18.0",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://easeverse.netlify.app",
+        "EXPO_PUBLIC_CLOUD_PRACTICE_ANALYSIS_ENABLED": "0",
         "EXPO_PUBLIC_DISABLE_LYRICS_SYNC_SOCKET": "1"
       }
     },

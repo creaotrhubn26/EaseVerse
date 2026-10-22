@@ -1,3 +1,4 @@
+import { preserveLocalRecordingUri } from './local-recordings';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Song, Session, UserSettings } from './types';
 import { detectInitialAccentGoal, detectInitialLanguage } from './detect-locale';
@@ -198,6 +199,7 @@ const defaultSettings: UserSettings = {
   countIn: 0,
   narrationVoice: 'female',
   metronomeEnabled: false,
+  cloudAnalysisEnabled: false,
   metronomeHaptics: false,
 };
 
@@ -248,7 +250,15 @@ export async function getSessions(): Promise<Session[]> {
     await AsyncStorage.removeItem(SESSIONS_KEY);
     return [];
   }
-  return parsed as Session[];
+  const sessions = await Promise.all((parsed as Session[]).map(async session => {
+    if (!session.recordingUri) return session;
+    const recordingUri = await preserveLocalRecordingUri(session.recordingUri);
+    return recordingUri === session.recordingUri ? session : { ...session, recordingUri };
+  }));
+  if (sessions.some((session, index) => session !== parsed[index])) {
+    await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  }
+  return sessions;
 }
 
 export async function saveSession(session: Session): Promise<void> {

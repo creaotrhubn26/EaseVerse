@@ -1,25 +1,24 @@
 import React, { ComponentProps, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet,
+  Platform,
   Text,
   View,
   ScrollView,
   Pressable,
-  Platform,
   Image,
   ActivityIndicator,
   Linking,
-  type ImageSourcePropType,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useApp } from '@/lib/AppContext';
 import Toast from '@/components/Toast';
-import LogoHeader from '@/components/LogoHeader';
 import HowToUseEaseVerse from '@/components/HowToUseEaseVerse';
 import { AccountSection } from '@/components/AccountSection';
 import { CostDashboardCard } from '@/components/CostDashboardCard';
@@ -27,7 +26,9 @@ import { AUTH_CONFIGURED, useAppUser } from '@/lib/use-app-user';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
 import { parseSongSections } from '@/lib/lyrics-sections';
 import { fetchLearningRecommendations } from '@/lib/learning-client';
-import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
+import { useResponsiveLayout } from '@/lib/responsive';
+import { useAuth } from '@/lib/creatorhub-auth';
+import { CLOUD_PRACTICE_ANALYSIS_ENABLED } from '@/lib/release-features';
 import {
   buildLyricsSyncRoute,
   buildSongTitleCandidatesMap,
@@ -76,47 +77,6 @@ type LearningRecommendationsView = {
 
 const DIFF_PREVIEW_LIMIT = 18;
 const DIFF_MAX_CELLS = 200000;
-const howToIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/icon-set/howto-icon.webp')
-    : require('@/assets/images/icon-set/howto-icon.png');
-const languageAccentIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/icon-set/Language_accent.webp')
-    : require('@/assets/images/icon-set/Language_accent.png');
-const feedbackHighIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/icon-set/Feedback_intensity_high.webp')
-    : require('@/assets/images/icon-set/Feedback_intensity_high.png');
-const liveModeIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/icon-set/Live_mode.webp')
-    : require('@/assets/images/icon-set/Live_mode.png');
-const easePocketIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/EasePocket.webp')
-    : require('@/assets/images/EasePocket.png');
-const lyricsFlowSpeedIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/lyrics_flow_speed_icon.webp')
-    : require('@/assets/images/lyrics_flow_speed_icon.png');
-const countInIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/count_in_icon.webp')
-    : require('@/assets/images/count_in_icon.png');
-const twoBeatsIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/two_beats.webp')
-    : require('@/assets/images/two_beats.png');
-const fourBeatsIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/four_beats.webp')
-    : require('@/assets/images/four_beats.png');
-const aboutIconSource =
-  Platform.OS === 'web'
-    ? require('@/assets/images/about_icon.webp')
-    : require('@/assets/images/about_icon.png');
-
 function buildLineDiff(
   previousLyrics: string,
   nextLyrics: string,
@@ -235,139 +195,40 @@ function buildLineDiff(
   };
 }
 
-function SettingRow({
-  icon,
-  label,
-  value,
-  onPress,
-  accessibilityHint,
-}: {
-  icon: ComponentProps<typeof Feather>['name'];
-  label: string;
-  value: string;
-  onPress?: () => void;
-  accessibilityHint?: string;
+function SettingRow({icon,label,value,onPress,accessibilityHint}: {
+  icon: ComponentProps<typeof Feather>['name'];label:string;value:string;onPress?:()=>void;accessibilityHint?:string;
 }) {
-  const responsive = useResponsiveLayout();
-  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
-  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
-  const iconContainerSize = scaleDisplay(tierValue(responsive.tier, [40, 46, 52, 60, 74, 92, 112]));
-  const iconGlyphSize = scaleDisplay(tierValue(responsive.tier, [20, 22, 24, 28, 34, 40, 46]));
-
-  if (!onPress) {
-    return (
-      <View style={styles.settingRow}>
-        <View style={styles.settingLeft}>
-          <View
-            style={[
-              styles.iconContainer,
-              {
-                width: iconContainerSize,
-                height: iconContainerSize,
-                borderRadius: Math.round(iconContainerSize * 0.26),
-              },
-            ]}
-          >
-            <Feather name={icon} size={iconGlyphSize} color={Colors.gradientMid} />
-          </View>
-          <Text style={styles.settingLabel}>{label}</Text>
-        </View>
-        <View style={styles.settingRight}>
-          <Text style={styles.settingValue}>{value}</Text>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.settingRow, pressed && styles.settingRowPressed]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${label}: ${value}`}
-      accessibilityHint={accessibilityHint}
-    >
-      <View style={styles.settingLeft}>
-        <View
-          style={[
-            styles.iconContainer,
-            {
-              width: iconContainerSize,
-              height: iconContainerSize,
-              borderRadius: Math.round(iconContainerSize * 0.26),
-            },
-          ]}
-        >
-          <Feather name={icon} size={iconGlyphSize} color={Colors.gradientMid} />
-        </View>
-        <Text style={styles.settingLabel}>{label}</Text>
-      </View>
-        <View style={styles.settingRight}>
-          <Text style={styles.settingValue}>{value}</Text>
-          <Ionicons name="chevron-forward" size={scaledIconSize(10, responsive)} color={Colors.textTertiary} />
-      </View>
-    </Pressable>
-  );
+  const content=<><View style={styles.iconContainer}><Feather name={icon} size={18} color={Colors.gradientMid}/></View>
+    <View style={styles.settingCopy}><Text style={styles.settingLabel}>{label}</Text><Text style={styles.settingValue}>{value}</Text></View>
+    {onPress&&<Ionicons name="chevron-forward" size={18} color={Colors.textTertiary}/>}</>;
+  return onPress?<Pressable style={({pressed})=>[styles.settingRow,pressed&&styles.settingRowPressed]} onPress={onPress}
+    accessibilityRole="button" accessibilityLabel={`${label}: ${value}`} accessibilityHint={accessibilityHint}>{content}</Pressable>
+    :<View style={styles.settingRow}>{content}</View>;
 }
-
-function SegmentedControl<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { key: T; label: string; iconImage?: ImageSourcePropType; iconScale?: number }[];
-  value: T;
-  onChange: (key: T) => void;
+function SegmentedControl<T extends string>({options,value,onChange}: {
+ options:{key:T;label:string}[];value:T;onChange:(key:T)=>void;
 }) {
-  const responsive = useResponsiveLayout();
-  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
-  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
-  const segmentIconWidth = scaleDisplay(tierValue(responsive.tier, [56, 64, 72, 84, 104, 128, 156]));
-  const segmentIconHeight = scaleDisplay(tierValue(responsive.tier, [36, 40, 44, 50, 60, 72, 86]));
-
-  return (
-    <View style={styles.segmented}>
-      {options.map(opt => (
-        <Pressable
-          key={opt.key}
-          style={[styles.segment, value === opt.key && styles.segmentActive]}
-          onPress={() => {
-            onChange(opt.key);
-            Haptics.selectionAsync();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${opt.label} option`}
-          accessibilityHint="Updates this setting"
-          accessibilityState={{ selected: value === opt.key }}
-        >
-          {opt.iconImage ? (
-            <Image
-              source={opt.iconImage}
-              style={[
-                styles.segmentIcon,
-                {
-                  width: Math.round(segmentIconWidth * (opt.iconScale ?? 1)),
-                  height: Math.round(segmentIconHeight * (opt.iconScale ?? 1)),
-                  opacity: value === opt.key ? 1 : 0.6,
-                },
-              ]}
-              resizeMode="contain"
-              accessible={false}
-            />
-          ) : (
-            <Text
-              style={[
-                styles.segmentText,
-                value === opt.key && styles.segmentTextActive,
-              ]}
-            >
-              {opt.label}
-            </Text>
-          )}
-        </Pressable>
-      ))}
-    </View>
-  );
+ return <View style={styles.segmented}>{options.map(opt=><Pressable key={opt.key}
+  style={[styles.segment,value===opt.key&&styles.segmentActive]} onPress={()=>{onChange(opt.key);void Haptics.selectionAsync();}}
+  accessibilityRole="button" accessibilityLabel={`${opt.label} option`} accessibilityState={{selected:value===opt.key}} aria-pressed={value===opt.key}>
+  <Text style={[styles.segmentText,value===opt.key&&styles.segmentTextActive]}>{opt.label}</Text>
+ </Pressable>)}</View>;
+}
+function ProfileGroup({title,summary,icon,children}: {title:string;summary:string;icon:ComponentProps<typeof Ionicons>['name'];children:React.ReactNode}) {
+ const [expanded,setExpanded]=useState(false);
+ return <View style={styles.group}>
+  <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{expanded}} aria-expanded={expanded}
+   accessibilityHint={`${summary}. ${expanded?'Collapse':'Expand'} settings`}
+   onPress={()=>setExpanded(value=>!value)} style={({pressed})=>[styles.groupHeader,pressed&&styles.settingRowPressed]}>
+   <View style={styles.groupIcon}><Ionicons name={icon} size={21} color={Colors.gradientMid}/></View>
+   <View style={styles.settingCopy}><Text style={styles.groupTitle}>{title}</Text><Text style={styles.groupSummary}>{summary}</Text></View>
+   <Ionicons name={expanded?'chevron-up':'chevron-down'} size={18} color={Colors.textTertiary}/>
+  </Pressable>
+  {expanded&&<View style={styles.groupBody}>{children}</View>}
+ </View>;
+}
+function Preference({title,hint,children}: {title:string;hint?:string;children:React.ReactNode}) {
+ return <View style={styles.preference}><Text accessibilityRole="header" style={styles.preferenceTitle}>{title}</Text>{children}{hint&&<Text style={styles.modeHint}>{hint}</Text>}</View>;
 }
 
 function CompanionLinkRow({ sectionPadding }: { sectionPadding: number }) {
@@ -395,10 +256,10 @@ function CompanionLinkRow({ sectionPadding }: { sectionPadding: number }) {
       <Ionicons name="cloud-download" size={18} color={Colors.gradientMid} />
       <View style={{ flex: 1 }}>
         <Text style={{ color: Colors.textPrimary, fontFamily: 'Inter_700Bold', fontSize: 14 }}>
-          Get the Companion App
+          Pro Tools connection
         </Text>
         <Text style={{ color: Colors.textTertiary, fontFamily: 'Inter_500Medium', fontSize: 12, marginTop: 2 }}>
-          Mac DMG ready · Windows / Linux coming via CI build.
+          Explore the desktop connection and setup guide.
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
@@ -482,6 +343,7 @@ function AdminLinkRow({ sectionPadding }: { sectionPadding: number }) {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const {isSignedIn}=useAuth();
   const responsive = useResponsiveLayout();
   const {
     settings,
@@ -492,7 +354,8 @@ export default function ProfileScreen() {
     updateSong,
     setActiveSong,
   } = useApp();
-  const [howToExpanded, setHowToExpanded] = useState(true);
+  const [choice,setChoice]=useState<'language'|'accent'|null>(null);
+  const [learningError,setLearningError]=useState('');
   const [syncingLyrics, setSyncingLyrics] = useState(false);
   const [syncChanges, setSyncChanges] = useState<LyricsSyncChange[]>([]);
   const [lastLyricsSyncAt, setLastLyricsSyncAt] = useState<number | null>(null);
@@ -515,21 +378,8 @@ export default function ProfileScreen() {
     variant: 'info',
   });
 
-  const webTopInset = Platform.OS === 'web' ? 67 : 0;
-  const webBottomInset = Platform.OS === 'web' ? 34 : 0;
-  const sectionPadding = responsive.contentPadding;
-  const contentMaxWidth = responsive.contentMaxWidth;
-  const iconDisplayScale = responsive.isWeb ? 1 + (responsive.highResScale - 1) * 0.9 : 1;
-  const scaleDisplay = (value: number) => Math.round(value * iconDisplayScale);
-  const sectionHeaderIconSize = scaleDisplay(tierValue(responsive.tier, [36, 40, 46, 54, 66, 82, 100]));
-  const sectionTitleIconSize = scaleDisplay(tierValue(responsive.tier, [72, 80, 92, 108, 132, 164, 200]));
-  const aboutIconWrapSize = scaleDisplay(tierValue(responsive.tier, [74, 84, 96, 112, 138, 172, 208]));
-  const aboutIconSize = scaleDisplay(tierValue(responsive.tier, [58, 66, 78, 92, 114, 144, 176]));
-  const scaledIcon = useMemo(
-    () => (size: number) => scaledIconSize(size, responsive),
-    [responsive]
-  );
-
+  const sectionPadding=responsive.contentPadding;
+  const contentMaxWidth=responsive.contentMaxWidth;
   const apiBaseUrl = useMemo(() => getApiUrl(), []);
   const lyricsSyncConfig = useMemo(() => resolveLyricsSyncConfig(), []);
   const lyricsSyncFilterLabel = useMemo(() => {
@@ -542,7 +392,6 @@ export default function ProfileScreen() {
     }
     return filters.length > 0 ? filters.join(', ') : 'all drafts';
   }, [lyricsSyncConfig.projectId, lyricsSyncConfig.source]);
-  const appIconSource = require('@/assets/images/easeverse_logo_App.png');
   const apiHost = useMemo(() => {
     try {
       const parsed = new URL(apiBaseUrl);
@@ -586,33 +435,14 @@ export default function ProfileScreen() {
     router.push('/account-deletion');
   }, []);
 
-  const totalDuration = sessions.reduce((acc, s) => acc + s.duration, 0);
-  const avgAccuracy = sessions.length > 0
-    ? Math.round(sessions.reduce((acc, s) => acc + s.insights.textAccuracy, 0) / sessions.length)
-    : 0;
-
-	const languages = ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Japanese', 'Korean'];
-	const accents = ['US', 'UK', 'AU', 'Standard'];
-
-  const cycleLanguage = () => {
-    const idx = languages.indexOf(settings.language);
-    const next = languages[(idx + 1) % languages.length];
-    updateSettings({ language: next });
-    Haptics.selectionAsync();
-  };
-
-  const cycleAccent = () => {
-    const idx = accents.indexOf(settings.accentGoal);
-    const next = accents[(idx + 1) % accents.length];
-    updateSettings({ accentGoal: next });
-    Haptics.selectionAsync();
-  };
-
+  const totalDuration=sessions.reduce((sum,item)=>sum+(Number.isFinite(item.duration)?Math.max(0,item.duration):0),0);
+  const languages=['English','Norwegian','Swedish','Danish','Finnish','Icelandic','Spanish','French','German','Italian','Portuguese','Japanese','Korean'];
+  const accents=['US','UK','AU','Standard'];
   const formatDuration = (secs: number) => {
     const h = Math.floor(secs / 3600);
     const m = Math.floor((secs % 3600) / 60);
     if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
+    return secs<60?`${Math.floor(secs)}s`:`${m}m`;
   };
 
   const formatSyncTime = useCallback((timestamp: number | null) => {
@@ -847,7 +677,8 @@ export default function ProfileScreen() {
   ]);
 
   const handleRefreshLearning = useCallback(async () => {
-    setLearningLoading(true);
+    if(learningLoading)return;
+    setLearningLoading(true);setLearningError('');
     try {
       const payload = await fetchLearningRecommendations();
       const rawRecommendations =
@@ -863,7 +694,7 @@ export default function ProfileScreen() {
         typeof rawRecommendations !== 'object' ||
         Array.isArray(rawRecommendations)
       ) {
-        setLearningRecommendations(null);
+        setLearningRecommendations(null);setLearningError('Practice suggestions are unavailable. Try again later.');
         return;
       }
 
@@ -908,16 +739,12 @@ export default function ProfileScreen() {
         globalChallengeWords,
         practicePlan,
       });
-    } catch (error) {
-      console.error('Learning recommendations fetch failed:', error);
+    } catch {
+      setLearningError('Could not load practice suggestions. Please try again.');
     } finally {
       setLearningLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void handleRefreshLearning();
-  }, [handleRefreshLearning, sessions.length]);
+  }, [learningLoading]);
 
   const sortedSyncChanges = useMemo(
     () =>
@@ -929,373 +756,67 @@ export default function ProfileScreen() {
     [syncChanges]
   );
 
-  return (
-    <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
-      <Toast
-        visible={toast.visible}
-        message={toast.message}
-        variant={toast.variant ?? 'info'}
-        sound={
-          toast.variant === 'success' && toast.message.startsWith('Synced latest lyrics.')
-            ? 'lyricsUpdated'
-            : 'none'
-        }
-        onHide={() => setToast((current) => ({ ...current, visible: false }))}
-      />
-      <LogoHeader variant="hero" />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}
-      >
-        <View style={{ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }}>
-        <AccountSection horizontalMargin={sectionPadding} />
-        {AUTH_CONFIGURED ? <AdminLinkRow sectionPadding={sectionPadding} /> : null}
-        {AUTH_CONFIGURED ? <ProjectsLinkRow sectionPadding={sectionPadding} /> : null}
-        <CompanionLinkRow sectionPadding={sectionPadding} />
-        {AUTH_CONFIGURED ? <CostDashboardCard horizontalMargin={sectionPadding} /> : null}
-        <View style={[styles.statsCard, { marginHorizontal: sectionPadding }]}>
-          <LinearGradient
-            colors={[Colors.gradientStart + '15', Colors.gradientEnd + '08']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.statsGradient}
-          >
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{sessions.length}</Text>
-              <Text style={styles.statLabel}>Sessions</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{formatDuration(totalDuration)}</Text>
-              <Text style={styles.statLabel}>Practice</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{avgAccuracy}%</Text>
-              <Text style={styles.statLabel}>Avg Score</Text>
-            </View>
-          </LinearGradient>
+  return <View style={[styles.container,{paddingTop:insets.top}]}>
+    <Toast visible={toast.visible} message={toast.message} variant={toast.variant??'info'}
+      sound={toast.variant==='success'&&toast.message.startsWith('Synced latest lyrics.')?'lyricsUpdated':'none'}
+      onHide={()=>setToast(current=>({...current,visible:false}))}/>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{paddingBottom:Math.max(insets.bottom,20)+110}}>
+      <View style={{width:'100%',maxWidth:contentMaxWidth,alignSelf:'center',paddingHorizontal:sectionPadding,gap:14}}>
+        <View style={styles.profileHeader}>
+          <Image source={require('@/assets/images/profile-studio-controls-amber-v1.jpg')} style={styles.profileArt} accessible={false}/>
+          <View style={styles.settingCopy}><Text accessibilityRole="header" style={styles.profileTitle}>Profile</Text><Text style={styles.profileSubtitle}>Your voice. Your way of working.</Text></View>
         </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <Pressable
-            onPress={() => {
-              setHowToExpanded((current) => !current);
-              Haptics.selectionAsync();
-            }}
-            style={({ pressed }) => [styles.sectionHeader, pressed && styles.sectionHeaderPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="How To Use"
-            accessibilityHint={howToExpanded ? 'Collapses the help tour' : 'Expands the help tour'}
-            accessibilityState={{ expanded: howToExpanded }}
-          >
-            <View style={styles.sectionTitleRow}>
-              <Image
-                source={howToIconSource}
-                style={[
-                  styles.sectionHeaderIcon,
-                  {
-                    width: sectionHeaderIconSize,
-                    height: sectionHeaderIconSize,
-                    borderRadius: Math.round(sectionHeaderIconSize * 0.33),
-                  },
-                ]}
-                resizeMode="cover"
-                accessible={false}
-              />
-            </View>
-            <Ionicons
-              name={howToExpanded ? 'chevron-up' : 'chevron-down'}
-              size={scaledIcon(11)}
-              color={Colors.textTertiary}
-            />
-          </Pressable>
-          {howToExpanded ? (
-            <HowToUseEaseVerse
-              onNavigate={(route) => {
-                Haptics.selectionAsync();
-                router.push(route);
-              }}
-            />
-          ) : (
-            <Text style={styles.modeHint}>Tap to expand the quick tour and icon legend.</Text>
-          )}
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <View style={styles.sectionTitleRow}>
-            <Image
-              source={easePocketIconSource}
-              style={[
-                styles.sectionTitleIcon,
-                {
-                  width: sectionTitleIconSize,
-                  height: sectionTitleIconSize,
-                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                },
-              ]}
-              resizeMode="cover"
-              accessibilityRole="header"
-              accessibilityLabel="EasePocket Timing Trainer"
-            />
+        <AccountSection horizontalMargin={0}/>
+        <View style={styles.localSummary}>
+          <Text accessibilityRole="header" style={styles.preferenceTitle}>On this device</Text>
+          <View style={styles.localStats}>
+            {[{label:'Songs',value:songs.length},{label:'Takes',value:sessions.length},{label:'Recorded',value:formatDuration(totalDuration)}].map(item=><View key={item.label} style={styles.statItem}><Text style={styles.statValue}>{item.value}</Text><Text style={styles.statLabel}>{item.label}</Text></View>)}
           </View>
+          <Text style={styles.modeHint}>Local songs and recordings are separate from shared studio projects.</Text>
+        </View>
+        <Text accessibilityRole="header" style={styles.menuHeading}>Make it yours</Text>
+        <ProfileGroup title="Voice & language" summary={`${settings.language} · ${settings.accentGoal} · ${settings.feedbackIntensity} feedback`} icon="mic-outline">
           <View style={styles.settingsCard}>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push('/easepocket');
-              }}
-              style={({ pressed }) => [styles.settingRow, pressed && styles.settingRowPressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Open EasePocket"
-              accessibilityHint="Opens timing training modes like subdivisions, silent beat, and consonant precision"
-            >
-              <View style={styles.settingLeft}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="pulse-outline" size={scaledIcon(11)} color={Colors.gradientStart} />
-                </View>
-                <Text style={styles.settingLabel}>EasePocket</Text>
-              </View>
-              <View style={styles.settingRight}>
-                <Text style={styles.settingValue}>Timing trainer</Text>
-                <Ionicons name="chevron-forward" size={scaledIcon(11)} color={Colors.textTertiary} />
-              </View>
+            <SettingRow icon="globe" label="Language" value={settings.language} onPress={()=>setChoice('language')} accessibilityHint="Choose the language you practice in"/>
+            <View style={styles.divider}/><SettingRow icon="mic" label="Accent Goal" value={settings.accentGoal} onPress={()=>setChoice('accent')} accessibilityHint="Choose your pronunciation practice target"/>
+          </View>
+          <Text style={styles.modeHint}>These are practice settings. They do not change the app language.</Text>
+          <Preference title="Feedback intensity" hint="Choose how much feedback appears during practice.">
+            <SegmentedControl<FeedbackIntensity> options={[{key:'low',label:'Low'},{key:'medium',label:'Medium'},{key:'high',label:'High'}]} value={settings.feedbackIntensity} onChange={v=>updateSettings({feedbackIntensity:v})}/>
+          </Preference>
+          <Preference title="Guidance voice" hint="Used by mindfulness guidance. A producer’s session warmup can have its own recorded voice.">
+            <SegmentedControl<NarrationVoice> options={[{key:'female',label:'Female'},{key:'male',label:'Male'}]} value={settings.narrationVoice} onChange={v=>updateSettings({narrationVoice:v})}/>
+          </Preference>
+        </ProfileGroup>
+        <ProfileGroup title="Recording & timing" summary={`${settings.countIn?settings.countIn+'-beat count-in':'No count-in'} · ${settings.lyricsFollowSpeed} lyric tracking`} icon="options-outline">
+          {CLOUD_PRACTICE_ANALYSIS_ENABLED&&<Preference title="Cloud practice analysis" hint="Optional. When enabled, recordings, lyrics and practice history are sent to EaseVerse for analysis. Transcription may use OpenAI. Turn it off to keep new local takes out of cloud analysis. Sharing a studio take is a separate action.">
+            <Pressable accessibilityRole="switch" accessibilityLabel="Cloud practice analysis"
+              accessibilityState={{checked:settings.cloudAnalysisEnabled===true}}
+              {...(Platform.OS==='web'?{'aria-checked':settings.cloudAnalysisEnabled===true}:{})}
+              onPress={()=>updateSettings({cloudAnalysisEnabled:settings.cloudAnalysisEnabled!==true})}
+              style={{minHeight:48,padding:14,borderRadius:12,backgroundColor:Colors.surface}}>
+              <Text style={{color:Colors.textPrimary}}>{settings.cloudAnalysisEnabled?'On — cloud analysis enabled':'Off — local practice only'}</Text>
             </Pressable>
-          </View>
-          <Text style={styles.modeHint}>
-            Train subdivisions, pocket control, and consonant attacks in milliseconds.
-          </Text>
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <View style={styles.sectionTitleRow}>
-            <Image
-              source={languageAccentIconSource}
-              style={[
-                styles.sectionTitleIcon,
-                {
-                  width: sectionTitleIconSize,
-                  height: sectionTitleIconSize,
-                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                },
-              ]}
-              resizeMode="cover"
-              accessibilityRole="header"
-              accessibilityLabel="Language & Accent"
-            />
-          </View>
-          <View style={styles.settingsCard}>
-            <SettingRow
-              icon="globe"
-              label="Language"
-              value={settings.language}
-              onPress={cycleLanguage}
-              accessibilityHint="Cycles to the next language"
-            />
-            <View style={styles.divider} />
-            <SettingRow
-              icon="mic"
-              label="Accent Goal"
-              value={settings.accentGoal}
-              onPress={cycleAccent}
-              accessibilityHint="Cycles to the next accent target"
-            />
-          </View>
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <View style={styles.sectionTitleRow}>
-            <Image
-              source={feedbackHighIconSource}
-              style={[
-                styles.sectionTitleIcon,
-                {
-                  width: sectionTitleIconSize,
-                  height: sectionTitleIconSize,
-                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                },
-              ]}
-              resizeMode="cover"
-              accessibilityRole="header"
-              accessibilityLabel="Feedback Intensity"
-            />
-          </View>
-          <SegmentedControl<FeedbackIntensity>
-            options={[
-              { key: 'low', label: 'Low' },
-              { key: 'medium', label: 'Medium' },
-              { key: 'high', label: 'High' },
-            ]}
-            value={settings.feedbackIntensity}
-            onChange={v => updateSettings({ feedbackIntensity: v })}
-          />
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <View style={styles.sectionTitleRow}>
-            <Image
-              source={liveModeIconSource}
-              style={[
-                styles.sectionTitleIcon,
-                {
-                  width: sectionTitleIconSize,
-                  height: sectionTitleIconSize,
-                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                },
-              ]}
-              resizeMode="cover"
-              accessibilityRole="header"
-              accessibilityLabel="Live Mode"
-            />
-          </View>
-          <SegmentedControl<LiveMode>
-            options={[
-              { key: 'stability', label: 'Stability' },
-              { key: 'speed', label: 'Speed' },
-            ]}
-            value={settings.liveMode}
-            onChange={v => updateSettings({ liveMode: v })}
-          />
-          <Text style={styles.modeHint}>
-            {settings.liveMode === 'stability'
-              ? 'Stability mode waits for confident recognition before updating'
-              : 'Speed mode shows results immediately with lower confidence'}
-          </Text>
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <View style={styles.sectionTitleRow}>
-            <Image
-              source={lyricsFlowSpeedIconSource}
-              style={[
-                styles.sectionTitleIcon,
-                {
-                  width: sectionTitleIconSize,
-                  height: sectionTitleIconSize,
-                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                },
-              ]}
-              resizeMode="contain"
-              accessibilityRole="header"
-              accessibilityLabel="Lyrics Follow Speed"
-            />
-          </View>
-          <SegmentedControl<LyricsFollowSpeed>
-            options={[
-              { key: 'slow', label: 'Slow' },
-              { key: 'normal', label: 'Normal' },
-              { key: 'fast', label: 'Fast' },
-            ]}
-            value={settings.lyricsFollowSpeed}
-            onChange={(v) => updateSettings({ lyricsFollowSpeed: v })}
-          />
-          <Text style={styles.modeHint}>
-            Controls how quickly the highlighted word advances in live tracking (most noticeable in Speed mode).
-          </Text>
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <View style={styles.sectionTitleRow}>
-            <Image
-              source={countInIconSource}
-              style={[
-                styles.sectionTitleIcon,
-                {
-                  width: sectionTitleIconSize,
-                  height: sectionTitleIconSize,
-                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                },
-              ]}
-              resizeMode="contain"
-              accessibilityRole="header"
-              accessibilityLabel="Count-In"
-            />
-          </View>
-          <SegmentedControl<string>
-            options={[
-              { key: '0', label: 'None' },
-              { key: '2', label: '2 beats', iconImage: twoBeatsIconSource },
-              { key: '4', label: '4 beats', iconImage: fourBeatsIconSource, iconScale: 1.22 },
-            ]}
-            value={String(settings.countIn)}
-            onChange={v => updateSettings({ countIn: Number(v) as 0 | 2 | 4 })}
-          />
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <View style={styles.sectionTitleRow}>
-            <Image
-              source={require('@/assets/images/metronome_icon.png')}
-              style={[
-                styles.sectionTitleIcon,
-                {
-                  width: sectionTitleIconSize,
-                  height: sectionTitleIconSize,
-                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                },
-              ]}
-              resizeMode="contain"
-              accessibilityRole="header"
-              accessibilityLabel="Metronome vibration"
-            />
-          </View>
-          <SegmentedControl<string>
-            options={[
-              { key: 'off', label: 'Click only' },
-              { key: 'on', label: 'Click + Vibrate' },
-            ]}
-            value={settings.metronomeHaptics ? 'on' : 'off'}
-            onChange={v => updateSettings({ metronomeHaptics: v === 'on' })}
-          />
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <View style={styles.sectionTitleRow}>
-            <Image
-              source={require('@/assets/images/icon-set/Mindfullness_voice.png')}
-              style={[
-                styles.sectionTitleIcon,
-                {
-                  width: sectionTitleIconSize,
-                  height: sectionTitleIconSize,
-                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                },
-              ]}
-              resizeMode="cover"
-              accessibilityRole="header"
-              accessibilityLabel="Mindfulness Voice"
-            />
-          </View>
-          <SegmentedControl<NarrationVoice>
-            options={[
-              { key: 'female', label: 'Female', iconImage: require('@/assets/images/Female.png') },
-              { key: 'male', label: 'Male', iconImage: require('@/assets/images/Male.png') },
-            ]}
-            value={settings.narrationVoice}
-            onChange={(v) => updateSettings({ narrationVoice: v })}
-          />
-          <Text style={styles.modeHint}>
-            Used for mindfulness narration (and other spoken guidance).
-          </Text>
-        </View>
-
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <View style={styles.sectionTitleRow}>
-            <Image
-              source={require('@/assets/images/icon-set/Lyrics_sync.png')}
-              style={[
-                styles.sectionTitleIcon,
-                {
-                  width: sectionTitleIconSize,
-                  height: sectionTitleIconSize,
-                  borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                },
-              ]}
-              resizeMode="cover"
-              accessibilityRole="header"
-              accessibilityLabel="Lyrics Sync"
-            />
-          </View>
+          </Preference>}
+          <Preference title="Live recognition" hint={settings.liveMode==='stability'?'Waits for more confident recognition before advancing.':'Updates sooner; recognition may be less certain.'}>
+            <SegmentedControl<LiveMode> options={[{key:'stability',label:'Stability'},{key:'speed',label:'Speed'}]} value={settings.liveMode} onChange={v=>updateSettings({liveMode:v})}/>
+          </Preference>
+          <Preference title="Lyrics follow speed" hint="How quickly the highlighted word advances in live tracking.">
+            <SegmentedControl<LyricsFollowSpeed> options={[{key:'slow',label:'Slow'},{key:'normal',label:'Normal'},{key:'fast',label:'Fast'}]} value={settings.lyricsFollowSpeed} onChange={v=>updateSettings({lyricsFollowSpeed:v})}/>
+          </Preference>
+          <Preference title="Count-in" hint="Uses the BPM set on your song.">
+            <SegmentedControl options={[{key:'0',label:'None'},{key:'2',label:'2 beats'},{key:'4',label:'4 beats'}]} value={String(settings.countIn)} onChange={v=>updateSettings({countIn:Number(v) as 0|2|4})}/>
+          </Preference>
+          <Preference title="Metronome vibration" hint="Vibration is available on supported devices.">
+            <SegmentedControl options={[{key:'off',label:'Click only'},{key:'on',label:'Click + Vibrate'}]} value={settings.metronomeHaptics?'on':'off'} onChange={v=>updateSettings({metronomeHaptics:v==='on'})}/>
+          </Preference>
+          <SettingRow icon="activity" label="EasePocket" value="Timing practice" onPress={()=>router.push('/easepocket')} accessibilityHint="Opens the timing practice tools"/>
+        </ProfileGroup>
+        <ProfileGroup title="Studio & lyrics" summary="Sound Room projects, shared lyrics and Pro Tools" icon="people-outline">
+          {AUTH_CONFIGURED&&<ProjectsLinkRow sectionPadding={0}/>}
+          <CompanionLinkRow sectionPadding={0}/>
+          <Text style={styles.modeHint}>Signing in gives access to shared studio material. It does not automatically upload your local recordings.</Text>
+          <Text accessibilityRole="header" style={styles.preferenceTitle}>Lyrics Sync</Text>
           <View style={styles.settingsCard}>
             <SettingRow
               icon="refresh-cw"
@@ -1393,32 +914,14 @@ export default function ProfileScreen() {
               ))}
             </View>
           )}
-        </View>
 
-        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">Smart Practice</Text>
-          <View style={styles.settingsCard}>
-            <SettingRow
-              icon="cpu"
-              label="Refresh Recommendations"
-              value={learningLoading ? 'Analyzing...' : 'Run now'}
-              onPress={learningLoading ? undefined : () => void handleRefreshLearning()}
-              accessibilityHint="Uses your latest sessions and timing drills to generate practice suggestions"
-            />
-            <View style={styles.divider} />
-            <SettingRow
-              icon="target"
-              label="Focus Words"
-              value={String(learningRecommendations?.focusWords.length ?? 0)}
-            />
-            <View style={styles.divider} />
-            <SettingRow
-              icon="activity"
-              label="Practice Plan"
-              value={String(learningRecommendations?.practicePlan.length ?? 0)}
-            />
-          </View>
-
+        </ProfileGroup>
+        <ProfileGroup title="Practice suggestions" summary="Find words and phrases to work on next" icon="sparkles-outline">
+          <Text style={styles.modeHint}>Request suggestions from your recent practice when you want them.</Text>
+          <SettingRow icon="refresh-cw" label="Refresh Recommendations" value={learningLoading?'Loading…':'Run now'} onPress={learningLoading?undefined:()=>void handleRefreshLearning()}/>
+          {learningLoading&&<ActivityIndicator accessibilityLabel="Loading practice suggestions" color={Colors.gradientMid}/>}
+          {!!learningError&&<Text accessibilityRole="alert" style={styles.errorText}>{learningError}</Text>}
+          {learningRecommendations&&!learningRecommendations.focusWords.length&&!learningRecommendations.practicePlan.length&&<Text style={styles.modeHint}>No suggestions yet. Save a take and try again.</Text>}
           {learningRecommendations && (
             <View style={styles.learningCard}>
               {learningRecommendations.focusWords.length > 0 && (
@@ -1455,207 +958,55 @@ export default function ProfileScreen() {
               )}
             </View>
           )}
-        </View>
 
-	        <View style={[styles.section, { paddingHorizontal: sectionPadding }]}>
-            <View style={styles.sectionTitleRow}>
-              <Image
-                source={aboutIconSource}
-                style={[
-                  styles.sectionTitleIcon,
-                  {
-                    width: sectionTitleIconSize,
-                    height: sectionTitleIconSize,
-                    borderRadius: Math.round(sectionTitleIconSize * 0.3),
-                  },
-                ]}
-                resizeMode="contain"
-                accessibilityRole="header"
-                accessibilityLabel="About"
-              />
-            </View>
-	          <View style={styles.aboutCard}>
-	            <View style={styles.aboutRow}>
-	              <View
-                  style={[
-                    styles.aboutIconWrap,
-                    {
-                      width: aboutIconWrapSize,
-                      height: aboutIconWrapSize,
-                      borderRadius: Math.round(aboutIconWrapSize * 0.3),
-                    },
-                  ]}
-                >
-	                <Image
-	                  source={appIconSource}
-	                  style={[
-                      styles.aboutIcon,
-                      { width: aboutIconSize, height: aboutIconSize },
-                    ]}
-	                  resizeMode="contain"
-	                  accessibilityRole="image"
-	                  accessibilityLabel="EaseVerse app icon"
-	                />
-	              </View>
-	              <View style={styles.aboutCopy}>
-	                <Text style={styles.aboutTitle}>EaseVerse</Text>
-	                <Text style={styles.aboutText}>
-	                  A complete vocal training system that removes cognitive resistance between thought and expression. From handwritten lyrics to millisecond-precise timing analysis.
-	                </Text>
-	              </View>
-	            </View>
-	            
-	            <Text style={[styles.aboutSectionTitle, { marginTop: 20 }]}>Core Features</Text>
-	            <View style={styles.aboutHighlights}>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="musical-notes-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Live lyric tracking with BPM-synced count-in and metronome</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="document-text-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Smart lyrics editor with auto-save, section parsing, and 16 genre profiles</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="pulse-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>EasePocket: 5 timing modes (Subdivision, Silent Beat, Consonant, Pocket, Slow Mastery)</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="trophy-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Session scoring with pronunciation coaching and practice loop for difficult phrases</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="create-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>iPad Apple Pencil: Handwriting → text conversion (Scribble) + visual annotations (Ink On)</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="sync-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Real-time collaboration with WebSocket sync and line-by-line diff visualization</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="sparkles-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Warm Up exercises + Mindfulness sessions with AI-powered narration</Text>
-	              </View>
-	            </View>
-	            
-	            <Text style={styles.aboutSectionTitle}>AI Technology Stack</Text>
-	            <View style={styles.aboutHighlights}>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="logo-google" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Gemini 2.5 Flash: Pronunciation coaching with 1M requests/day capacity</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="mic-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Whisper STT: Local speech-to-text transcription</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="volume-high-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>ElevenLabs TTS: Premium voice synthesis for pronunciation playback</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="analytics-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>ML Learning Engine: Adaptive recommendations based on practice patterns</Text>
-	              </View>
-	            </View>
-	            
-	            <Text style={styles.aboutSectionTitle}>iPad Exclusive Features</Text>
-	            <View style={styles.aboutHighlights}>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="create" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Paper Mode: 36 lined guides (34px spacing) for natural handwriting</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="albums-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>iOS Scribble Integration: Automatic handwriting-to-text conversion</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="brush" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>Ink On: Pen (6 colors, 4 widths), Highlighter, Eraser with pressure sensitivity</Text>
-	              </View>
-	              <View style={styles.aboutHighlightRow}>
-	                <Ionicons name="refresh-circle-outline" size={scaledIcon(9)} color={Colors.gradientStart} />
-	                <Text style={styles.aboutHighlightText}>60-state undo/redo for drawings, stylus priority mode, session persistence</Text>
-	              </View>
-	            </View>
-	          </View>
-
-	          <View style={styles.settingsCard}>
-	            <SettingRow icon="info" label="Version" value="1.0.0 (Feb 2026)" />
-	            <View style={styles.divider} />
-	            <SettingRow icon="globe" label="API Server" value={apiHost || 'Unknown'} />
-	            <View style={styles.divider} />
-	            <SettingRow icon="code" label="Frontend" value="React Native + Expo" />
-	            <View style={styles.divider} />
-	            <SettingRow icon="cpu" label="Backend" value="Node.js + Express" />
-	            <View style={styles.divider} />
-	            <SettingRow icon="zap" label="AI Coaching" value="Gemini 2.5 Flash" />
-	            <View style={styles.divider} />
-	            <SettingRow icon="mic" label="Speech-to-Text" value="Whisper Base EN" />
-	            <View style={styles.divider} />
-	            <SettingRow icon="speaker" label="Text-to-Speech" value="ElevenLabs" />
-	            <View style={styles.divider} />
-	            <SettingRow icon="activity" label="Timing Engine" value="EasePocket v1" />
-	            <View style={styles.divider} />
-	            <SettingRow icon="bar-chart" label="ML Learning" value="Rule-based Adaptive" />
-	            <View style={styles.divider} />
-	            <SettingRow icon="edit" label="iPad Pencil" value="Scribble + Ink On" />
-	            <View style={styles.divider} />
-	            <SettingRow
-	              icon="link"
-	              label="API Catalog"
-	              value="Open"
-	              onPress={handleOpenApiCatalog}
-	              accessibilityHint="Opens the API discovery document in your browser"
-	            />
-	            <View style={styles.divider} />
-	            <SettingRow
-	              icon="file-text"
-	              label="OpenAPI Spec"
-	              value="Open"
-	              onPress={handleOpenOpenApiJson}
-	              accessibilityHint="Opens the OpenAPI JSON spec in your browser"
-	            />
-	            <View style={styles.divider} />
-	            <SettingRow
-	              icon="shield"
-	              label="Privacy Policy"
-	              value="Open"
-	              onPress={handleOpenPrivacy}
-	              accessibilityHint="Opens the EaseVerse privacy policy"
-	            />
-	            <View style={styles.divider} />
-	            <SettingRow
-	              icon="trash-2"
-	              label="Delete account & data"
-	              value="Request"
-	              onPress={handleOpenAccountDeletion}
-	              accessibilityHint="Opens the permanent account deletion request page"
-	            />
-	          </View>
-	        </View>
-        </View>
-      </ScrollView>
-	    </View>
-	  );
-	}
+        </ProfileGroup>
+        <ProfileGroup title="Help & privacy" summary="Quick tour, app information and your data" icon="help-circle-outline">
+          <Text accessibilityRole="header" style={styles.preferenceTitle}>How To Use</Text>
+          <HowToUseEaseVerse onNavigate={route=>router.push(route)}/>
+          <View style={styles.aboutCard}>
+            <Text style={styles.aboutTitle}>EaseVerse</Text><Text style={styles.aboutText}>Write lyrics, capture vocal ideas and work with your producer through Sound Room.</Text>
+            <Text style={styles.modeHint}>Version {Constants.expoConfig?.version??'Unknown'}</Text>
+          </View>
+          <SettingRow icon="shield" label="Privacy Policy" value="Read" onPress={handleOpenPrivacy}/>
+          <SettingRow icon="trash-2" label="Delete account & data" value="View request options" onPress={handleOpenAccountDeletion} accessibilityHint="Opens information about requesting deletion; no data is deleted here"/>
+          <ProfileGroup title="Technical details" summary="Service address and API documents" icon="code-slash-outline">
+            <SettingRow icon="globe" label="API Server" value={apiHost||'Unknown'}/>
+            <SettingRow icon="link" label="API Catalog" value="Open" onPress={handleOpenApiCatalog}/>
+            <SettingRow icon="file-text" label="OpenAPI Spec" value="Open" onPress={handleOpenOpenApiJson}/>
+          </ProfileGroup>
+        </ProfileGroup>
+        {AUTH_CONFIGURED&&isSignedIn&&<ProfileGroup title="Usage & administration" summary="Usage details and authorized account tools" icon="bar-chart-outline">
+          <AdminLinkRow sectionPadding={0}/><CostDashboardCard horizontalMargin={0}/>
+        </ProfileGroup>}
+      </View>
+    </ScrollView>
+    <Modal visible={choice!==null} transparent animationType="fade" onRequestClose={()=>setChoice(null)}>
+      <View style={styles.modalOverlay}><View style={styles.choiceDialog} accessibilityViewIsModal>
+        <Text accessibilityRole="header" style={styles.groupTitle}>{choice==='language'?'Practice language':'Accent goal'}</Text>
+        <ScrollView>{(choice==='language'?languages:accents).map(value=>{
+          const selected=value===(choice==='language'?settings.language:settings.accentGoal);
+          return <Pressable key={value} accessibilityRole="radio" accessibilityLabel={value} accessibilityState={{checked:selected}} aria-checked={selected}
+            onPress={()=>{updateSettings(choice==='language'?{language:value}:{accentGoal:value});setChoice(null);}}
+            style={[styles.choiceRow,selected&&styles.segmentActive]}>
+            <Text style={styles.preferenceTitle}>{value}</Text><Ionicons name={selected?'radio-button-on':'radio-button-off'} size={22} color={selected?Colors.gradientMid:Colors.textTertiary}/>
+          </Pressable>;
+        })}</ScrollView>
+        <Pressable onPress={()=>setChoice(null)} accessibilityRole="button" style={styles.choiceCancel}><Text style={styles.preferenceTitle}>Cancel</Text></Pressable>
+      </View></View>
+    </Modal>
+  </View>;
+}
 
 const styles = StyleSheet.create({
+  profileHeader:{flexDirection:'row',alignItems:'center',gap:14,paddingVertical:20},profileArt:{width:58,height:58,borderRadius:18},profileTitle:{fontSize:30,lineHeight:38,color:Colors.textPrimary,fontFamily:'Inter_700Bold'},profileSubtitle:{fontSize:12,lineHeight:19,color:Colors.textTertiary},
+  settingCopy:{flex:1,minWidth:0,gap:3},menuHeading:{fontSize:18,color:Colors.textPrimary,fontFamily:'Inter_600SemiBold',marginTop:8},
+  group:{borderRadius:18,borderWidth:1,borderColor:Colors.borderGlass,backgroundColor:Colors.surface,overflow:'hidden'},
+  groupHeader:{minHeight:82,padding:16,flexDirection:'row',alignItems:'center',gap:12},groupIcon:{width:36,height:36,borderRadius:12,alignItems:'center',justifyContent:'center',backgroundColor:Colors.accentSubtle},groupTitle:{fontSize:16,lineHeight:23,color:Colors.textPrimary,fontFamily:'Inter_600SemiBold'},groupSummary:{fontSize:12,lineHeight:18,color:Colors.textTertiary},groupBody:{padding:14,paddingTop:4,gap:18},
+  preference:{gap:10},preferenceTitle:{fontSize:14,lineHeight:21,color:Colors.textPrimary,fontFamily:'Inter_600SemiBold'},localSummary:{padding:18,borderRadius:18,backgroundColor:Colors.surfaceGlass,borderWidth:1,borderColor:Colors.borderGlass,gap:14},localStats:{flexDirection:'row',gap:12},
+  errorText:{fontSize:13,lineHeight:20,color:Colors.dangerUnderline},modalOverlay:{flex:1,justifyContent:'center',backgroundColor:'rgba(0,0,0,0.72)',padding:20},choiceDialog:{maxHeight:'85%',width:'100%',maxWidth:420,alignSelf:'center',padding:20,borderRadius:22,backgroundColor:Colors.surface,borderWidth:1,borderColor:Colors.borderGlass,gap:16},choiceRow:{minHeight:48,padding:12,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderRadius:10,gap:8},choiceCancel:{minHeight:48,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:Colors.borderGlass,borderRadius:12},
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-  },
-  statsCard: {
-    marginHorizontal: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-  },
-  statsGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 16,
   },
   statItem: {
     flex: 1,
@@ -1672,47 +1023,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_500Medium',
   },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: Colors.borderGlass,
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-    gap: 10,
-  },
-  sectionTitle: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  sectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sectionHeaderIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
-  },
-  sectionTitleIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 44,
-  },
-  sectionHeaderPressed: {
-    opacity: 0.9,
-  },
   settingsCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -1728,30 +1038,6 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
-  aboutRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  aboutIconWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: Colors.surfaceGlass,
-    borderWidth: 1,
-    borderColor: Colors.borderGlass,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  aboutIcon: {
-    width: 44,
-    height: 44,
-  },
-  aboutCopy: {
-    flex: 1,
-    gap: 4,
-  },
   aboutTitle: {
     color: Colors.textPrimary,
     fontSize: 16,
@@ -1763,43 +1049,17 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: 'Inter_400Regular',
   },
-  aboutHighlights: {
-    marginTop: 12,
-    gap: 8,
-  },
-  aboutHighlightRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  aboutHighlightText: {
-    flex: 1,
-    color: Colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontFamily: 'Inter_500Medium',
-  },
-  aboutSectionTitle: {
-    color: Colors.textPrimary,
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-    marginTop: 16,
-    marginBottom: 8,
-  },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    minHeight:60,
+    gap:12,
   },
   settingRowPressed: {
     backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
   },
   iconContainer: {
     width: 32,
@@ -1811,17 +1071,14 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     color: Colors.textPrimary,
-    fontSize: 16,
+    fontSize: 14,
+    lineHeight:21,
     fontFamily: 'Inter_500Medium',
-  },
-  settingRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
   },
   settingValue: {
     color: Colors.textTertiary,
-    fontSize: 15,
+    fontSize: 12,
+    lineHeight:18,
     fontFamily: 'Inter_400Regular',
   },
   divider: {
@@ -1839,7 +1096,9 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    minHeight:48,
+    paddingHorizontal:4,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1848,10 +1107,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentSubtle,
     borderWidth: 1,
     borderColor: Colors.accentBorder,
-  },
-  segmentIcon: {
-    width: 44,
-    height: 30,
   },
   segmentText: {
     color: Colors.textTertiary,

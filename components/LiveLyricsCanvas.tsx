@@ -13,6 +13,7 @@ import type { LyricLine, WordState } from '@/lib/types';
 interface LiveLyricsCanvasProps {
   lines: LyricLine[];
   activeLineIndex: number;
+  isListening?: boolean;
 }
 
 function AnimatedWord({ text, state }: { text: string; state: WordState }) {
@@ -31,17 +32,16 @@ function AnimatedWord({ text, state }: { text: string; state: WordState }) {
 
   const getTextOpacity = () => {
     switch (state) {
-      case 'upcoming': return 0.4;
+      case 'upcoming': return 0.82;
       case 'active': return 1;
       case 'confirmed': return 0.88;
       case 'unclear': return 0.5;
       case 'mismatch': return 0.82;
-      default: return 0.4;
+      default: return 0.82;
     }
   };
 
   const showUnderline = state !== 'upcoming';
-  const isActive = state === 'active';
   const isDotted = state === 'unclear';
 
   useEffect(() => {
@@ -69,8 +69,8 @@ function AnimatedWord({ text, state }: { text: string; state: WordState }) {
           styles.word,
           {
             opacity: getTextOpacity(),
-            fontFamily: isActive ? 'Inter_600SemiBold' : 'Inter_500Medium',
-            fontSize: isActive ? 30 : 28,
+            fontFamily: 'Inter_500Medium',
+            fontSize: 25,
           },
         ]}
       >
@@ -88,45 +88,36 @@ function AnimatedWord({ text, state }: { text: string; state: WordState }) {
 }
 
 function AnimatedLine({ line, isActive }: { line: LyricLine; isActive: boolean }) {
-  const opacity = useSharedValue(isActive ? 1 : 0.7);
-  const scale = useSharedValue(isActive ? 1 : 0.96);
-
-  useEffect(() => {
-    opacity.value = withTiming(isActive ? 1 : 0.7, { duration: 200 });
-    scale.value = withTiming(isActive ? 1 : 0.96, { duration: 200 });
-  }, [isActive, opacity, scale]);
-
-  const lineAnim = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-
+  const text = line.words.map(word => word.text).join(' ');
+  if (/^\[.+\]$/.test(text.trim())) {
+    return <Text style={styles.sectionLabel}>{text.trim().slice(1, -1)}</Text>;
+  }
   return (
-    <Animated.View style={[styles.lineContainer, isActive && styles.activeLineContainer, lineAnim]}>
+    <View style={styles.lineContainer} accessible accessibilityLabel={text}>
       {isActive && <View style={styles.nowGuide} />}
       <View style={styles.wordsRow}>
         {line.words.map(word => (
           <AnimatedWord key={word.id} text={word.text} state={word.state} />
         ))}
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
-export default function LiveLyricsCanvas({ lines, activeLineIndex }: LiveLyricsCanvasProps) {
-  const hasActiveLine = activeLineIndex >= 0;
+export default function LiveLyricsCanvas({ lines, activeLineIndex, isListening = false }: LiveLyricsCanvasProps) {
+  const hasActiveLine = isListening && activeLineIndex >= 0;
   const visibleStart = hasActiveLine ? Math.max(0, activeLineIndex - 1) : 0;
-  const visibleEnd = hasActiveLine ? Math.min(lines.length, activeLineIndex + 3) : Math.min(lines.length, 4);
+  const visibleEnd = hasActiveLine ? Math.min(lines.length, activeLineIndex + 3) : lines.length;
   const visibleLines = lines.slice(visibleStart, visibleEnd);
 
   return (
-    <View style={styles.canvas}>
+    <View style={styles.canvas} testID="sing-lyrics-canvas">
       {visibleLines.map((line, idx) => {
         const globalIdx = visibleStart + idx;
         return (
           <AnimatedLine
             key={line.id}
-            line={line}
+            line={isListening ? line : { ...line, words: line.words.map(word => ({ ...word, state: 'upcoming' as const })) }}
             isActive={hasActiveLine && globalIdx === activeLineIndex}
           />
         );
@@ -141,26 +132,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderGlass,
     borderRadius: 20,
-    paddingVertical: 28,
-    paddingHorizontal: 20,
-    minHeight: 200,
+    paddingVertical: 20,
+    paddingHorizontal: 18,
+    minHeight: 160,
     justifyContent: 'center',
     gap: 14,
   },
+  sectionLabel: { color: Colors.gradientMid, fontSize: 12, lineHeight: 18, letterSpacing: 1.2,
+    fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase', paddingLeft: 12 },
   lineContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
-  },
-  activeLineContainer: {
-    paddingLeft: 8,
+    paddingLeft: 12,
   },
   nowGuide: {
     width: 2.5,
     height: '100%',
     backgroundColor: Colors.gradientStart,
     borderRadius: 1.5,
-    marginRight: 10,
+    position: 'absolute',
+    left: 0,
     opacity: 0.5,
   },
   wordsRow: {
@@ -174,7 +166,7 @@ const styles = StyleSheet.create({
   },
   word: {
     color: Colors.textPrimary,
-    lineHeight: 40,
+    lineHeight: 36,
     letterSpacing: 0.3,
   },
   underline: {

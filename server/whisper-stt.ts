@@ -3,6 +3,7 @@
  * Uses @huggingface/transformers to run Whisper locally in Node.js
  */
 
+import {hasAudibleSignal} from '../shared/audio-signal';
 import { pipeline, AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
 import { readFile, writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -193,6 +194,8 @@ export async function transcribeWithWhisper(
     debugLog('Whisper: Decoding audio with ffmpeg...');
     const audioSamples = await decodeAudio(audioBuffer);
     debugLog('Whisper: Decoded', audioSamples.length, 'samples');
+    // A recogniser may hallucinate text for digital silence. Do not invoke it here.
+    if(!hasAudibleSignal(audioSamples))return '';
 
     // Pass raw audio samples to Whisper
     const generationOptions: Record<string, unknown> = {

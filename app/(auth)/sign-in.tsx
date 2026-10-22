@@ -2,12 +2,15 @@ import React, { useState } from "react";
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/creatorhub-auth";
+import { safeCreatorHubAuthNextPath } from '@/lib/auth-return';
 
 export default function SignInScreen() {
+  const {next} = useLocalSearchParams<{next?: string}>();
+  const nextPath = safeCreatorHubAuthNextPath(next);
   const insets = useSafeAreaInsets();
   const { signIn, isSigningIn } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -16,8 +19,8 @@ export default function SignInScreen() {
     if (isSigningIn) return;
     setError(null);
     try {
-      const completed = await signIn();
-      if (completed && Platform.OS !== "web") router.replace("/(tabs)");
+      const completed = await signIn(nextPath ?? undefined);
+      if (completed && Platform.OS !== "web") router.replace((nextPath ?? '/(tabs)') as Href);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "CreatorHub login failed.");
     }
@@ -28,21 +31,21 @@ export default function SignInScreen() {
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 28 }]}
     >
-      <Pressable onPress={() => router.back()} style={styles.back} accessibilityLabel="Go back">
+      <Pressable onPress={() => router.back()} style={[styles.back,{top:insets.top+12}]} accessibilityRole="button" accessibilityLabel="Go back">
         <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
       </Pressable>
       <View style={styles.mark}>
         <Ionicons name="musical-notes" size={28} color={Colors.gradientMid} />
       </View>
-      <Text style={styles.eyebrow}>CREATORHUB WORKSPACE</Text>
-      <Text style={styles.title}>One login for your whole music workflow</Text>
+      <Text style={styles.eyebrow}>EASEVERSE</Text>
+      <Text style={styles.title}>Sign in to EaseVerse</Text>
       <Text style={styles.subtitle}>
-        Continue with the same CreatorHub account you use in Workspace. Your EaseVerse projects and Pro Tools Companion pairing stay connected to that identity.
+        Use the email address your producer invited. Open your personal invitation first if you have not joined the studio project yet.
       </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable onPress={start} disabled={isSigningIn} accessibilityRole="button">
+      <Pressable onPress={start} disabled={isSigningIn} accessibilityRole="button" accessibilityLabel="Continue with Google">
         <LinearGradient
           colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd] as const}
           start={{ x: 0, y: 0 }}
@@ -54,7 +57,7 @@ export default function SignInScreen() {
           ) : (
             <>
               <Ionicons name="logo-google" size={18} color="#fff" />
-              <Text style={styles.primaryText}>Continue with CreatorHub</Text>
+              <Text style={styles.primaryText}>Continue with Google</Text>
             </>
           )}
         </LinearGradient>
@@ -63,7 +66,7 @@ export default function SignInScreen() {
       <View style={styles.note}>
         <Ionicons name="shield-checkmark-outline" size={17} color={Colors.gradientMid} />
         <Text style={styles.noteText}>
-          EaseVerse does not create a separate password or account. Authentication is handled by CreatorHub Workspace.
+          CreatorHub provides sign-in for EaseVerse. Artists and band members join studio projects through their producer’s invitation.
         </Text>
       </View>
     </ScrollView>

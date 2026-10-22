@@ -255,14 +255,14 @@ export const voiceSafetyRules: SafetyRule[] = [
     type: 'danger',
   },
   {
-    title: 'Hydrate with room-temp water',
-    description: 'Cold water shocks your vocal cords. Hot water increases mucus. Room temperature water is ideal.',
+    title: 'Stay hydrated',
+    description: 'Drink water regularly and give your voice breaks. Choose a temperature that feels comfortable.',
     icon: 'water',
     type: 'info',
   },
   {
-    title: 'Never sing on a cold voice',
-    description: 'Always warm up before performing or rehearsing. Singing without warming up is like sprinting without stretching.',
+    title: 'Prepare gently',
+    description: 'Start with gentle sounds in a comfortable range. A completed warm-up does not assess whether your voice is ready.',
     icon: 'thermometer',
     type: 'warning',
   },

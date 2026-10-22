@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -52,6 +52,7 @@ function RootLayoutNav() {
           animation: "slide_from_bottom",
         }}
       />
+      <Stack.Screen name="warmup-session" options={{headerShown:false,presentation:"card",animation:"slide_from_bottom"}} />
       <Stack.Screen
         name="warmup"
         options={{
@@ -145,6 +146,7 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const pathname = usePathname();
   const [fontsLoaded] = useFonts({
     Inter_400Regular: require("@/assets/fonts/Inter_400Regular.ttf"),
     Inter_500Medium: require("@/assets/fonts/Inter_500Medium.ttf"),
@@ -173,6 +175,14 @@ export default function RootLayout() {
       useNativeDriver: true,
     }).start(() => setShowIntro(false));
   }, [introOpacity]);
+
+  useEffect(() => {
+    if (pathname.startsWith('/sound-room/invite/')) {
+      introDismissedRef.current = true;
+      introPlayer.pause();
+      setShowIntro(false);
+    }
+  }, [pathname, introPlayer]);
 
   // expo-video: 'playToEnd' tilsvarer expo-av sin didJustFinish; ved feil-status
   // hopper vi rett til appen (samme oppførsel som onError før).
@@ -307,6 +317,10 @@ const styles = StyleSheet.create({
   },
   introVideo: {
     ...StyleSheet.absoluteFillObject,
+    // VideoView maps styles directly to <video> on web. Explicit dimensions
+    // prevent the intrinsic video size from widening small phone viewports.
+    width: "100%",
+    height: "100%",
   },
   introActions: {
     position: "absolute",
@@ -317,7 +331,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   introActionButton: {
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.35)",

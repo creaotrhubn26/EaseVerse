@@ -1,3 +1,4 @@
+import { PracticeAnalysisPanel } from '@/components/PracticeAnalysisPanel';
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -23,17 +24,19 @@ import { useApp } from '@/lib/AppContext';
 import { goBackWithFallback } from '@/lib/navigation';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
+import { useIsFocused } from '@react-navigation/native';
+import { hasNoSharedLyricWords } from '@/shared/lyric-match';
 
 function InsightCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <View style={styles.insightCard}>
-      <Text style={[styles.insightValue, { color }]}>{value}</Text>
+    <View style={styles.insightCard} accessible accessibilityLabel={`${label}: ${value}`} testID={`session-insight-${label.toLowerCase().replace(/ /g, "-")}`}>
       <Text style={styles.insightLabel}>{label}</Text>
+      <Text style={[styles.insightValue, { color }]}>{value}</Text>
     </View>
   );
 }
 
-function FixItem({ word, reason, index, onPronounce, isActive, coachState, coachResult }: {
+function FixItem({ word, reason, index, onPronounce, isActive, coachState, coachResult, coachError }: {
   word: string;
   reason: string;
   index: number;
@@ -41,23 +44,24 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
   isActive: boolean;
   coachState: string;
   coachResult: { phonetic: string; tip: string; slow: string } | null;
+  coachError:string|null;
 }) {
   const responsive = useResponsiveLayout();
-  const iconSize = scaledIconSize(11, responsive);
+  const iconSize = Math.max(24,scaledIconSize(16, responsive));
   const detailIconSize = scaledIconSize(10, responsive);
   const replayIconSize = scaledIconSize(9, responsive);
 
   return (
     <View>
       <Pressable
-        style={styles.fixItem}
+        style={({pressed})=>[styles.fixItem,pressed&&{backgroundColor:Colors.accentSubtle}]}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onPronounce(word);
         }}
         accessibilityRole="button"
-        accessibilityLabel={`Hear pronunciation for ${word}`}
-        accessibilityHint={reason}
+        accessibilityLabel={isActive&&(coachState==='playing'||coachState==='loading')?`Stop pronunciation example for ${word}`:`Hear pronunciation example for ${word}`}
+        accessibilityHint="Speaks an example using your device’s speech voice. This is not a clip from your recording."
       >
         <View style={styles.fixIndex}>
           <Text style={styles.fixIndexText}>{index + 1}</Text>
@@ -69,12 +73,14 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
         {isActive && coachState === 'loading' ? (
           <ActivityIndicator size="small" color={Colors.gradientStart} />
         ) : (
-          <Ionicons name="volume-high-outline" size={iconSize} color={Colors.gradientStart} />
+          <Ionicons name={isActive&&coachState==='playing'?'stop-circle-outline':'volume-high-outline'} size={iconSize} color={Colors.gradientStart} />
         )}
       </Pressable>
+      {isActive&&(coachState==='loading'||coachState==='playing')&&<View style={styles.coachPanel} accessibilityLiveRegion="polite"><Text style={styles.coachTip}>{coachState==='loading'?'Preparing example pronunciation…':'Playing example pronunciation…'} Tap the word again to stop.</Text></View>}
+      {isActive&&coachError&&<View style={styles.coachPanel}><Text style={styles.coachError} accessibilityRole="alert">{coachError}</Text><Pressable style={styles.replayBtn} onPress={()=>onPronounce(word)} accessibilityRole="button" accessibilityLabel={`Retry pronunciation for ${word}`}><Text style={styles.replayText}>Try again</Text></Pressable></View>}
       {isActive && coachResult && (
         <View style={styles.coachPanel}>
-          <View style={styles.coachPhoneticRow}>
+          {!!coachResult.phonetic&&<View style={styles.coachPhoneticRow}>
             <Ionicons name="ear-outline" size={detailIconSize} color={Colors.gradientEnd} />
             <Text style={styles.coachPhonetic}>{coachResult.phonetic}</Text>
             {coachState === 'playing' && (
@@ -84,7 +90,7 @@ function FixItem({ word, reason, index, onPronounce, isActive, coachState, coach
                 <View style={[styles.speakingBar, styles.speakingBar3]} />
               </View>
             )}
-          </View>
+          </View>}
           <Text style={styles.coachTip}>{coachResult.tip}</Text>
           <Pressable
             style={styles.replayBtn}
@@ -109,11 +115,16 @@ export default function SessionReviewScreen() {
   const insets = useSafeAreaInsets();
   const responsive = useResponsiveLayout();
   const { id, fromRecording } = useLocalSearchParams<{ id: string; fromRecording?: string }>();
-  const { sessions, toggleFavorite } = useApp();
+  const { sessions, toggleFavorite, updateSession, settings } = useApp();
   const coach = usePronunciationCoach();
+  const [showGenreTips, setShowGenreTips] = useState(false);
   const [activeFixWord, setActiveFixWord] = useState<string | null>(null);
   const [showAddedToast, setShowAddedToast] = useState(false);
   const [waveformProgress, setWaveformProgress] = useState(0);
+  const [playbackError, setPlaybackError] = useState('');
+  const [footerHeight,setFooterHeight]=useState(100);
+  const [audioAttempt, setAudioAttempt] = useState(0);
+  const focused = useIsFocused();
   type TrimMarks = { start: number | null; end: number | null };
   const [trimMarks, setTrimMarks] = useState<TrimMarks>({ start: null, end: null });
   const [trimHistory, setTrimHistory] = useState<TrimMarks[]>([]);
@@ -155,6 +166,8 @@ export default function SessionReviewScreen() {
   const session = useMemo(() => sessions.find(s => s.id === id), [sessions, id]);
 
   const handlePronounce = (word: string) => {
+    if(activeFixWord===word&&(coach.state==='playing'||coach.state==='loading')){coach.dismiss();setActiveFixWord(null);return;}
+    player.pause();
     setActiveFixWord(word);
     coach.pronounce(word, undefined, session?.genre);
   };
@@ -167,7 +180,7 @@ export default function SessionReviewScreen() {
   const playerStatus = useAudioPlayerStatus(player);
   const genreProfile = useMemo(() => session?.genre ? getGenreProfile(session.genre) : null, [session?.genre]);
 
-  const webTopInset = Platform.OS === 'web' ? 67 : 0;
+  const webTopInset = 0;
   const webBottomInset = Platform.OS === 'web' ? 34 : 0;
   const hasRecording = Boolean(session?.recordingUri);
   const hasWebLocalRecordingUri =
@@ -175,6 +188,15 @@ export default function SessionReviewScreen() {
     typeof session?.recordingUri === 'string' &&
     /^(file|content):\/\//i.test(session.recordingUri);
   const canPlayRecording = hasRecording && !hasWebLocalRecordingUri;
+  useEffect(() => {
+    if (!focused) { try { player.pause(); } catch {} }
+  }, [focused, player]);
+  useEffect(() => {
+    setPlaybackError('');
+    if (!canPlayRecording || playerStatus.isLoaded) return;
+    const timer = setTimeout(() => setPlaybackError('Could not load this recording. Try again.'), 10000);
+    return () => clearTimeout(timer);
+  }, [canPlayRecording, playerStatus.isLoaded, session?.id, audioAttempt]);
   const horizontalInset = responsive.contentPadding;
   const contentMaxWidth = responsive.contentMaxWidth;
   const sectionWrapStyle = useMemo(
@@ -207,7 +229,7 @@ export default function SessionReviewScreen() {
       <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
         <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
           <Pressable
-            onPress={() => goBackWithFallback(router, '/profile')}
+            onPress={() => goBackWithFallback(router, '/sessions')}
             hitSlop={12}
             style={styles.backButton}
             accessibilityRole="button"
@@ -245,28 +267,14 @@ export default function SessionReviewScreen() {
     if (v >= 70) return Colors.warningUnderline;
     return Colors.dangerUnderline;
   };
+  const noSharedWords = hasNoSharedLyricWords(session.analysis?.comparison);
 
-  const getTimingLabel = (t: string) => {
-    switch (t) {
-      case 'high': return 'Consistent';
-      case 'medium': return 'Moderate';
-      default: return 'Needs work';
-    }
-  };
-
-  const getTimingColor = (t: string) => {
-    switch (t) {
-      case 'high': return Colors.successUnderline;
-      case 'medium': return Colors.warningUnderline;
-      default: return Colors.dangerUnderline;
-    }
-  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + webTopInset }]}>
       <View style={[styles.topBar, sectionWrapStyle, { paddingHorizontal: horizontalInset }]}>
         <Pressable
-          onPress={() => goBackWithFallback(router, '/profile')}
+            onPress={() => goBackWithFallback(router, '/sessions')}
           hitSlop={12}
           style={styles.backButton}
           accessibilityRole="button"
@@ -309,7 +317,7 @@ export default function SessionReviewScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, webBottomInset) + 100 }}
+        contentContainerStyle={{ paddingBottom: footerHeight + 24 }}
       >
         <View style={{ width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const }}>
         <View style={[styles.sessionHeader, { paddingHorizontal: horizontalInset }]}>
@@ -324,9 +332,8 @@ export default function SessionReviewScreen() {
         <View style={[styles.waveformSection, { paddingHorizontal: horizontalInset }]}>
           <WaveformTimeline
             progress={waveformProgress}
-            barCount={70}
-            duration={session.duration}
-            interactive
+            duration={playerStatus.duration || session.duration}
+            interactive={canPlayRecording && playerStatus.isLoaded}
             onSeek={(seekPos) => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setWaveformProgress(seekPos);
@@ -335,12 +342,13 @@ export default function SessionReviewScreen() {
                   playerStatus.duration && playerStatus.duration > 0
                     ? playerStatus.duration
                     : session.duration;
-                void player.seekTo(Math.max(0, Math.min(effectiveDuration, seekPos * effectiveDuration)));
+                void player.seekTo(Math.max(0, Math.min(effectiveDuration, seekPos * effectiveDuration))).catch(() => setPlaybackError('Could not change playback position. Try again.'));
               }
             }}
           />
           <View style={styles.waveformControls}>
             <Pressable
+              disabled={!canPlayRecording || !playerStatus.isLoaded}
               onPress={() => {
                 if (!canPlayRecording) {
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -350,15 +358,23 @@ export default function SessionReviewScreen() {
                 if (playerStatus.playing) {
                   void player.pause();
                 } else {
-                  void player.play();
+                  coach.dismiss();
+                  setPlaybackError('');
+                  const duration = playerStatus.duration || session.duration;
+                  void (async () => {
+                    try {
+                      if (playerStatus.didJustFinish || playerStatus.currentTime >= duration - 0.05) await player.seekTo(0);
+                      player.play();
+                    } catch { setPlaybackError('Could not play this recording. Try again.'); }
+                  })();
                 }
               }}
-              style={styles.waveformPlayBtn}
+              style={[styles.waveformPlayBtn, (!canPlayRecording || !playerStatus.isLoaded) && {opacity:0.45}]}
               accessibilityRole="button"
               accessibilityLabel={playerStatus.playing ? 'Pause session audio' : 'Play session audio'}
               accessibilityHint="Plays or pauses the recorded take"
             >
-              <Ionicons name={playerStatus.playing ? 'pause' : 'play'} size={scaledIcon(10)} color="#fff" />
+              <Ionicons name={playerStatus.playing ? 'pause' : 'play'} size={24} color="#111318" />
               <Text style={styles.waveformPlayText}>{playerStatus.playing ? 'Pause' : 'Play'}</Text>
             </Pressable>
             {!hasRecording && (
@@ -370,6 +386,14 @@ export default function SessionReviewScreen() {
               </Text>
             )}
           </View>
+          {canPlayRecording && !playerStatus.isLoaded && !playbackError && <Text style={styles.waveformHintText}>Loading recording…</Text>}
+          {!!playbackError && <View>
+            <Text accessibilityRole="alert" style={styles.waveformHintText}>{playbackError}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Retry session audio" style={{minHeight:44,justifyContent:'center'}}
+              onPress={() => {setAudioAttempt(value=>value+1);setPlaybackError('');try{player.replace(sessionAudioSource);}catch{setPlaybackError('Could not load this recording. Try again.');}}}>
+              <Text style={{color:Colors.gradientMid}}>Try again</Text>
+            </Pressable>
+          </View>}
           {hasRecording && Platform.OS === 'web' && !hasWebLocalRecordingUri ? (
             <View style={styles.trimRow}>
               <View style={styles.trimMarkRow}>
@@ -476,31 +500,38 @@ export default function SessionReviewScreen() {
 
         <View style={[styles.insightsRow, { paddingHorizontal: horizontalInset }]}>
           <InsightCard
-            label="Text Accuracy"
-            value={`${session.insights.textAccuracy}%`}
-            color={getAccuracyColor(session.insights.textAccuracy)}
+            label="Lyric match"
+            value={session.insights.analysisAvailable===false?'Not analysed':noSharedWords?'No word matches':`${session.insights.textAccuracy}%`}
+            color={session.insights.analysisAvailable===false||noSharedWords?Colors.textSecondary:getAccuracyColor(session.insights.textAccuracy)}
           />
           <InsightCard
             label="Pronunciation"
-            value={`${session.insights.pronunciationClarity}%`}
-            color={getAccuracyColor(session.insights.pronunciationClarity)}
+            value="Not measured"
+            color={Colors.textSecondary}
           />
           <InsightCard
             label="Timing"
-            value={getTimingLabel(session.insights.timingConsistency)}
-            color={getTimingColor(session.insights.timingConsistency)}
+            value="Not measured"
+            color={Colors.textSecondary}
           />
         </View>
 
+        <View style={{paddingHorizontal:horizontalInset}}><PracticeAnalysisPanel session={session} language={settings.language} accentGoal={settings.accentGoal} onResult={patch=>updateSession(session.id,patch)}/></View>
+
         {genreProfile && (
           <View style={[styles.genreCoachSection, { paddingHorizontal: horizontalInset }]}>
-            <View style={styles.genreCoachHeader}>
+            <Pressable onPress={() => setShowGenreTips(value => !value)} style={styles.genreCoachHeader}
+              accessibilityRole="button" accessibilityLabel={`General ${genreProfile.label} practice tips`}
+              accessibilityState={{ expanded: showGenreTips }} aria-expanded={showGenreTips}>
               <View style={[styles.genreCoachBadge, { backgroundColor: genreProfile.accentColor, borderColor: genreProfile.color }]}>
                 <Ionicons name={genreProfile.icon} size={scaledIcon(9)} color={genreProfile.color} />
-                <Text style={[styles.genreCoachBadgeText, { color: genreProfile.color }]}>{genreProfile.label} Coaching</Text>
+                <Text style={[styles.genreCoachBadgeText, { color: genreProfile.color }]}>{genreProfile.label} · practice tips</Text>
               </View>
-            </View>
-            <View style={styles.genreCoachCard}>
+              <Ionicons name={showGenreTips ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.textSecondary}/>
+            </Pressable>
+            <Text style={styles.genreCoachDisclaimer}>General genre suggestions, not an assessment of this recording. No producer or AI has reviewed your voice for these tips.</Text>
+            {showGenreTips && <View style={styles.genreCoachCard}>
+
               <View style={styles.genreCoachRow}>
                 <Ionicons name="mic-outline" size={scaledIcon(10)} color={genreProfile.color} />
                 <View style={styles.genreCoachInfo}>
@@ -539,16 +570,16 @@ export default function SessionReviewScreen() {
                   ))}
                 </>
               )}
-            </View>
+            </View>}
           </View>
         )}
 
-        <View style={[styles.fixSection, { paddingHorizontal: horizontalInset }]}>
+        {!noSharedWords && session.insights.topToFix.length>0 && <View style={[styles.fixSection, { paddingHorizontal: horizontalInset }]}>
           <View style={styles.fixSectionHeader}>
-            <Text style={styles.fixSectionTitle}>Top to Fix</Text>
+            <Text style={styles.fixSectionTitle}>Words to check</Text>
             <View style={styles.fixSectionHint}>
               <Ionicons name="volume-high-outline" size={scaledIcon(8)} color={Colors.textTertiary} />
-              <Text style={styles.fixSectionHintText}>Tap to hear</Text>
+              <Text style={styles.fixSectionHintText}>Hear an example</Text>
             </View>
           </View>
           <View style={styles.fixList}>
@@ -562,10 +593,11 @@ export default function SessionReviewScreen() {
                 isActive={activeFixWord === item.word}
                 coachState={activeFixWord === item.word ? coach.state : 'idle'}
                 coachResult={activeFixWord === item.word ? coach.result : null}
+                coachError={activeFixWord === item.word ? coach.errorMessage : null}
               />
             ))}
           </View>
-        </View>
+        </View>}
 
         {session.lyrics && (
           <View style={[styles.lyricsSection, { paddingHorizontal: horizontalInset }]}>
@@ -579,15 +611,15 @@ export default function SessionReviewScreen() {
       </ScrollView>
 
       <View
+        onLayout={event=>setFooterHeight(event.nativeEvent.layout.height)}
         style={[
           styles.bottomAction,
-          sectionWrapStyle,
           {
-            paddingHorizontal: horizontalInset,
             paddingBottom: Math.max(insets.bottom, webBottomInset) + 16,
           },
         ]}
       >
+       <View style={[sectionWrapStyle,{paddingHorizontal:horizontalInset}]}>
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -604,10 +636,11 @@ export default function SessionReviewScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.practiceBtn}
           >
-            <Ionicons name="repeat" size={scaledIcon(12)} color="#fff" />
+            <Ionicons name="repeat" size={24} color="#111318" />
             <Text style={styles.practiceBtnText}>Practice Loop</Text>
           </LinearGradient>
         </Pressable>
+       </View>
       </View>
     </View>
   );
@@ -660,6 +693,7 @@ const styles = StyleSheet.create({
   },
   sessionMeta: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
   },
@@ -729,23 +763,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   waveformControls: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     gap: 12,
   },
   waveformPlayBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent:'center',
+    minHeight:52,
+    minWidth:148,
     gap: 8,
     backgroundColor: Colors.gradientStart,
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
   },
   waveformPlayText: {
-    color: '#fff',
-    fontSize: 13,
+    color: '#111318',
+    fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },
   waveformHintText: {
@@ -754,38 +791,49 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
   },
   insightsRow: {
-    flexDirection: 'row',
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 8,
     marginBottom: 24,
   },
   insightCard: {
-    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     backgroundColor: Colors.surface,
     borderRadius: 14,
-    padding: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
     borderWidth: 1,
     borderColor: Colors.borderGlass,
   },
   insightValue: {
-    fontSize: 20,
-    fontFamily: 'Inter_700Bold',
+    flexGrow: 1,
+    flexBasis: 130,
+    fontSize: 16,
+    lineHeight: 23,
+    fontFamily: 'Inter_600SemiBold',
+    textAlign: 'right',
   },
   insightLabel: {
-    color: Colors.textTertiary,
-    fontSize: 11,
+    flexGrow: 1,
+    flexBasis: 120,
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
     fontFamily: 'Inter_500Medium',
-    textAlign: 'center',
   },
   genreCoachSection: {
     paddingHorizontal: 20,
     marginBottom: 24,
     gap: 10,
   },
+  genreCoachDisclaimer: { color: Colors.textSecondary, fontSize: 13, lineHeight: 20, fontFamily: 'Inter_400Regular' },
   genreCoachHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 10,
     alignItems: 'center',
   },
   genreCoachBadge: {
@@ -904,10 +952,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fixItem: {
+    minHeight:76,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderGlass,
     gap: 12,
@@ -927,16 +976,18 @@ const styles = StyleSheet.create({
   },
   fixContent: {
     flex: 1,
+    minWidth:0,
     gap: 2,
   },
   fixWord: {
     color: Colors.textPrimary,
-    fontSize: 15,
+    fontSize: 17,
     fontFamily: 'Inter_600SemiBold',
   },
   fixReason: {
     color: Colors.textTertiary,
     fontSize: 13,
+    lineHeight:20,
     fontFamily: 'Inter_400Regular',
   },
   lyricsSection: {
@@ -962,26 +1013,31 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 20,
     paddingTop: 12,
     backgroundColor: Colors.background,
   },
   practicePressable: {
+    width:'100%',
+    minHeight:56,
     borderRadius: 14,
     overflow: 'hidden',
     boxShadow: `0px 4px 12px ${Colors.accentGlow}`,
     elevation: 6,
   },
   practiceBtn: {
+    minHeight:56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 16,
+    paddingHorizontal:20,
     borderRadius: 14,
   },
   practiceBtnText: {
-    color: '#fff',
+    color: '#111318',
+    textAlign:'center',
+    flexShrink:1,
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
   },
@@ -1010,13 +1066,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     lineHeight: 18,
   },
+  coachError:{color:Colors.dangerUnderline,fontSize:14,lineHeight:21,fontFamily:'Inter_500Medium'},
   replayBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     alignSelf: 'flex-start',
-    minHeight: 36,
-    paddingVertical: 4,
+    minHeight: 48,
+    minWidth:120,
+    paddingVertical: 12,
+    paddingHorizontal:12,
   },
   replayText: {
     color: Colors.gradientStart,

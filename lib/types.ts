@@ -40,6 +40,8 @@ export interface Song {
 }
 
 export interface SessionInsight {
+  /** False when no transcription was available; zero is not a measured score. */
+  analysisAvailable?: boolean;
   textAccuracy: number;
   pronunciationClarity: number;
   timingConsistency: 'low' | 'medium' | 'high';
@@ -59,6 +61,12 @@ export interface Session {
   insights: SessionInsight;
   lyrics: string;
   transcript?: string;
+  analysis?: {
+    provider: 'apple-speech' | 'android-speech' | 'browser-speech' | 'openai';
+    language: string;
+    analysedAt: number;
+    comparison: import('../shared/lyric-match').LyricMatch;
+  };
 }
 
 export type SignalQuality = 'good' | 'ok' | 'poor';
@@ -76,6 +84,8 @@ export interface UserSettings {
   countIn: 0 | 2 | 4;
   narrationVoice: NarrationVoice;
   metronomeEnabled: boolean;
+  /** Explicit opt-in before recordings, lyrics or practice history leave the device for analysis. */
+  cloudAnalysisEnabled?: boolean;
   /** Per-beat haptic on the metronome (in addition to the audible click). */
   metronomeHaptics: boolean;
 }

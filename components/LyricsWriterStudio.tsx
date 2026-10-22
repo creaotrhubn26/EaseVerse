@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import type { Session } from '@/lib/types';
@@ -162,8 +162,7 @@ export default function LyricsWriterStudio({
 
   return (
     <View style={styles.container}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Section Goals</Text>
+      <WriterSection title="Song structure" summary="Ideas for the parts of your song">
         {sectionGoals.map((goal) => (
           <View key={`${goal.sectionLabel}-${goal.sectionType}`} style={styles.goalRow}>
             <Text style={styles.goalLabel}>{goal.sectionLabel}</Text>
@@ -171,10 +170,9 @@ export default function LyricsWriterStudio({
             <Text style={styles.goalHint}>{goal.guidance}</Text>
           </View>
         ))}
-      </View>
+      </WriterSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Syllable + Stress Meter</Text>
+      <WriterSection title="Syllables and rhythm" summary="Estimated patterns to try against your melody">
         {meterAnalysis.length === 0 ? (
           <Text style={styles.emptyText}>Add lyric lines to see meter analysis.</Text>
         ) : (
@@ -199,10 +197,9 @@ export default function LyricsWriterStudio({
             </Pressable>
           ))
         )}
-      </View>
+      </WriterSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Rhyme Map</Text>
+      <WriterSection title="Rhymes" summary="Explore the endings of your lines">
         <Text style={styles.subhead}>End Rhymes</Text>
         {rhymeMap.endRhymes.length === 0 ? (
           <Text style={styles.emptyText}>No repeated end rhymes yet.</Text>
@@ -233,10 +230,9 @@ export default function LyricsWriterStudio({
             </Text>
           ))
         )}
-      </View>
+      </WriterSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Hook Lab</Text>
+      <WriterSection title="Hook ideas" summary="Try a different turn of phrase">
         {hookVariants.length === 0 ? (
           <Text style={styles.emptyText}>Add a chorus or a few lines to generate hook variants.</Text>
         ) : (
@@ -282,10 +278,9 @@ export default function LyricsWriterStudio({
             );
           })
         )}
-      </View>
+      </WriterSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Line Quality Lint</Text>
+      <WriterSection title="Writing checks" summary="Suggestions to review in your own style">
         {lintIssues.length === 0 ? (
           <Text style={styles.emptyText}>No major lint flags. Lyrics look clean.</Text>
         ) : (
@@ -309,15 +304,14 @@ export default function LyricsWriterStudio({
             </Pressable>
           ))
         )}
-      </View>
+      </WriterSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Version Timeline</Text>
+      <WriterSection title="Saved versions" summary="Keep a copy and compare changes">
         <View style={styles.inputRow}>
           <TextInput
             value={versionNote}
             onChangeText={setVersionNote}
-            placeholder="Snapshot note (optional)"
+            placeholder="Version note (optional)"
             placeholderTextColor={Colors.textTertiary}
             style={styles.input}
           />
@@ -328,13 +322,13 @@ export default function LyricsWriterStudio({
               setVersionNote('');
             }}
             accessibilityRole="button"
-            accessibilityLabel="Create version snapshot"
+            accessibilityLabel="Save a lyrics version"
           >
-            <Text style={styles.primaryBtnText}>Snapshot</Text>
+            <Text style={styles.primaryBtnText}>Save version</Text>
           </Pressable>
         </View>
         {versions.length === 0 ? (
-          <Text style={styles.emptyText}>No snapshots yet.</Text>
+          <Text style={styles.emptyText}>No saved versions yet.</Text>
         ) : (
           versions.slice(0, 16).map((version) => {
             const diff = summarizeVersionDiff(version.lyrics, lyrics);
@@ -371,10 +365,9 @@ export default function LyricsWriterStudio({
             );
           })
         )}
-      </View>
+      </WriterSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Comment Mode (Per Line)</Text>
+      <WriterSection title="Notes on lines" summary="Keep feedback beside the words">
         {editableLines.length === 0 ? (
           <Text style={styles.emptyText}>Add lines to annotate.</Text>
         ) : (
@@ -425,10 +418,9 @@ export default function LyricsWriterStudio({
             );
           })
         )}
-      </View>
+      </WriterSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Sing-Back Linkage</Text>
+      <WriterSection title="Practice feedback" summary="Review lines from your recorded takes">
         {singBackHotspots.length === 0 ? (
           <Text style={styles.emptyText}>Complete a singing session to surface weak lines.</Text>
         ) : (
@@ -454,10 +446,9 @@ export default function LyricsWriterStudio({
             </Pressable>
           ))
         )}
-      </View>
+      </WriterSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Capture Inbox</Text>
+      <WriterSection title="Idea notebook" summary="Save a phrase for later">
         <View style={styles.inputRow}>
           <TextInput
             value={captureDraft}
@@ -521,26 +512,25 @@ export default function LyricsWriterStudio({
             </View>
           ))
         )}
-      </View>
+      </WriterSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Pro Export</Text>
+      <WriterSection title="Share and export" summary="Prepare lyrics for rehearsal or sharing">
         <Text style={styles.exportPreview} numberOfLines={4}>
           {hasLyrics ? cleanExportText : 'Write lyrics to preview export.'}
         </Text>
         <View style={styles.exportActions}>
-          <Pressable style={styles.smallBtn} onPress={() => onExport('copy-clean')}>
-            <Text style={styles.smallBtnText}>Copy Clean</Text>
+          <Pressable accessibilityRole="button" style={styles.smallBtn} onPress={() => onExport('copy-clean')}>
+            <Text style={styles.smallBtnText}>{Platform.OS === 'web' ? 'Copy lyrics' : 'Share lyrics'}</Text>
           </Pressable>
-          <Pressable style={styles.smallBtn} onPress={() => onExport('copy-rehearsal')}>
-            <Text style={styles.smallBtnText}>Copy Rehearsal</Text>
+          <Pressable accessibilityRole="button" style={styles.smallBtn} onPress={() => onExport('copy-rehearsal')}>
+            <Text style={styles.smallBtnText}>{Platform.OS === 'web' ? 'Copy for rehearsal' : 'Share for rehearsal'}</Text>
           </Pressable>
-          <Pressable style={styles.smallBtn} onPress={() => onExport('download-clean')}>
+          {Platform.OS === 'web' && <><Pressable accessibilityRole="button" style={styles.smallBtn} onPress={() => onExport('download-clean')}>
             <Text style={styles.smallBtnText}>Download TXT</Text>
           </Pressable>
-          <Pressable style={styles.smallBtn} onPress={() => onExport('print')}>
+          <Pressable accessibilityRole="button" style={styles.smallBtn} onPress={() => onExport('print')}>
             <Text style={styles.smallBtnText}>Print / PDF</Text>
-          </Pressable>
+          </Pressable></>}
         </View>
         <Text style={styles.exportHint}>
           Rehearsal export includes line numbers and timestamp for practice sessions.
@@ -548,17 +538,38 @@ export default function LyricsWriterStudio({
         <Text style={styles.exportHint} numberOfLines={2}>
           Preview includes {rehearsalExportText.split('\n').length} lines.
         </Text>
-      </View>
+      </WriterSection>
     </View>
   );
+}
+
+function WriterSection({title, summary, children}: {title: string; summary: string; children: React.ReactNode}) {
+  const [expanded, setExpanded] = useState(false);
+  return <View style={styles.section}>
+    <Pressable accessibilityRole="button" accessibilityLabel={title}
+      accessibilityState={{expanded}} aria-expanded={expanded}
+      onPress={() => setExpanded(value => !value)}
+      {...(Platform.OS === 'web' ? {onKeyDown: (event: React.KeyboardEvent) => {
+        if (event.key === 'Enter' || event.key === ' ') {event.preventDefault();setExpanded(value => !value);}
+      }} : {})}
+      style={styles.toolHeading}>
+      <View style={styles.toolHeadingCopy}><Text style={styles.sectionTitle}>{title}</Text><Text style={styles.toolSummary}>{summary}</Text></View>
+      <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.gradientMid} />
+    </Pressable>
+    {expanded && <View style={styles.toolContent}>{children}</View>}
+  </View>;
 }
 
 const styles = StyleSheet.create({
   container: {
     gap: 12,
   },
+  toolHeading: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  toolHeadingCopy: { flex: 1, minWidth: 0, gap: 5 },
+  toolSummary: { color: Colors.textTertiary, fontSize: 12, lineHeight: 18 },
+  toolContent: { gap: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.borderGlass },
   section: {
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.borderGlass,
     backgroundColor: Colors.surface,

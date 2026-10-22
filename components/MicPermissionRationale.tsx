@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -21,20 +22,20 @@ export function MicPermissionRationale({ visible, onAllow, onCancel }: Props) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
+          <ScrollView contentContainerStyle={styles.cardContent} showsVerticalScrollIndicator>
           <View style={styles.iconCircle}>
             <Ionicons name="mic" size={32} color="#fff" />
           </View>
           <Text style={styles.title}>We need your microphone</Text>
           <Text style={styles.body}>
-            EaseVerse records vocals locally on your device for live lyric tracking and pronunciation coaching.
-            Recordings are only saved if you choose to keep them.
+            EaseVerse uses your microphone when you start a take. Takes of at least 3 seconds are saved locally when you stop. You can listen back or delete them from Sessions.
           </Text>
           <View style={styles.bulletList}>
             <Bullet icon="musical-notes-outline">Live highlighting of lyric words as you sing</Bullet>
-            <Bullet icon="sparkles-outline">Coach tips for pronunciation, rhythm and clarity</Bullet>
-            <Bullet icon="lock-closed-outline">Audio never leaves your device without your choice</Bullet>
+            <Bullet icon="sparkles-outline">Optional cloud analysis is off until you enable it in Profile</Bullet>
+            <Bullet icon="lock-closed-outline">Studio recordings are shared only when you choose Share</Bullet>
           </View>
-          <Pressable onPress={onAllow} accessibilityRole="button">
+          <Pressable onPress={onAllow} accessibilityRole="button" style={styles.allowAction}>
             <LinearGradient
               colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd] as const}
               start={{ x: 0, y: 0 }}
@@ -47,6 +48,7 @@ export function MicPermissionRationale({ visible, onAllow, onCancel }: Props) {
           <Pressable onPress={onCancel} accessibilityRole="button" style={styles.cancelButton}>
             <Text style={styles.cancelText}>Not now</Text>
           </Pressable>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -79,13 +81,17 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 420,
+    maxHeight: '100%',
     backgroundColor: '#16181F',
     borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
+  cardContent: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  allowAction: { alignSelf: 'stretch' },
   iconCircle: {
     width: 64,
     height: 64,
@@ -131,13 +137,15 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   allowButton: {
-    alignSelf: 'stretch',
+    minHeight: 48,
+    paddingHorizontal: 20,
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center',
   },
   allowText: {
-    color: '#fff',
+    color: '#111318',
+    textAlign: 'center',
     fontFamily: 'Inter_700Bold',
     fontSize: 15,
   },

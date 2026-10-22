@@ -1,0 +1,7 @@
+{
+  "tool": "OpenAI built-in imagegen",
+  "createdAt": "2026-10-21",
+  "path": "assets/images/profile-studio-controls-amber-v1.jpg",
+  "prompt": "Use case: stylized-concept. Asset type: small editorial artwork for the Profile and personal practice settings page of EaseVerse, a premium dark music app. A restrained close-up still life of an unbranded compact studio audio interface with one tactile amber-lit adjustment knob beside the corner of a blank songwriting notebook. Charcoal matte materials, fine realistic texture, soft warm side light, intimate personal home-studio atmosphere. Square composition, main object centered and legible at a small size, calm clean negative space. Background deep charcoal #0E0F14, muted amber-orange accent consistent with a professional music app. No person, face or invented avatar. No text, logo, watermark, UI, fake waveform, meters, neon or floating particles. Decorative editorial image, no buttons rendered into the image.",
+  "use": "Small decorative artwork in Profile heading. Not an avatar, control or generated UI."
+}

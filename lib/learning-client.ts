@@ -1,6 +1,7 @@
 import { getApiHeaders, getApiUrl } from "@/lib/query-client";
 import * as Storage from "@/lib/storage";
 import type { Session } from "@/lib/types";
+import { CLOUD_PRACTICE_ANALYSIS_ENABLED } from './release-features';
 
 type LearningIngestResponse = {
   ok: boolean;
@@ -9,6 +10,7 @@ type LearningIngestResponse = {
 };
 
 const isLearningDisabled = () => {
+  if (!CLOUD_PRACTICE_ANALYSIS_ENABLED) return true;
   const runtime = (globalThis as { __E2E_DISABLE_LEARNING__?: boolean }).__E2E_DISABLE_LEARNING__;
   if (runtime) return true;
   const envFlag = process.env.EXPO_PUBLIC_DISABLE_LEARNING;
@@ -80,6 +82,7 @@ export async function ingestSessionLearningEvent(params: {
   }
 
   try {
+    if (!(await Storage.getSettings()).cloudAnalysisEnabled) return null;
     const userId = await Storage.getOrCreateLearningUserId();
     const url = new URL("/api/v1/learning/session", getApiUrl());
     const response = await fetch(url.toString(), {
@@ -130,6 +133,7 @@ export async function ingestEasePocketLearningEvent(params: {
   }
 
   try {
+    if (!(await Storage.getSettings()).cloudAnalysisEnabled) return null;
     const userId = await Storage.getOrCreateLearningUserId();
     const url = new URL("/api/v1/learning/easepocket", getApiUrl());
     const response = await fetch(url.toString(), {

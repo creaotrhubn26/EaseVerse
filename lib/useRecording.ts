@@ -1,3 +1,5 @@
+import { preserveNewLocalRecordingUri } from './local-recordings';
+import {generateId} from './id';
 import { useRef, useState, useCallback, useEffect } from 'react';
 import {
   useAudioRecorder,
@@ -31,6 +33,8 @@ export function useRecording() {
   const engineRef = useRef<'expo' | 'fallback' | null>(null);
   const startEpochMsRef = useRef<number | null>(null);
   const elapsedMsRef = useRef(0);
+  const takeIdRef=useRef<string|null>(null);
+  const startInFlightRef=useRef(false);
 
   const handleStatusUpdate = useCallback((status: RecordingStatus) => {
     if (status.isFinished && status.url) {
@@ -123,13 +127,14 @@ export function useRecording() {
   }, [getElapsedSecondsNow, recorder, stopMetering]);
 
   const start = useCallback(async () => {
-    let permitted = hasPermission;
-    if (permitted === null || permitted === false) {
-      permitted = await requestPermission();
-    }
-    if (!permitted) return false;
-
+    if(startInFlightRef.current||recordingActiveRef.current)return false;
+    startInFlightRef.current=true;
     try {
+      let permitted = hasPermission;
+      if (permitted === null || permitted === false) {
+        permitted = await requestPermission();
+      }
+      if (!permitted) return false;
       // iOS needs the audio session to explicitly allow recording — without
       // allowsRecording the session stays playback-only and recorder.record()
       // throws, surfacing as "Unable to start recording" even though the mic
@@ -139,7 +144,10 @@ export function useRecording() {
         playsInSilentMode: true,
       });
 
-      await recorder.prepareToRecordAsync();
+      // Passing options creates a fresh AVAudioRecorder/file on iOS. With no
+      // options Expo may prepare the previous file again and overwrite it.
+      await recorder.prepareToRecordAsync({...RecordingPresets.HIGH_QUALITY,isMeteringEnabled:true});
+      takeIdRef.current=generateId();
       recorder.record();
 
       engineRef.current = 'expo';
@@ -173,7 +181,7 @@ export function useRecording() {
       }
       setError('Unable to start recording. Check microphone permission and try again.');
       return false;
-    }
+    } finally {startInFlightRef.current=false;}
   }, [hasPermission, requestPermission, startMetering, recorder]);
 
   const pause = useCallback(async () => {
@@ -214,7 +222,9 @@ export function useRecording() {
     }
   }, [startMetering, recorder]);
 
+  const stopInFlightRef = useRef(false);
   const stop = useCallback(async (): Promise<{ uri: string | null; durationSeconds: number }> => {
+    if(stopInFlightRef.current)return {uri:null,durationSeconds:0};
     stopMetering();
     setAudioLevel(0);
     const elapsed = Math.max(durationRef.current, getElapsedSecondsNow());
@@ -222,15 +232,16 @@ export function useRecording() {
     if (!recordingActiveRef.current) {
       setIsRecording(false);
       setIsPaused(false);
-      return { uri: null, durationSeconds: elapsed };
+      return { uri: null, durationSeconds: 0 };
     }
 
+    stopInFlightRef.current=true;
     try {
       let uri: string | null = null;
       if (engineRef.current === 'expo') {
         await recorder.stop();
         const state = recorder.getStatus();
-        uri = state.url || null;
+        uri = state.url&&takeIdRef.current ? await preserveNewLocalRecordingUri(state.url,takeIdRef.current) : null;
       }
       recordingActiveRef.current = false;
       setIsRecording(false);
@@ -258,7 +269,7 @@ export function useRecording() {
       startEpochMsRef.current = null;
       elapsedMsRef.current = 0;
       return { uri: null, durationSeconds: elapsed };
-    }
+    } finally { stopInFlightRef.current=false; }
   }, [getElapsedSecondsNow, stopMetering, recorder]);
 
   const togglePause = useCallback(async () => {

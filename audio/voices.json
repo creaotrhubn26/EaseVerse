@@ -1,0 +1,14 @@
+{
+  "warmup": {
+    "provider": "fal.ai",
+    "endpoint": "google/gemini-3.8-flash-tts",
+    "voice": "Algenib",
+    "voice_approved": true,
+    "approved_at": "2026-10-19",
+    "language": "nb-NO",
+    "style_instructions": "Speak Norwegian Bokmål with a natural Norwegian accent. Use an exceptionally deep, dark male bass register, rich chest resonance, full low-end and a warm, grounded tone. Calm measured tutorial narration with clear diction and natural pauses. Stay consistently in the lowest comfortable natural bass register, not a bright baritone, not whispering, not growling, and not theatrical. PRONUNCIATION: CreatorHub is the English phrase 'creator hub': /kriˈeɪtər hʌb/, pronounced 'cree-AY-ter hub', with English AY in creator and English short UH in hub. Switch to English pronunciation for this brand even inside Norwegian sentences. Never pronounce it with Norwegian vowels or 'høbb'. Pro Tools and Sound Room also use their standard English pronunciation. These directions must not be spoken. Read only the provided transcript.",
+    "pronunciation_review": "approved by user 2026-10-19; CreatorHub uses English pronunciation",
+    "sample_url": "https://v3b.fal.media/files/b/0aaf0b25/koWdpM7h3GX04kuO3dQ3C_gemini_tts_output.wav",
+    "consent": null
+  }
+}

@@ -73,7 +73,27 @@ test('a song without BPM explains the missing tempo and stays on Sing', async ({
   });
   await page.goto('/');await page.getByRole('button',{name:'Skip intro',exact:true}).click();
   await page.getByRole('button',{name:'Metronome',exact:true}).click();
-  await expect(page.getByText('This song has no BPM yet. Open your producer’s song from Sessions, or set a practice BPM in Lyrics.',{exact:true})).toBeVisible();
+  await expect(page.getByText('Your producer has not set a BPM for this song yet. Open the shared song from Sessions or contact your producer.',{exact:true})).toBeVisible();
   await expect(page.getByRole('tab',{name:'Sing tab',exact:true})).toHaveAttribute('aria-selected','true');
   await expect(page.getByTestId('record-button')).toBeVisible();
+});
+
+test('lyrics and Pocket show producer tempo without artist tempo editors or stored overrides',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.route('**/api/**',route=>route.fulfill({status:401,json:{error:'Isolated artist fixture'}}));
+  await page.addInitScript(()=>{
+    localStorage.setItem('@lyricflow_songs',JSON.stringify([{id:'producer-song',title:'Producer song',lyrics:'Hold the tone',sections:[],genre:'pop',bpm:92.5,createdAt:1,updatedAt:1}]));
+    localStorage.setItem('@easeverse_easepocket_prefs',JSON.stringify({grid:'16th',beatsPerBar:4,lastBpmOverride:88}));
+  });
+  await page.goto('/');await page.getByRole('button',{name:'Skip intro',exact:true}).click();
+  await page.getByRole('tab',{name:'Lyrics tab',exact:true}).click();
+  await page.getByRole('button',{name:'Song settings',exact:true}).click();
+  await expect(page.getByText('92.5 BPM · Set by your producer',{exact:true})).toBeVisible();
+  await expect(page.getByRole('textbox',{name:'Tempo in beats per minute',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Tap tempo',exact:true})).toHaveCount(0);
+  await page.goto('/easepocket');
+  await expect(page.getByText('Only your producer can change the song tempo.',{exact:true})).toBeVisible();
+  await expect(page.getByLabel('Producer tempo',{exact:true})).toHaveText('92.5 BPM');
+  await expect(page.getByRole('button',{name:'Decrease BPM',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Increase BPM',exact:true})).toHaveCount(0);
 });

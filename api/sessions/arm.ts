@@ -1,4 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { canSetProjectTempo } from "../_lib/producer-tempo-permissions.js";
+import { validBpm } from "../../lib/tempo.js";
 import { isAuthConfigured, requireAuth } from "../_lib/auth.js";
 import {
   armRecording,
@@ -22,6 +24,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(403).json({ error: "Only the producer can arm or stop recording" });
   }
 
+  if ((req.method === "POST" || req.method === "PATCH") && !await canSetProjectTempo(session.projectId, userId)) {
+    return res.status(403).json({ error: "Only the project producer can set the tempo or arm recording" });
+  }
+
   if (req.method === "POST") {
     const body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) as {
       countdownSec?: number;
@@ -29,6 +35,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       clickOn?: boolean;
     };
     const countdownSec = Math.max(0, Math.min(15, body.countdownSec ?? 4));
+    if (body.bpm !== undefined && validBpm(body.bpm) === null) {
+      return res.status(400).json({ error: "bpm must be between 20 and 400" });
+    }
     const updated = await armRecording({
       sessionId,
       userId,
@@ -44,11 +53,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       bpm?: number;
       clickOn?: boolean;
     };
-    if (typeof body.bpm !== "number") return res.status(400).json({ error: "bpm required" });
+    const bpm = validBpm(body.bpm);
+    if (bpm === null) return res.status(400).json({ error: "bpm must be between 20 and 400" });
     await updateSessionBpm({
       sessionId,
       userId,
-      bpm: Math.max(20, Math.min(300, body.bpm)),
+      bpm,
       clickOn: typeof body.clickOn === "boolean" ? body.clickOn : undefined,
     });
     return res.status(200).json({ ok: true });

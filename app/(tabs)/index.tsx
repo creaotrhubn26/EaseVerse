@@ -58,7 +58,7 @@ const recordControlIconSource = require('@/assets/images/sing-record-v1.png');
 const stopControlIconSource = require('@/assets/images/sing-stop-v1.png');
 const metronomeControlIconSource = require('@/assets/images/sing-metronome-v1.png');
 const markerControlIconSource = require('@/assets/images/sing-marker-v1.png');
-const missingTempoMessage = 'This song has no BPM yet. Open your producer’s song from Sessions, or set a practice BPM in Lyrics.';
+const missingTempoMessage = 'Your producer has not set a BPM for this song yet. Open the shared song from Sessions or contact your producer.';
 
 function TransportIcon({ source, size, active, dimmed }: {
   source: ImageSourcePropType; size: number; active: boolean; dimmed?: boolean;
@@ -1111,7 +1111,7 @@ export default function SingScreen() {
                 active={settings.metronomeEnabled}
                 dimmed={false}
               />
-              <Text style={styles.transportLabel}>{bpmValue ? `${bpmValue} BPM` : 'Set tempo'}</Text>
+              <Text style={styles.transportLabel}>{bpmValue ? `${bpmValue} BPM` : 'Tempo pending'}</Text>
             </Pressable>
           )}
         </View>

@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { canSetProjectTempo } from "../../../_lib/producer-tempo-permissions.js";
 import { requireAuth } from "../../../_lib/auth.js";
 import {
   isExternalKeyAuthorized,
@@ -71,6 +72,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "POST") {
     try {
       const body = parseBody(req);
+      const context = integrationContext(body?.integrationContext);
+      if (actor.kind === "user" && !await canSetProjectTempo(context.easeverseProjectId ?? body?.projectId, actor.ownerUserId)) {
+        return res.status(403).json({ error: "Only the project producer can import Pro Tools tempo and metadata" });
+      }
       const externalTrackId = boundedString(body?.externalTrackId, 160);
       if (!externalTrackId) return res.status(400).json({ error: "externalTrackId is required" });
       const markers = normalizeProToolsMarkers(body?.markers);
@@ -89,7 +94,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const bpm = Number.isFinite(bpmValue) && bpmValue >= 20 && bpmValue <= 400
         ? bpmValue
         : undefined;
-      const context = integrationContext(body?.integrationContext);
       const rec: ProToolsRecord = {
         schemaVersion: 1,
         ownerUserId,

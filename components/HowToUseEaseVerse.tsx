@@ -270,14 +270,14 @@ export default function HowToUseEaseVerse({
       {
         id: 'lyrics',
         title: 'Lyrics',
-        summary: 'Write lyrics, detect BPM, and prep your structure for recording.',
+        summary: 'Write lyrics and prepare your song for recording at the producer’s tempo.',
         route: '/lyrics',
         accent: Colors.successUnderline,
         icon: 'document-text',
         iconImage: lyricsTabIconSource,
         bullets: [
           'Write or import lyrics for your song.',
-          'Set Tempo (BPM) or Tap to detect BPM quickly.',
+          'Open your producer’s shared song from Sessions to use its BPM. Only the producer can change it.',
           'Auto-save keeps the Sing screen ready in real time.',
           'BPM drives count-in, metronome, and EasePocket timing grids.',
           'Use Genre to tune coaching defaults for the style.',
@@ -288,10 +288,9 @@ export default function HowToUseEaseVerse({
           { icon: 'add-circle-outline', label: 'New song', description: 'Clears the current draft and starts fresh.' },
           {
             iconImage: bpmIconSource,
-            label: 'Tempo (BPM)',
-            description: 'Syncs count-in + metronome while recording.',
+            label: 'Producer tempo (BPM)',
+            description: 'Read-only song tempo for count-in and metronome.',
           },
-          { icon: 'pulse-outline', label: 'Tap', description: 'Tap repeatedly to detect BPM.' },
           { icon: 'layers-outline', label: 'Structure', description: 'Helps you see sections like Verse/Chorus.' },
           { icon: 'download-outline', label: 'Import', description: 'Paste in lyrics from another source.' },
           { icon: 'create-outline', label: 'Paper Mode (iPad)', description: 'Lined notebook with Apple Pencil handwriting → text conversion.' },
@@ -330,7 +329,7 @@ export default function HowToUseEaseVerse({
         iconImage: easePocketIconSource,
         bullets: [
           'Choose mode: Subdivision Lab, Silent Beat, Consonant Precision, Pocket Control, or Slow Mastery.',
-          'Set BPM from the song, or override BPM for practice drills.',
+          'Exercises follow the song’s producer BPM. If tempo is missing, contact your producer.',
           'Set beats per bar (2/4) and choose grid when needed.',
           'In Consonant Precision, record a short phrase and tap Stop + Analyze.',
           'Review On-Time %, Mean ms, Offset, and saved drill history.',
@@ -343,8 +342,8 @@ export default function HowToUseEaseVerse({
           },
           {
             iconImage: bpmIconSource,
-            label: 'BPM',
-            description: 'Controls click speed and timing grid spacing.',
+            label: 'Producer BPM',
+            description: 'Exercises follow the producer’s song tempo; artists cannot override it.',
           },
           {
             iconImage: twoBeatsIconSource,
@@ -428,8 +427,8 @@ export default function HowToUseEaseVerse({
           <View style={styles.introCopy}>
             <Text style={styles.introTitle}>Quick Tour</Text>
             <Text style={styles.introText}>
-              Tap an icon to jump, or expand a card to learn every control. Best flow: add lyrics,
-              set BPM, record in Sing, then use EasePocket to tighten timing.
+              Tap an icon to jump, or expand a card to learn every control. Open your producer’s
+              song from Sessions, prepare your lyrics, record in Sing, then practice in EasePocket.
             </Text>
           </View>
         </View>

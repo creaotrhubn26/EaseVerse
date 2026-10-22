@@ -286,7 +286,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const incomingLyrics = item.lyrics.replace(/\r\n/g, '\n');
       const incomingBpm =
         typeof item.bpm === 'number' && Number.isFinite(item.bpm)
-          ? Math.max(20, Math.min(300, item.bpm))
+          ? Math.max(20, Math.min(400, item.bpm))
           : undefined;
 
       const shouldUpdateLyrics = matchedSong.lyrics !== incomingLyrics;

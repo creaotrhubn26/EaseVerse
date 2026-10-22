@@ -16,6 +16,7 @@ async function setup(page:Page,mode:'voice'|'missing'|'error'='voice'){
  },{mode});
  await page.route('**/api/**',route=>route.fulfill({status:401,json:{error:'Isolated speech UI fixture'}}));
  await page.goto('/session/qa-word');await page.getByRole('button',{name:'Skip intro',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Skip intro',exact:true})).toHaveCount(0);
 }
 for(const width of [320,390,768])test(`review playback and practice actions are centred and touch-friendly at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:900});await setup(page);

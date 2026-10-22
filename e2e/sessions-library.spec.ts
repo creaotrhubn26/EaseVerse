@@ -112,6 +112,7 @@ test('expired studio access leaves a persistent sign-in explanation',async({page
  let expire=false;
  await page.route('**/api/**',route=>{
   const url=new URL(route.request().url());
+  if(url.pathname==='/api/auth/start')return route.fulfill({status:503,json:{error:'CreatorHub login is temporarily unavailable'}});
   if(url.pathname==='/api/auth/session')return route.fulfill({json:{user:{id:'qa-expiring',email:'qa@example.invalid'}}});
   if(url.pathname==='/api/users/me')return route.fulfill({json:{userId:'qa-expiring',status:'approved'}});
   if(url.pathname==='/api/projects')return route.fulfill({json:{projects:[]}});
@@ -123,4 +124,6 @@ test('expired studio access leaves a persistent sign-in explanation',async({page
  await expect(page.getByRole('alert')).toContainText('Sign in to open your private studio recordings.');
  await expect(page.getByRole('button',{name:'Sign in to open studio recordings',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'Your recordings',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Sign in to open studio recordings',exact:true}).click();
+ await expect(page.getByText('CreatorHub login is temporarily unavailable',{exact:true})).toBeVisible();
 });

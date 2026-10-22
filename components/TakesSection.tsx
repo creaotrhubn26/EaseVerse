@@ -151,7 +151,7 @@ function TakesSectionAuthed({ horizontalMargin = 16, collapsible = false }: Prop
       <Text accessibilityRole="alert" style={styles.error}>Sign in to open your private studio recordings.</Text>
       {signInError ? <Text accessibilityRole="alert" style={styles.error}>{signInError}</Text> : null}
       <Pressable disabled={isSigningIn} accessibilityRole="button" accessibilityLabel="Sign in to open studio recordings" style={styles.retryButton}
-        onPress={() => { setSignInError(null); void signIn('/sessions').catch(() => setSignInError('Could not sign in. Try again.')); }}>
+        onPress={() => { setSignInError(null); void signIn('/sessions').catch(error => setSignInError(error instanceof Error ? error.message : 'Could not sign in. Try again.')); }}>
         <Text style={styles.boothBtnText}>{isSigningIn ? 'Opening sign-in…' : 'Continue with CreatorHub'}</Text>
       </Pressable>
     </View>;

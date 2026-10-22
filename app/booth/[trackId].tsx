@@ -26,7 +26,8 @@ import { createBoothRefresh } from "@/lib/booth-refresh";
 import { DismissibleFeedbackPreview } from "@/components/DismissibleFeedbackPreview";
 import { getApiUrl } from "@/lib/query-client";
 import { parseProducerNote, formatTimestamp } from "@/lib/parse-timestamps";
-import { startClick, type ClickHandle } from "@/lib/click-track";
+import { useMetronome } from "@/lib/useMetronome";
+import { studioBpm, type StudioTempo } from "@/lib/tempo";
 import { currentPushEndpoint, subscribeToPush, unsubscribeFromPush } from "@/lib/push-client";
 import { castVote, clearVote, fetchVoteTally, type ConsensusVote } from "@/lib/takes-client";
 import { AUTH_CONFIGURED } from "@/lib/use-app-user";
@@ -77,6 +78,7 @@ type BoothPayload = {
   projectId?: string;
   lyrics: { title: string | null; lyrics: string | null; bpm: number | null; updatedAt: string } | null;
   referenceTrack: { url: string; name: string | null; durationSec: number | null; versionId?: string; expiresAt?: number; producerComments?: ReferenceComment[] } | null;
+  tempo?: StudioTempo;
   collaborationUnavailable?:boolean;
   recordingRequests?: RecordingRequest[];
   takes: BoothTake[];
@@ -112,29 +114,19 @@ export default function BoothScreen() {
     void AsyncStorage.setItem(BOOTH_TIP_KEY, "1");
   }
 
-  const clickRef = useRef<ClickHandle | null>(null);
+  const { start: startClick, stop: stopClick, status: clickStatus, error: clickError } = useMetronome();
   const [clickOn, setClickOn] = useState(false);
-  const [bpmOverride, setBpmOverride] = useState<number | null>(null);
-  const effectiveBpm = bpmOverride ?? data?.lyrics?.bpm ?? 100;
-
-  function toggleClick() {
-    if (clickRef.current && clickRef.current.isRunning()) {
-      clickRef.current.stop();
-      clickRef.current = null;
-      setClickOn(false);
-      return;
-    }
-    clickRef.current = startClick({ bpm: effectiveBpm, beatsPerBar: 4, accentDownbeat: true });
-    setClickOn(true);
-  }
+  const effectiveBpm = studioBpm(data?.tempo, data?.lyrics?.bpm);
 
   useEffect(() => {
-    return () => {
-      clickRef.current?.stop();
-    };
-  }, []);
+    if (!clickOn || effectiveBpm === null || error) { stopClick(); return; }
+    void startClick(effectiveBpm).catch(() => setClickOn(false));
+    return stopClick;
+  }, [clickOn, effectiveBpm, error, startClick, stopClick]);
+  useEffect(() => { setClickOn(false); stopClick(); }, [trackId, projectId, stopClick]);
 
   const auth = useBoothAuth();
+  useEffect(() => { setClickOn(false); stopClick(); }, [auth.user?.id, stopClick]);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
 
@@ -234,7 +226,16 @@ export default function BoothScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>{data?.lyrics?.title || trackId}</Text>
       </View>
       {auth.user?.picture ? <Image source={{ uri: new URL(auth.user.picture, getApiUrl()).href }} accessibilityLabel={auth.user.name || 'Artist'} style={{ width: 36, height: 36, borderRadius: 18 }} /> : null}
-      {Platform.OS === 'web' ? <Pressable onPress={toggleClick} style={[styles.headerButton, clickOn && styles.clickBtnActive]} accessibilityRole="button" accessibilityLabel={clickOn ? 'Stop click track' : 'Start click track'}><Ionicons name="musical-notes" size={18} color={clickOn ? '#fff' : Colors.gradientMid} /><Text style={styles.bpm}>{effectiveBpm}</Text></Pressable> : data?.lyrics?.bpm ? <Text style={styles.bpm}>{data.lyrics.bpm} BPM</Text> : null}
+      <Pressable onPress={() => {
+        if (clickStatus === 'playing' || clickStatus === 'loading') { setClickOn(false); stopClick(); }
+        else if (effectiveBpm !== null) { setClickOn(true); void startClick(effectiveBpm).catch(() => setClickOn(false)); }
+      }} disabled={effectiveBpm === null}
+        style={[styles.headerButton, {minWidth: 48, minHeight: 48}, clickStatus === 'playing' && styles.clickBtnActive]}
+        accessibilityRole="button" accessibilityLabel={effectiveBpm === null ? 'Producer has not set a BPM' : `${clickOn ? 'Stop' : 'Start'} metronome, producer tempo ${effectiveBpm} BPM`}
+        accessibilityState={{disabled: effectiveBpm === null, selected: clickStatus === 'playing', busy: clickStatus === 'loading'}}>
+        <Ionicons name="musical-notes" size={18} color={clickStatus === 'playing' ? '#fff' : Colors.gradientMid} />
+        <Text style={styles.bpm}>{effectiveBpm === null ? 'BPM —' : `${effectiveBpm} BPM`}</Text>
+      </Pressable>
       {Platform.OS === 'web' && typeof Notification !== 'undefined' ? <Pressable onPress={togglePush} disabled={pushBusy} style={styles.headerButton} accessibilityRole="button" accessibilityLabel={pushOn ? 'Disable push notifications' : 'Enable push notifications'}><Ionicons name={pushOn ? 'notifications' : 'notifications-outline'} size={20} color={Colors.textSecondary} /></Pressable> : null}
     </View>
     <View style={styles.panelTabs} accessibilityRole="tablist">
@@ -250,6 +251,7 @@ export default function BoothScreen() {
         {introVisible ? <View style={styles.hintRow}><Text style={styles.hintText}>Tap a timecode to hear feedback in context.</Text><Pressable onPress={dismissIntro} style={styles.headerButton} accessibilityRole="button" accessibilityLabel="Dismiss booth tip"><Ionicons name="close" size={18} color={Colors.textSecondary} /></Pressable></View> : null}
         {data?.projectId&&<Pressable accessibilityRole="button" accessibilityLabel="Åpne oppvarming fra produsenten" onPress={()=>router.push({pathname:'/warmup-session',params:{projectId:data.projectId}})} style={styles.hintRow}><Ionicons name="headset-outline" size={20} color={Colors.gradientMid}/><Text style={styles.hintText}>Oppvarming fra produsenten</Text><Ionicons name="chevron-forward" size={18} color={Colors.textSecondary}/></Pressable>}
         {panel!=='requests' && data?.recordingRequests?.some(r=>r.status==='open') ? <Pressable accessibilityRole="button" accessibilityLabel="Open recording requests" onPress={()=>{chooseAudio('reference');setPanel('requests');}} style={styles.hintRow}><Text style={styles.hintText}>Your producer has requested a new recording. Open requests →</Text></Pressable>:null}
+        {clickError ? <Text accessibilityRole="alert" style={styles.error}>{clickError}</Text> : null}
         {panel === 'requests' ? data?.collaborationUnavailable ? <Text accessibilityRole="alert" style={styles.error}>Recording requests are temporarily unavailable. Your song and recordings are still available.</Text> : <RecordingRequests requests={data?.recordingRequests||[]} projectId={data?.projectId||''} refresh={()=>void load()} onPendingChange={setRequestPending}/> : panel === 'lyrics' ? <>
           <View style={styles.lyricsCard}>
             {data?.lyrics?.lyrics ? data.lyrics.lyrics.split('\n').map((line, index) => <Text key={index} style={/^\[.+\]$/.test(line.trim()) ? styles.lyricSection : styles.lyricsText}>{line || ' '}</Text>) : <Text style={styles.empty}>Lyrics will appear here when they are shared with you.</Text>}

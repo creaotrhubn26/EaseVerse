@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import { AudioModule, useAudioPlayer } from "expo-audio";
+import { useMetronome } from "@/lib/useMetronome";
 import Colors from "@/constants/colors";
 import { useNarration } from "@/lib/useNarration";
 import { useApp } from "@/lib/AppContext";
@@ -169,7 +169,7 @@ export default function EasePocketScreen() {
   const responsive = useResponsiveLayout();
   const { activeSong } = useApp();
   const recording = useRecording();
-  const metronomePlayer = useAudioPlayer(require("@/assets/sounds/metronome-click.wav"));
+  const {start: startClick, stop: stopClick, error: clickError} = useMetronome();
 
   const [mode, setMode] = useState<ModeId>("subdivision");
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -219,16 +219,12 @@ export default function EasePocketScreen() {
     if (Number.isFinite(parsed) && parsed > 0) {
       return clamp(parsed, 40, 300);
     }
-    if (prefs.lastBpmOverride) {
-      return clamp(prefs.lastBpmOverride, 40, 300);
-    }
-    if (songBpm) {
-      return clamp(Math.round(songBpm), 40, 300);
-    }
+    if (songBpm) return clamp(songBpm, 20, 300);
+    if (prefs.lastBpmOverride) return clamp(prefs.lastBpmOverride, 40, 300);
     return 120;
   }, [bpmText, prefs.lastBpmOverride, songBpm]);
 
-  const beatMs = useMemo(() => Math.round(60000 / effectiveBpm), [effectiveBpm]);
+  const beatMs = useMemo(() => 60000 / effectiveBpm, [effectiveBpm]);
   const barMs = useMemo(() => beatMs * prefs.beatsPerBar, [beatMs, prefs.beatsPerBar]);
 
   const currentGrid: Grid = useMemo(() => {
@@ -256,11 +252,12 @@ export default function EasePocketScreen() {
   const visualEnabled = !(mode === "silent" && phase === "silent");
 
   const stopTick = useCallback(() => {
+    stopClick();
     if (tickTimeoutRef.current) {
       clearTimeout(tickTimeoutRef.current);
       tickTimeoutRef.current = null;
     }
-  }, []);
+  }, [stopClick]);
 
   const stopPhaseTimeouts = useCallback(() => {
     for (const t of phaseTimeoutsRef.current) {
@@ -305,14 +302,10 @@ export default function EasePocketScreen() {
     stopSubdivisionScheduler();
     stopPocketPromptScheduler();
     
-    // Stop metronome to prevent lingering clicks
-    try {
-      metronomePlayer.pause();
-      void metronomePlayer.seekTo(0).catch(() => undefined);
-    } catch {
-      // Ignore metronome cleanup failures
-    }
-  }, [stopPhaseTimeouts, stopPocketPromptScheduler, stopSubdivisionScheduler, stopTick, metronomePlayer]);
+    stopClick();
+  }, [stopPhaseTimeouts, stopPocketPromptScheduler, stopSubdivisionScheduler, stopTick, stopClick]);
+
+  useEffect(() => { if (clickError) setToast({visible:true, message:clickError}); }, [clickError]);
 
   useEffect(() => {
     isRunningRef.current = isRunning;
@@ -340,18 +333,12 @@ export default function EasePocketScreen() {
       setPrefs(loadedPrefs);
       setHistory(loadedHistory);
       setPrefsLoaded(true);
-      if (!loadedPrefs.lastBpmOverride && songBpm) {
-        setBpmText(String(Math.round(songBpm)));
-      } else if (loadedPrefs.lastBpmOverride) {
-        setBpmText(String(Math.round(loadedPrefs.lastBpmOverride)));
-      } else if (songBpm) {
-        setBpmText(String(Math.round(songBpm)));
-      }
+      setBpmText(songBpm !== null ? String(songBpm) : String(loadedPrefs.lastBpmOverride || 120));
     })();
     return () => {
       cancelled = true;
     };
-  }, [songBpm]);
+  }, [songBpm, activeSong?.id]);
 
   useEffect(() => {
     if (!prefsLoaded) return;
@@ -361,30 +348,11 @@ export default function EasePocketScreen() {
     return () => clearTimeout(timeoutId);
   }, [effectiveBpm, prefs, prefsLoaded]);
 
-  const playMetronomeTick = useCallback(
-    (accent: boolean) => {
-      if (Platform.OS !== "web") {
-        void Haptics.selectionAsync();
-      }
-      try {
-        metronomePlayer.volume = accent ? 0.42 : 0.28;
-        void metronomePlayer.seekTo(0).catch(() => undefined);
-        metronomePlayer.play();
-      } catch {
-        // Ignore click failures; haptics still provides usable timing.
-      }
-    },
-    [metronomePlayer]
-  );
-
   const scheduleNextTick = useCallback(
     async (startEpoch: number) => {
       stopTick();
-      try {
-        await AudioModule.setAudioModeAsync({ playsInSilentMode: true });
-      } catch {
-        // Ignore audio mode failures.
-      }
+      try { await startClick(effectiveBpm, prefs.beatsPerBar); }
+      catch { hardStop(); return; }
 
       const loop = () => {
         if (!isRunningRef.current) return;
@@ -397,15 +365,14 @@ export default function EasePocketScreen() {
         tickTimeoutRef.current = setTimeout(() => {
           if (!isRunningRef.current) return;
           if (modeRef.current === "silent" && phaseRef.current === "silent") return;
-          const beatNumber = (beatIndex % prefs.beatsPerBar) + 1;
-          playMetronomeTick(beatNumber === 1);
+          if (Platform.OS !== "web") void Haptics.selectionAsync();
           loop();
         }, delay);
       };
 
       loop();
     },
-    [beatMs, playMetronomeTick, prefs.beatsPerBar, stopTick]
+    [beatMs, effectiveBpm, prefs.beatsPerBar, stopTick, startClick, hardStop]
   );
 
   useEffect(() => {
@@ -572,6 +539,7 @@ export default function EasePocketScreen() {
           setPhase("silent");
           phaseRef.current = "silent";
           stopTick();
+          stopClick();
           setFeedbackText("Silent... keep tapping");
         }, audible1)
       );
@@ -644,6 +612,7 @@ export default function EasePocketScreen() {
     stopPocketPromptScheduler,
     stopSubdivisionScheduler,
     stopTick,
+    stopClick,
   ]);
 
   useEffect(() => {

@@ -24,3 +24,11 @@ server_cache/
 
 # Generated Xcode products are rebuilt remotely, never uploaded as project source.
 ios-build/
+
+# Native source for the local Expo audio-clock module is a build input.
+!modules/easeverse-metronome/ios/
+!modules/easeverse-metronome/ios/**
+!modules/easeverse-metronome/android/
+!modules/easeverse-metronome/android/**
+modules/easeverse-metronome/android/.gradle/
+modules/easeverse-metronome/android/build/

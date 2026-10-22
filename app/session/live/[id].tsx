@@ -24,7 +24,8 @@ import {
   type LiveParticipant,
   type LiveSession,
 } from "@/lib/sessions-client";
-import { startClick, type ClickHandle } from "@/lib/click-track";
+import { useMetronome } from "@/lib/useMetronome";
+import { validBpm } from "@/lib/tempo";
 import { uploadTake, uploadTakeFromUri } from "@/lib/takes-client";
 import { startLiveMeter, type MeterHandle } from "@/lib/live-meter";
 import { startNativeMeterPusher, type NativeMeterHandle } from "@/lib/live-meter-native";
@@ -53,7 +54,7 @@ function Inner() {
   const [micArmed, setMicArmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const clickRef = useRef<ClickHandle | null>(null);
+  const { start: startClick, stop: stopClick, error: clickError } = useMetronome();
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -401,27 +402,22 @@ function Inner() {
     })();
   }, [session?.recordingStartsAt, recording, getToken, id, nativeRec, session, user?.id]);
 
-  // Click track follows session.clickOn + session.bpm, gated to recording window
+  // The session BPM is authoritative. Start at the scheduled recording window.
   useEffect(() => {
-    const shouldRun = session?.clickOn && session.recordingStartsAt && session.bpm && !session.recordingStoppedAt;
-    if (shouldRun) {
-      if (!clickRef.current) {
-        clickRef.current = startClick({ bpm: session!.bpm!, beatsPerBar: 4, accentDownbeat: true });
-      }
-    } else {
-      clickRef.current?.stop();
-      clickRef.current = null;
+    const bpm = validBpm(session?.bpm);
+    if (!session?.clickOn || !session.recordingStartsAt || session.recordingStoppedAt || bpm === null) {
+      stopClick(); return;
     }
-    return () => {
-      // unmount-only cleanup is via separate effect below
-    };
-  }, [session?.clickOn, session?.bpm, session?.recordingStartsAt, session?.recordingStoppedAt]);
+    const delay = Math.max(0, new Date(session.recordingStartsAt).getTime() - Date.now());
+    const timer = setTimeout(() => { void startClick(bpm).catch(() => undefined); }, delay);
+    return () => { clearTimeout(timer); stopClick(); };
+  }, [session?.clickOn, session?.bpm, session?.recordingStartsAt, session?.recordingStoppedAt, startClick, stopClick]);
 
   useEffect(() => () => {
-    clickRef.current?.stop();
+    stopClick();
     recorderRef.current?.stop();
     streamRef.current?.getTracks().forEach((t) => t.stop());
-  }, []);
+  }, [stopClick]);
 
   async function handleRecAll() {
     if (!session) return;
@@ -496,7 +492,7 @@ function Inner() {
         </View>
       </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error || clickError ? <Text accessibilityRole="alert" style={styles.error}>{error || clickError}</Text> : null}
 
       <View style={styles.summary}>
         <Text style={styles.summaryText}>

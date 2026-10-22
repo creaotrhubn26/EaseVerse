@@ -311,3 +311,25 @@ test('recording requests and frozen take context use the same verified project m
  });
  assert.deepEqual(payload?.recordingRequests,[request]);assert.deepEqual(payload?.takes[0].recordingContext,{requestId:'request-1',startSeconds:5,referenceVersionId:'mix-2'});
 });
+
+test("linked booth uses current producer BPM instead of the old lyric draft, including refresh", async () => {
+  for (const bpm of [92.5, 110, null]) {
+    const payload = await buildLinkedBoothPayload(db() as any, "artist", "track-1", "project-1", {
+      referencePlayback: async () => reference,
+      storage: async operation => operation === 'collaboration' ? {requests: [], takeContexts: [], tempo: {bpm, source: 'sound-room'}} : {comments: []},
+      regions: async () => new Map(),
+    });
+    assert.equal(payload?.lyrics?.bpm,92);
+    assert.equal(payload?.tempo.bpm,bpm);
+    assert.equal(payload?.tempo.unavailable,false);
+  }
+});
+test("unavailable producer tempo cannot silently reuse old lyric BPM", async () => {
+  const payload = await buildLinkedBoothPayload(db() as any, "artist", "track-1", "project-1", {
+    referencePlayback: async () => reference,
+    storage: async operation => {if(operation === 'collaboration') throw new Error('offline'); return {comments: []};},
+    regions: async () => new Map(),
+  });
+  assert.equal(payload?.tempo.bpm,null);
+  assert.equal(payload?.tempo.unavailable,true);
+});

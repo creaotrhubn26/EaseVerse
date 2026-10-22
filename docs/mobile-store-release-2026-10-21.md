@@ -25,3 +25,14 @@ The production CreatorHub server currently returns 404 Endpoint not implemented 
 Unit/type/lint and isolated browser checks are recorded under outputs/mobile-store-release-20261021/. Fixtures prove client behavior and handler boundaries; they do not prove Play/App Store delivery, production database behavior, physical-device Universal/App Links or real audio quality. Native iOS and Android UI, microphone denial/acceptance, recording/playback, restart persistence, invitation ownership/expiry, account return and profile synchronization remain required on the actual candidate artifacts. Store screenshots must show the released UI and no private account or customer data.
 
 Do not claim public availability from a successful upload. Apple and Google review/processing and final store statuses must be verified separately. Legal agreements and legally binding declarations require the owner at their final acceptance step.
+
+## 22 October — producer BPM correction (candidate 40)
+
+- Release 39 was accepted into internal TestFlight; the web release from PR 55 is live. Neither store has a public release yet.
+- The reviewer address `app-review@creatorhubn.com` is only an alias. A separate reviewer sign-in and credentials in the stores' protected fields remain necessary.
+- Replaced per-beat media-player seeking with an autolinked native sample-clock metronome. The shared linked booth uses the current Sound Room tempo, disables the click on missing/unavailable tempo, and refreshes every five seconds.
+- iOS simulator 40 compiled and installed. Local QA recording with the metronome armed continued for 3:15 and saved successfully. This verifies recording continuity, not physical-device audibility.
+- Android native module compiled successfully. Local full APK build hit an existing CMake/Ninja cache loop; a remote release build and emulator run remain necessary.
+- 170 unit tests pass. Browser tests cover 92.5 → 110 BPM, stop on missing tempo, 48 px targets, count-in/recording continuity and cleanup. A disposable local PostgreSQL check verifies fractional collaboration BPM, revision ordering and owner isolation.
+- Pro Tools is the requested tempo source. CreatorHub's separate AAX/backend changes are being tested; a browser service fixture alone does not verify the Pro Tools-to-artist chain.
+- This is fixed BPM metadata, not network audio-clock alignment or a Pro Tools tempo-map implementation. Downbeat accent is four beats unless another count is provided.

@@ -1,3 +1,4 @@
+import { validBpm } from '../../lib/tempo';
 import type { Pool } from "pg";
 import { listRegionsForTakes } from "./takes-db.js";
 import { getProjectReferenceTrack } from "./projects-db.js";
@@ -157,7 +158,7 @@ export async function buildLinkedBoothPayload(
     !legacy && (referenceTrack || takeRows.some((t) => UUID.test(t.id)))
       ? await storage("reviews", context, referenceTrack?.versionId ? { referenceVersionId: referenceTrack.versionId } : {})
       : { comments: [] };
-  const collaboration = !legacy ? await storage('collaboration',context).catch(()=>({requests:[],takeContexts:[],unavailable:true})) : { requests: [],takeContexts:[] };
+  const collaboration: Record<string, any> = !legacy ? await storage('collaboration',context).catch(()=>({requests:[],takeContexts:[],unavailable:true})) : { requests: [],takeContexts:[] };
   const takeContext = new Map((Array.isArray(collaboration.takeContexts)?collaboration.takeContexts:[]).map((r:any)=>[r.id,r.context]));
   const comments = Array.isArray(review.comments) ? review.comments : [];
   const linked = takeRows.map((t) => {
@@ -195,6 +196,12 @@ export async function buildLinkedBoothPayload(
   return {
     trackId: trackId,
     lyrics,
+    // A linked room follows the producer's current tempo, never a local draft.
+    tempo: legacy
+      ? { source: 'lyrics' as const, bpm: validBpm(lyrics?.bpm) }
+      : { source: 'sound-room' as const, bpm: validBpm(collaboration.tempo?.bpm),
+          unavailable: collaboration.unavailable === true || !collaboration.tempo,
+          updatedAt: collaboration.tempo?.updatedAt },
     referenceTrack: referenceTrack ? {
       ...referenceTrack,
       producerComments: comments.filter((comment: any) => referenceTrack.versionId && comment.version_id === referenceTrack.versionId).map((comment: any) => ({

@@ -25,6 +25,7 @@ import { goBackWithFallback } from '@/lib/navigation';
 import { usePronunciationCoach } from '@/lib/usePronunciationCoach';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
 import { useIsFocused } from '@react-navigation/native';
+import { hasNoSharedLyricWords } from '@/shared/lyric-match';
 
 function InsightCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -260,6 +261,7 @@ export default function SessionReviewScreen() {
     if (v >= 70) return Colors.warningUnderline;
     return Colors.dangerUnderline;
   };
+  const noSharedWords = hasNoSharedLyricWords(session.analysis?.comparison);
 
 
   return (
@@ -492,8 +494,8 @@ export default function SessionReviewScreen() {
         <View style={[styles.insightsRow, { paddingHorizontal: horizontalInset }]}>
           <InsightCard
             label="Lyric match"
-            value={session.insights.analysisAvailable===false?'Not analysed':`${session.insights.textAccuracy}%`}
-            color={session.insights.analysisAvailable===false?Colors.textSecondary:getAccuracyColor(session.insights.textAccuracy)}
+            value={session.insights.analysisAvailable===false?'Not analysed':noSharedWords?'No word matches':`${session.insights.textAccuracy}%`}
+            color={session.insights.analysisAvailable===false||noSharedWords?Colors.textSecondary:getAccuracyColor(session.insights.textAccuracy)}
           />
           <InsightCard
             label="Pronunciation"
@@ -565,7 +567,7 @@ export default function SessionReviewScreen() {
           </View>
         )}
 
-        {session.insights.topToFix.length>0 && <View style={[styles.fixSection, { paddingHorizontal: horizontalInset }]}>
+        {!noSharedWords && session.insights.topToFix.length>0 && <View style={[styles.fixSection, { paddingHorizontal: horizontalInset }]}>
           <View style={styles.fixSectionHeader}>
             <Text style={styles.fixSectionTitle}>Words to check</Text>
             <View style={styles.fixSectionHint}>

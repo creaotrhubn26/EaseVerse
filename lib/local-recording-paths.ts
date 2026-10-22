@@ -20,7 +20,7 @@ export type RecordingFiles = {
   mkdir: (uri: string) => Promise<void>;
   copy: (from: string, to: string) => Promise<void>;
 };
-export async function preserveRecording(uri: string, files: RecordingFiles): Promise<string> {
+export async function preserveRecording(uri: string, files: RecordingFiles, takeId?:string): Promise<string> {
   if (!uri.startsWith('file://') || !files.documents) return uri;
   let resolved = uri;
   try {
@@ -33,10 +33,14 @@ export async function preserveRecording(uri: string, files: RecordingFiles): Pro
     const name = resolved.slice(resolved.lastIndexOf('/') + 1);
     if (!/^[a-zA-Z0-9_.-]+\.(?:m4a|wav|aac|mp3|caf|webm)$/i.test(name)) return resolved;
     const directory = `${files.documents}easeverse-recordings/`;
-    const destination = `${directory}${name}`;
+    // Migration reuses an existing durable copy. A NEW take must never select
+    // that copy: native recorders can reuse the same cache filename each time.
+    if(takeId&&!/^[a-zA-Z0-9_-]+$/.test(takeId))return resolved;
+    const destination = `${directory}${takeId?`take-${takeId}.${name.split('.').pop()}`:name}`;
     if (resolved === destination) return destination;
     await files.mkdir(directory);
     if (!(await files.info(destination)).exists) await files.copy(resolved, destination);
+    else if(takeId)return resolved; // Never substitute old audio on an identity collision.
     return destination;
   } catch {
     // Keep the original available take on a full disk; retry migration next load.

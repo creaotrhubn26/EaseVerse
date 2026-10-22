@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {matchLyricTranscript,lyricWords} from '../shared/lyric-match';
+import {matchLyricTranscript,lyricWords,hasNoSharedLyricWords} from '../shared/lyric-match';
 test('exact recognised words produce a text match, with no invented vocal assessment',()=>{const x=matchLyricTranscript('Hold the tone','Hold the tone.');assert.equal(x.score,100);assert.equal(x.matchedWords,3);assert.equal('pronunciation' in x,false);assert.equal('timing' in x,false);});
 test('section labels and Nordic letters are handled without losing actual lyric words',()=>{assert.deepEqual(lyricWords('[Vers 1]\nÆrlig blå øy\n[Refreng]\nHold på tonen'),['ærlig','blå','øy','hold','på','tonen']);assert.equal(matchLyricTranscript('Ærlig blå øy','ærlig blå øy').score,100);});
 test('insertions and repetitions cannot silently count as a perfect performance',()=>{const x=matchLyricTranscript('hold the tone','hold hold the tone now');assert.equal(x.extraWords,2);assert.ok(x.score<100);});
@@ -8,3 +8,10 @@ test('counts omitted and different words and preserves sequence',()=>{const x=ma
 test('silence and missing lyrics are unavailable, not zero scores',()=>{assert.throws(()=>matchLyricTranscript('hold the tone',''));assert.throws(()=>matchLyricTranscript('','hold'));});
 test('percentages remain bounded and oversized alignment is rejected',()=>{assert.equal(matchLyricTranscript('one','different extra words').score,0);assert.throws(()=>matchLyricTranscript('a '.repeat(2001),'a'));});
 test('typographic and plain apostrophes match consistently',()=>{assert.equal(matchLyricTranscript('Don’t leave','don\'t leave').score,100);});
+test('unrelated recognised words are a transcript mismatch, not a singing assessment',()=>{
+ const result=matchLyricTranscript('To the stars and way beyond','Yeah I hate London');
+ assert.equal(hasNoSharedLyricWords(result),true);assert.equal(result.matchedWords,0);assert.equal(result.score,0);
+ assert.equal(hasNoSharedLyricWords(undefined),false);
+ // Insertions can drive the alignment score to zero even with shared words.
+ assert.equal(hasNoSharedLyricWords(matchLyricTranscript('hold','hold a very long note')),false);
+});

@@ -29,6 +29,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { getApiHeaders, getApiUrl } from '@/lib/query-client';
 import { goBackWithFallback } from '@/lib/navigation';
 import { scaledIconSize, tierValue, useResponsiveLayout } from '@/lib/responsive';
+import { hasNoSharedLyricWords } from '@/shared/lyric-match';
 
 const speedOptions = [0.8, 1.0, 1.1] as const;
 const loopLengthOptions = [5, 10, 20] as const;
@@ -231,7 +232,7 @@ export default function PracticeLoopScreen() {
       const endAt = loopEndAtRef.current;
       if (endAt && Date.now() < endAt) {
         setLoopCount((count) => count + 1);
-        const hints = session?.insights?.topToFix || [];
+        const hints = hasNoSharedLyricWords(session?.analysis?.comparison) ? [] : session?.insights?.topToFix || [];
         if (hints.length > 0) {
           const hint = hints[loopHintIndexRef.current % hints.length];
           loopHintIndexRef.current += 1;
@@ -252,7 +253,7 @@ export default function PracticeLoopScreen() {
         setIsLooping(false);
       }
     }
-  }, [isLooping, loopPlayer, loopPlayerStatus.didJustFinish, session?.insights?.topToFix]);
+  }, [isLooping, loopPlayer, loopPlayerStatus.didJustFinish, session?.insights?.topToFix, session?.analysis?.comparison]);
 
   useEffect(() => {
     if (!isLoopAudioLoading && loopAudioUri) {

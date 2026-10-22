@@ -1,4 +1,8 @@
 export type LyricMatch = { score:number; expectedWords:number; recognizedWords:number; matchedWords:number; substitutions:number; missingWords:number; extraWords:number; wordsToCheck:string[] };
+/** No shared words is a transcript mismatch, not evidence of a poor vocal performance. */
+export function hasNoSharedLyricWords(comparison:LyricMatch|undefined):boolean{
+ return !!comparison&&comparison.expectedWords>0&&comparison.recognizedWords>0&&comparison.matchedWords===0;
+}
 export function lyricWords(text:string):string[]{
  return (text.normalize('NFKC').replace(/^\s*\[(?:verse|chorus|pre[- ]?chorus|bridge|intro|outro|vers|refreng|bro)(?:\s+\d+)?\]\s*$/gim,'').replace(/’/g,"'").toLowerCase().match(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu)??[]);
 }

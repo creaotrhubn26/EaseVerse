@@ -5,7 +5,7 @@ import Colors from '@/constants/colors';
 import {useAuth} from '@/lib/creatorhub-auth';
 import {localPracticeCapability,transcribePracticeLocally,downloadPracticeLanguage,type LocalPracticeCapability} from '@/lib/practice-recognition';
 import {analyzeSessionRecording} from '@/lib/session-scoring-client';
-import {matchLyricTranscript} from '@/shared/lyric-match';
+import {hasNoSharedLyricWords,matchLyricTranscript} from '@/shared/lyric-match';
 import {resolveSpeechRecognitionLang,resolveSttLanguageCode} from '@/lib/language';
 import type {Session} from '@/lib/types';
 
@@ -16,7 +16,8 @@ export function PracticeAnalysisPanel({session,language,accentGoal,onResult}:{se
  const request=useRef<AbortController|null>(null),locked=useRef(false),generation=useRef(0);
  const locale=resolveSpeechRecognitionLang(language,accentGoal);
  useEffect(()=>{let current=true;const scope=++generation.current;setCapability(null);setBusy(null);locked.current=false;setError('');setConsent(false);void localPracticeCapability(locale).then(value=>{if(current)setCapability(value);});return()=>{current=false;generation.current=scope+1;request.current?.abort();};},[locale,session.id]);
- const save=async(transcript:string,comparison:ReturnType<typeof matchLyricTranscript>,provider:NonNullable<Session['analysis']>['provider'])=>onResult({transcript,analysis:{provider,language,analysedAt:Date.now(),comparison},insights:{textAccuracy:comparison.score,analysisAvailable:true,pronunciationClarity:0,timingConsistency:'low',topToFix:comparison.wordsToCheck.map(word=>({word,reason:'Not matched in the transcript. Listen back and check this word.'}))}});
+ const noSharedWords=hasNoSharedLyricWords(session.analysis?.comparison);
+ const save=async(transcript:string,comparison:ReturnType<typeof matchLyricTranscript>,provider:NonNullable<Session['analysis']>['provider'])=>onResult({transcript,analysis:{provider,language,analysedAt:Date.now(),comparison},insights:{textAccuracy:comparison.score,analysisAvailable:true,pronunciationClarity:0,timingConsistency:'low',topToFix:hasNoSharedLyricWords(comparison)?[]:comparison.wordsToCheck.map(word=>({word,reason:'Not matched in the transcript. Listen back and check this word.'}))}});
  const analyse=async(mode:'local'|'cloud')=>{
   if(locked.current){setError('An analysis is still finishing. Please retry in a moment.');return;}
   if(!session.recordingUri){setError('Could not find the audio for this take.');return;}
@@ -64,11 +65,18 @@ export function PracticeAnalysisPanel({session,language,accentGoal,onResult}:{se
    </View>}
   </>}
   {session.analysis&&<View style={s.result}>
+   {noSharedWords&&<View style={s.mismatch} accessibilityLiveRegion="polite">
+    <Text style={s.title}>No word matches</Text>
+    <Text style={s.copy}>The recognised text has no words in common with these lyrics. Speech recognition may have misheard the take, or the recording and lyrics may differ. This is not a score of your singing.</Text>
+    <Text style={s.copy}>Recognised words</Text>
+    <Text style={s.transcript} selectable testID="unmatched-transcript">{session.transcript}</Text>
+    <Text style={s.copy}>Play the recording and compare it with this text. Check that you selected the right lyrics and recognition language before trying again. No word-specific practice suggestions are shown for this result.</Text>
+   </View>}
    <Text style={s.copy}>Source: {session.analysis.provider==='openai'?'OpenAI transcription':session.analysis.provider==='browser-speech'?'Browser speech recognition':'On-device speech recognition'} · {session.analysis.language}</Text>
    <Text style={s.copy}>{session.analysis.comparison.matchedWords} of {session.analysis.comparison.expectedWords} words matched · {session.analysis.comparison.missingWords} missing · {session.analysis.comparison.extraWords} extra · {session.analysis.comparison.substitutions} different.</Text>
    <Text style={s.copy}>Singing and background music can confuse speech recognition. Listen back and check the transcript.</Text>
-   <Pressable style={s.secondary} onPress={()=>setShowTranscript(value=>!value)} accessibilityRole="button" aria-expanded={showTranscript} accessibilityState={{expanded:showTranscript}}><Text style={s.link}>{showTranscript?'Hide recognised words':'Show recognised words'}</Text></Pressable>
-   {showTranscript&&<Text style={s.copy} selectable>{session.transcript}</Text>}
+   {!noSharedWords&&<Pressable style={s.secondary} onPress={()=>setShowTranscript(value=>!value)} accessibilityRole="button" aria-expanded={showTranscript} accessibilityState={{expanded:showTranscript}}><Text style={s.link}>{showTranscript?'Hide recognised words':'Show recognised words'}</Text></Pressable>}
+   {!noSharedWords&&showTranscript&&<Text style={s.copy} selectable>{session.transcript}</Text>}
   </View>}
  </View>;
 }
@@ -80,4 +88,5 @@ const s=StyleSheet.create({
  primaryText:{fontFamily:'Inter_700Bold',fontSize:14,lineHeight:21,color:'#111318',textAlign:'center'},
  secondary:{minHeight:44,paddingVertical:10,justifyContent:'center'},link:{fontFamily:'Inter_600SemiBold',fontSize:14,lineHeight:21,color:Colors.gradientEnd},
  consent:{gap:12,padding:14,borderRadius:12,backgroundColor:Colors.background},status:{gap:12},error:{fontFamily:'Inter_500Medium',fontSize:13,lineHeight:20,color:Colors.dangerUnderline},result:{gap:10,borderTopWidth:1,borderColor:Colors.borderGlass,paddingTop:12},
+ mismatch:{gap:10,padding:14,borderRadius:12,backgroundColor:Colors.background},transcript:{fontFamily:'Inter_500Medium',fontSize:15,lineHeight:23,color:Colors.textPrimary},
 });

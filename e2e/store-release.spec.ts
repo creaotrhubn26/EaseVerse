@@ -41,3 +41,32 @@ for(const enabled of [false,true])test(`cloud analysis is ${enabled?'explicitly 
  else await expect(page.getByTestId('session-insight-lyric-match')).toHaveAttribute('aria-label','Lyric match: 100%');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('@lyricflow_sessions')||'[]').length)).toBe(1);
 });
+test('successive takes open their own saved audio and send that same audio for analysis',async({page})=>{
+ const submitted:string[]=[];
+ await page.addInitScript(()=>{
+  localStorage.setItem('@lyricflow_songs',JSON.stringify([{id:'qa-two-takes',title:'Two takes',lyrics:'Hold the tone',sections:[],genre:'pop',createdAt:1,updatedAt:1}]));
+  localStorage.setItem('@lyricflow_settings',JSON.stringify({cloudAnalysisEnabled:true,countIn:0}));
+ });
+ await page.route('**/api/**',route=>{
+  if(new URL(route.request().url()).pathname==='/api/v1/session-score'){
+   submitted.push(route.request().postDataJSON().audioBase64);
+   return route.fulfill({json:{transcript:'Hold the tone',provider:'openai',method:'transcription_text_match'}});
+  }
+  return route.fulfill({status:401,json:{error:'No session in isolated fixture'}});
+ });
+ await page.goto('/');await page.getByRole('button',{name:'Skip intro',exact:true}).click();
+ for(const duration of [3600,5600]){
+  await page.getByTestId('record-button').click();await expect(page.getByTestId('stop-button')).toBeVisible();
+  await page.waitForTimeout(duration);await page.getByTestId('stop-button').click();
+  await expect(page.getByRole('heading',{name:'Session Review',exact:true})).toBeVisible({timeout:20000});
+  const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('@lyricflow_sessions')||'[]'));
+  await expect(page).toHaveURL(new RegExp(`/session/${stored[0].id}`));
+  const audio=await page.evaluate(async(uri)=>{const bytes=new Uint8Array(await(await fetch(uri)).arrayBuffer());let raw='';for(const byte of bytes)raw+=String.fromCharCode(byte);return btoa(raw);},stored[0].recordingUri);
+  expect(submitted.at(-1)).toBe(audio);
+  if(submitted.length===1)await page.getByRole('button',{name:'Go back',exact:true}).click();
+ }
+ const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('@lyricflow_sessions')||'[]'));
+ expect(stored).toHaveLength(2);expect(submitted).toHaveLength(2);
+ expect(stored[0].id).not.toBe(stored[1].id);expect(stored[0].recordingUri).not.toBe(stored[1].recordingUri);
+ expect(submitted[0]).not.toBe(submitted[1]);
+});

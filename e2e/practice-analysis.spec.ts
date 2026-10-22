@@ -60,3 +60,21 @@ test('cancellation ignores a late provider result and a retry does not duplicate
  await choose.click();await page.getByRole('button',{name:'Send recording for cloud lyric analysis',exact:true}).dblclick();
  await expect(page.getByTestId('session-insight-lyric-match')).toHaveAttribute('aria-label','Lyric match: 100%');expect(calls).toBe(2);
 });
+test('unrelated recognised words are visible without a red singing score or targeted word advice',async({page})=>{
+ await page.setViewportSize({width:320,height:900});
+ await openTake(page,async route=>route.fulfill({json:{...result,transcript:'Yeah I hate London'}}));
+ await page.getByRole('button',{name:'Choose cloud lyric analysis',exact:true}).click();
+ await page.getByRole('button',{name:'Send recording for cloud lyric analysis',exact:true}).click();
+ await expect(page.getByTestId('session-insight-lyric-match')).toHaveAttribute('aria-label','Lyric match: No word matches');
+ await expect(page.getByTestId('unmatched-transcript')).toHaveText('Yeah I hate London');
+ await expect(page.getByText('Words to check',{exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Show recognised words',exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+ // Old stored results can still contain suggestions: do not surface them on reload.
+ await page.evaluate(()=>{const items=JSON.parse(localStorage.getItem('@lyricflow_sessions')!);items[0].insights.topToFix=[{word:'hold',reason:'Old suggestion'}];localStorage.setItem('@lyricflow_sessions',JSON.stringify(items));});
+ const second=await page.context().newPage();await second.goto('/session/qa-analysis');
+ await expect(second.getByTestId('unmatched-transcript')).toHaveText('Yeah I hate London');
+ await expect(second.getByText('Words to check',{exact:true})).toHaveCount(0);
+ await page.getByTestId('unmatched-transcript').scrollIntoViewIfNeeded();
+ await page.screenshot({path:'outputs/mobile-store-release-20261021/practice-no-word-matches-320.png',fullPage:true});
+});

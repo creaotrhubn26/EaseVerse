@@ -67,3 +67,63 @@ test('studio recordings remain separate, keyboard disclosure and retry recover f
 test('missing audio remains disabled instead of suggesting playable media',async({page})=>{
  await setup(page,[{...fixture[0],recordingUri:undefined}]);await page.getByRole('button',{name:'Open session QA chorus',exact:true}).click();await expect(page.getByRole('button',{name:'Play session audio',exact:true})).toBeDisabled();await expect(page.getByText('Audio not saved for this session.',{exact:true})).toBeVisible();
 });
+
+
+for (const width of [320, 390]) {
+ test(`studio recording opens the selected take at ${width}px despite a detail failure`, async ({page}) => {
+  await page.setViewportSize({width,height:844});
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  const selectedId='22222222-2222-4222-8222-222222222222';
+  let detailFails=true;
+  const take={id:selectedId,projectId:'qa-project',externalTrackId:'qa-song',filename:'Selected vocal.wav',status:'done',uploadedAt:'2026-10-22T09:40:00Z',durationSec:12,storageUrl:`/api/takes/${selectedId}/audio`};
+  const boothTake=(id:string,filename:string,note:string)=>({id,filename,producerNote:note,audioUrl:'/qa-session.wav',regions:[],consensus:{agree:0,disagree:0},status:'done',uploadedAt:'2026-10-22T09:40:00Z'});
+  await page.route('**/api/**',route=>{
+   const url=new URL(route.request().url());
+   if(url.pathname==='/api/auth/session')return route.fulfill({json:{user:{id:'studio-artist',email:'qa@example.invalid',name:'QA Artist'}}});
+   if(url.pathname==='/api/users/me')return route.fulfill({json:{userId:'studio-artist',status:'approved'}});
+   if(url.pathname==='/api/projects')return route.fulfill({json:{projects:[{id:'qa-project',name:'QA Studio',role:'vocalist'}]}});
+   if(url.pathname==='/api/takes')return route.fulfill(url.searchParams.has('id') ? detailFails ? {status:503,json:{error:'Detail service unavailable'}} : {json:{...take,analysis:null}} : {json:{takes:[take]}});
+   if(url.pathname==='/api/booth'){
+    expect(url.searchParams.get('trackId')).toBe('qa-song');expect(url.searchParams.get('projectId')).toBe('qa-project');
+    return route.fulfill({json:{trackId:'qa-song',projectId:'qa-project',lyrics:{title:'QA Song',lyrics:'Hold the tone',bpm:92.5},takes:[boothTake('newest','Newest vocal.wav','Newest note'),boothTake(selectedId,take.filename,'Hold the pause before the next line.')],referenceTrack:null}});
+   }
+   if(url.pathname==='/api/takes/vote')return route.fulfill({json:{agree:0,disagree:0,votes:[],myVote:null}});
+   return route.fulfill({status:404,json:{error:'Not part of this isolated fixture'}});
+  });
+  await page.goto('/sessions');await page.getByRole('button',{name:'Skip intro',exact:true}).click();
+  await page.getByRole('button',{name:'Studio takes',exact:true}).click();
+  const failure=page.getByRole('alert').filter({hasText:'Could not load recording details'});
+  await expect(failure).toContainText('503');
+  const open=page.getByRole('button',{name:'Open studio recording Selected vocal.wav',exact:true});
+  const box=await open.boundingBox();expect(box!.height).toBeGreaterThanOrEqual(48);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  await page.screenshot({path:`outputs/mobile-store-release-20261021/studio-detail-error-${width}.png`,fullPage:true});
+  detailFails=false;await page.getByRole('button',{name:'Retry details for Selected vocal.wav',exact:true}).click();await expect(failure).toHaveCount(0);
+  await open.click();await expect(page).toHaveURL(new RegExp(`booth/qa-song.*takeId=${selectedId}`));
+  await expect(page.getByText('Hold the pause before the next line.',{exact:true})).toBeVisible();
+  await expect(page.getByText('Newest note',{exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Start metronome, producer tempo 92.5 BPM',exact:true})).toBeVisible();
+  await page.screenshot({path:`outputs/mobile-store-release-20261021/studio-selected-take-${width}.png`,fullPage:true});
+  expect(errors).toEqual([]);
+ });
+}
+
+test('expired studio access leaves a persistent sign-in explanation',async({page})=>{
+ let expire=false;
+ await page.route('**/api/**',route=>{
+  const url=new URL(route.request().url());
+  if(url.pathname==='/api/auth/start')return route.fulfill({status:503,json:{error:'CreatorHub login is temporarily unavailable'}});
+  if(url.pathname==='/api/auth/session')return route.fulfill({json:{user:{id:'qa-expiring',email:'qa@example.invalid'}}});
+  if(url.pathname==='/api/users/me')return route.fulfill({json:{userId:'qa-expiring',status:'approved'}});
+  if(url.pathname==='/api/projects')return route.fulfill({json:{projects:[]}});
+  if(url.pathname==='/api/takes')return route.fulfill(expire?{status:401,json:{error:'Session expired'}}:{status:503,json:{error:'Temporary studio failure'}});
+  return route.fulfill({status:404,json:{error:'Not part of this isolated fixture'}});
+ });
+ await page.goto('/sessions');await page.getByRole('button',{name:'Skip intro',exact:true}).click();await page.getByRole('button',{name:'Studio takes',exact:true}).click();
+ expire=true;await page.getByRole('button',{name:'Retry loading studio takes',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Sign in to open your private studio recordings.');
+ await expect(page.getByRole('button',{name:'Sign in to open studio recordings',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Your recordings',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Sign in to open studio recordings',exact:true}).click();
+ await expect(page.getByText('CreatorHub login is temporarily unavailable',{exact:true})).toBeVisible();
+});

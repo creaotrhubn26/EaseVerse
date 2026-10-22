@@ -31,19 +31,22 @@ export const UniversalAudioPlayer = forwardRef<UniversalAudioPlayerHandle, Props
   useEffect(() => {
     if (!privateTake) return;
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => { if (!cancelled) setResolveError(true); controller.abort(); }, 20000);
     setResolvedUri(null); setResolveError(false);
     void (async () => {
       try {
         const token = await getToken();
-        const response = await authedFetch(`${absolute.pathname}${absolute.search ? absolute.search + "&" : "?"}format=json`, token);
+        const response = await authedFetch(`${absolute.pathname}${absolute.search ? absolute.search + "&" : "?"}format=json`, token, { signal: controller.signal });
         if (!response.ok) throw new Error('Playback unavailable');
         const playback = await response.json() as { url: string };
         if (new URL(playback.url).protocol !== 'https:') throw new Error('Invalid playback');
         if (!cancelled) setResolvedUri(playback.url);
       } catch { if (!cancelled) setResolveError(true); }
+      finally { clearTimeout(timeout); }
     })();
-    return () => { cancelled = true; };
-  }, [absolute.href, privateTake, getToken, resolveAttempt]);
+    return () => { cancelled = true; clearTimeout(timeout); controller.abort(); };
+  }, [absolute, privateTake, getToken, resolveAttempt]);
   const source = useMemo(() => privateTake ? resolvedUri ? { uri: resolvedUri } : null : { uri: absolute.href }, [privateTake, resolvedUri, absolute.href]);
   const player = useAudioPlayer(source, { updateInterval: 100 });
   const status = useAudioPlayerStatus(player);
@@ -55,6 +58,14 @@ export const UniversalAudioPlayer = forwardRef<UniversalAudioPlayerHandle, Props
   const seekingLoop = useRef(false);
   const [playError, setPlayError] = useState(false);
   const ready = Boolean(status.isLoaded && duration > 0);
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  const failedToLoad = status.playbackState === 'failed' || status.playbackState === 'error' || loadTimedOut;
+  useEffect(() => {
+    setLoadTimedOut(false);
+    if (!source || ready) return;
+    const timeout = setTimeout(() => setLoadTimedOut(true), 20000);
+    return () => clearTimeout(timeout);
+  }, [source, ready, resolveAttempt]);
   const seekTo = useCallback(async (seconds: number, autoplay = true) => {
     if (!ready) return;
     try {
@@ -118,12 +129,13 @@ export const UniversalAudioPlayer = forwardRef<UniversalAudioPlayerHandle, Props
       <Text style={[styles.time, { textAlign: "right" }]}>{duration ? clock(duration) : "—"}</Text>
     </View>
     {loop ? <Pressable onPress={() => setLoop(null)} accessibilityRole="button" accessibilityLabel="Stop repeating section" style={styles.loop}><Ionicons name="repeat" size={16} color={Colors.gradientMid} /><Text style={styles.loopLabel}>{clock(loop.start)}–{clock(loop.end)} · Stop loop</Text></Pressable> : null}
-    {playError || resolveError ? <View>
+    {!ready && !resolveError && !failedToLoad ? <Text accessibilityLiveRegion="polite" style={styles.label}>Loading audio…</Text> : null}
+    {playError || resolveError || failedToLoad ? <View>
       <Text accessibilityRole="alert" style={styles.error}>Could not play this audio.</Text>
       <Pressable accessibilityRole="button" accessibilityLabel="Retry loading audio" style={styles.loop} onPress={() => {
-        setPlayError(false);
+        setPlayError(false); setLoadTimedOut(false);
         if (privateTake) setResolveAttempt(attempt => attempt + 1);
-        else { try { player.replace({ uri: absolute.href }); } catch { setPlayError(true); } }
+        else { setResolveAttempt(attempt => attempt + 1); try { player.replace({ uri: absolute.href }); } catch { setPlayError(true); } }
       }}><Ionicons name="refresh" size={18} color={Colors.gradientMid} /><Text style={styles.loopLabel}>Try again</Text></Pressable>
     </View> : null}
   </View>;

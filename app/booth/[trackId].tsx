@@ -233,8 +233,8 @@ export default function BoothScreen() {
         style={[styles.headerButton, {minWidth: 48, minHeight: 48}, clickStatus === 'playing' && styles.clickBtnActive]}
         accessibilityRole="button" accessibilityLabel={effectiveBpm === null ? 'Producer has not set a BPM' : `${clickOn ? 'Stop' : 'Start'} metronome, producer tempo ${effectiveBpm} BPM`}
         accessibilityState={{disabled: effectiveBpm === null, selected: clickStatus === 'playing', busy: clickStatus === 'loading'}}>
-        <Ionicons name="musical-notes" size={18} color={clickStatus === 'playing' ? '#fff' : Colors.gradientMid} />
-        <Text style={styles.bpm}>{effectiveBpm === null ? 'BPM —' : `${effectiveBpm} BPM`}</Text>
+        <Ionicons name="musical-notes" size={18} color={clickStatus === 'playing' ? Colors.background : Colors.gradientMid} />
+        <Text style={[styles.bpm, clickStatus === 'playing' && {color:Colors.background}]}>{effectiveBpm === null ? 'BPM —' : `${effectiveBpm} BPM`}</Text>
       </Pressable>
       {Platform.OS === 'web' && typeof Notification !== 'undefined' ? <Pressable onPress={togglePush} disabled={pushBusy} style={styles.headerButton} accessibilityRole="button" accessibilityLabel={pushOn ? 'Disable push notifications' : 'Enable push notifications'}><Ionicons name={pushOn ? 'notifications' : 'notifications-outline'} size={20} color={Colors.textSecondary} /></Pressable> : null}
     </View>

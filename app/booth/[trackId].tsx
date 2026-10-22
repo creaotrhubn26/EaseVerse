@@ -88,14 +88,14 @@ const BOOTH_TIP_KEY = "@easeverse_booth_intro_dismissed_v1";
 
 export default function BoothScreen() {
   const insets = useSafeAreaInsets();
-  const { trackId, projectId } = useLocalSearchParams<{ trackId: string; projectId?: string }>();
+  const { trackId, projectId, takeId } = useLocalSearchParams<{ trackId: string; projectId?: string; takeId?: string }>();
   const [requestPending,setRequestPending]=useState(false);
   usePreventRemove(requestPending,()=>Alert.alert('Unshared recording','Share the response or choose another recording before leaving.'));
   const [data, setData] = useState<BoothPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [introVisible, setIntroVisible] = useState(false);
-  const [panel, setPanel] = useState<'lyrics' | 'feedback' | 'takes' | 'requests'>('lyrics');
+  const [panel, setPanel] = useState<'lyrics' | 'feedback' | 'takes' | 'requests'>(takeId ? 'feedback' : 'lyrics');
   const [selectedTakeId, setSelectedTakeId] = useState<string | null>(null);
   const [audioChoice, setAudioChoice] = useState<'reference' | 'take' | 'memo'>('take');
   const [jump, setJump] = useState<PlaybackJump | null>(null);
@@ -159,7 +159,9 @@ export default function BoothScreen() {
     setData(null);
     setLoading(true);
     setError(null);
-    setSelectedTakeId(null);
+    setSelectedTakeId(takeId || null);
+    setPanel(takeId ? 'feedback' : 'lyrics');
+    setAudioChoice('take');
     setHiddenFeedback(new Set());
     setJump(null);
     const updates = createBoothRefresh<BoothPayload>({
@@ -195,16 +197,17 @@ export default function BoothScreen() {
       updates.dispose();
       if (refreshRef.current === updates) refreshRef.current = null;
     };
-  }, [trackId, projectId, auth.user?.id, auth.isLoaded, auth.getToken]);
+  }, [trackId, projectId, takeId, auth.user?.id, auth.isLoaded, auth.getToken]);
 
-  const selectedTake = data?.takes.find(take => take.id === selectedTakeId) || data?.takes[0];
+  const selectedTake = selectedTakeId ? data?.takes.find(take => take.id === selectedTakeId) : data?.takes[0];
+  const missingRequestedTake = Boolean(data && selectedTakeId && !selectedTake);
   const activeAudio = audioChoice === 'reference' && data?.referenceTrack
     ? { id: 'reference', url: data.referenceTrack.url, name: data.referenceTrack.name || 'Reference mix' }
     : audioChoice === 'memo' && selectedTake?.producerMemoUrl
       ? { id: `memo-${selectedTake.id}`, url: selectedTake.producerMemoUrl, name: 'Producer voice note' }
       : selectedTake?.audioUrl
         ? { id: selectedTake.id, url: selectedTake.audioUrl, name: selectedTake.filename }
-        : data?.referenceTrack ? { id: 'reference', url: data.referenceTrack.url, name: data.referenceTrack.name || 'Reference mix' } : null;
+        : data?.referenceTrack && !missingRequestedTake ? { id: 'reference', url: data.referenceTrack.url, name: data.referenceTrack.name || 'Reference mix' } : null;
   const isReference = activeAudio?.id === 'reference';
   const referenceComments = data?.referenceTrack?.producerComments || [];
   const hasFeedback = isReference ? referenceComments.length > 0 : Boolean(selectedTake?.producerNote || selectedTake?.producerMemoUrl || selectedTake?.regions.length);
@@ -246,6 +249,10 @@ export default function BoothScreen() {
     </View>
     {loading && !data ? <ActivityIndicator accessibilityLabel="Loading vocal booth" color={Colors.gradientMid} style={{ marginTop: 32 }} /> : error && !data ? <View style={styles.stateCard}><Text style={styles.error}>{error}</Text><Pressable onPress={() => void (!auth.user && auth.signIn ? auth.signIn().then(load) : load())} style={styles.headerButton} accessibilityRole="button" accessibilityLabel={!auth.user ? "Sign in to open song" : "Retry loading song"}><Text style={styles.panelTabLabelActive}>{!auth.user ? "Continue with CreatorHub" : "Try again"}</Text></Pressable></View> : <>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll}>
+        {missingRequestedTake ? <View style={styles.stateCard}>
+          <Text accessibilityRole="alert" style={styles.error}>This recording is no longer available in this song. Choose another take or go back to Sessions.</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Choose another studio take" style={styles.headerButton} onPress={() => { setSelectedTakeId(null); setPanel('takes'); }}><Text style={styles.panelTabLabelActive}>Choose another take</Text></Pressable>
+        </View> : null}
         {error && data ? <Pressable accessibilityRole="button" accessibilityLabel="Retry song updates" onPress={() => void load()} style={styles.hintRow}><Text accessibilityLiveRegion="polite" aria-live="polite" style={styles.hintText}>Could not refresh. Retrying automatically. Tap to retry now.</Text></Pressable> : null}
         {data?.projectId ? <StudioBookingsCard key={data.projectId} projectId={data.projectId} compact disabled={requestPending} /> : null}
         {introVisible ? <View style={styles.hintRow}><Text style={styles.hintText}>Tap a timecode to hear feedback in context.</Text><Pressable onPress={dismissIntro} style={styles.headerButton} accessibilityRole="button" accessibilityLabel="Dismiss booth tip"><Ionicons name="close" size={18} color={Colors.textSecondary} /></Pressable></View> : null}

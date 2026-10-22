@@ -49,7 +49,8 @@ export function TakesSection(props: Props) {
 }
 
 function TakesSectionAuthed({ horizontalMargin = 16, collapsible = false }: Props) {
-  const { getToken, isLoaded, isSignedIn, user } = useAuth();
+  const { getToken, isLoaded, isSignedIn, user, signIn, isSigningIn } = useAuth();
+  const [signInError, setSignInError] = useState<string | null>(null);
   const userId = user?.id;
   const accountRef = useRef(userId);
   accountRef.current = userId;
@@ -144,7 +145,16 @@ function TakesSectionAuthed({ horizontalMargin = 16, collapsible = false }: Prop
   }, [isSignedIn, takes, reload]);
 
   if (!isSignedIn) {
-    return null;
+    if (!isLoaded) return null;
+    return <View style={[styles.card, { marginHorizontal: horizontalMargin }]}>
+      <Text style={styles.title}>Studio takes</Text>
+      <Text accessibilityRole="alert" style={styles.error}>Sign in to open your private studio recordings.</Text>
+      {signInError ? <Text accessibilityRole="alert" style={styles.error}>{signInError}</Text> : null}
+      <Pressable disabled={isSigningIn} accessibilityRole="button" accessibilityLabel="Sign in to open studio recordings" style={styles.retryButton}
+        onPress={() => { setSignInError(null); void signIn('/sessions').catch(() => setSignInError('Could not sign in. Try again.')); }}>
+        <Text style={styles.boothBtnText}>{isSigningIn ? 'Opening sign-in…' : 'Continue with CreatorHub'}</Text>
+      </Pressable>
+    </View>;
   }
 
   return (
@@ -304,6 +314,22 @@ function TakeRow({
   onTakeUpdated: (updated: TakeRecord) => void;
 }) {
   const [analysis, setAnalysis] = useState<TakeAnalysis | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailAttempt, setDetailAttempt] = useState(0);
+  const [openError, setOpenError] = useState<string | null>(null);
+
+  function openTake() {
+    if (!take.externalTrackId) return;
+    setOpenError(null);
+    try {
+      router.push({ pathname: '/booth/[trackId]', params: {
+        trackId: take.externalTrackId, takeId: take.id,
+        ...(take.projectId ? { projectId: take.projectId } : {}),
+      } });
+    } catch {
+      setOpenError('Could not open this recording. Tap the recording to try again.');
+    }
+  }
   const [noteDraft, setNoteDraft] = useState(take.producerNote ?? "");
   const [noteDirty, setNoteDirty] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
@@ -549,15 +575,20 @@ function TakeRow({
     if (take.status !== "done") return;
     if (analysis) return;
     let cancelled = false;
-    (async () => {
-      const token = await getToken();
-      const detail = await fetchTakeDetail(token, take.id);
-      if (!cancelled) setAnalysis(detail?.analysis ?? null);
+    void (async () => {
+      try {
+        const token = await getToken();
+        const detail = await fetchTakeDetail(token, take.id);
+        if (!detail) throw new Error('Recording details are no longer available.');
+        if (!cancelled) { setAnalysis(detail.analysis ?? null); setDetailError(null); }
+      } catch (error) {
+        if (!cancelled) setDetailError(`Could not load recording details. You can still open the song. ${error instanceof Error ? error.message : 'Try again.'}`);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [take.status, take.id, analysis, getToken]);
+  }, [take.status, take.id, analysis, getToken, detailAttempt]);
 
   const [boothCopied, setBoothCopied] = useState(false);
 
@@ -578,7 +609,11 @@ function TakeRow({
   return (
     <View style={styles.takeRow}>
       <View style={styles.takeRowHeader}>
-        <View style={{ flex: 1 }}>
+        <Pressable style={{ flexBasis: '100%', flexGrow: 1, minWidth: 0, minHeight: 52, justifyContent: 'center' }}
+          disabled={!take.externalTrackId} accessibilityRole={take.externalTrackId ? 'button' : undefined}
+          accessibilityLabel={take.externalTrackId ? `Open studio recording ${take.filename}` : undefined}
+          accessibilityHint="Opens this recording with the song lyrics and producer feedback"
+          onPress={openTake}>
           <Text style={styles.takeName} numberOfLines={1}>
             {take.filename}
           </Text>
@@ -588,9 +623,9 @@ function TakeRow({
             {take.durationSec ? `${take.durationSec.toFixed(1)}s · ` : ""}
             {new Date(take.uploadedAt).toLocaleString()}
           </Text>
-        </View>
+        </Pressable>
         {take.externalTrackId ? <Pressable accessibilityRole="button" accessibilityLabel="Open studio song"
-          onPress={() => router.push({pathname:"/booth/[trackId]",params:{trackId:take.externalTrackId!,...(take.projectId?{projectId:take.projectId}:{})}})}
+          onPress={openTake}
           style={[styles.boothBtn,{minHeight:48,minWidth:48}]}><Text style={styles.boothBtnText}>Open song</Text></Pressable> : null}
         {take.externalTrackId && Platform.OS === "web" ? (
           <>
@@ -639,6 +674,13 @@ function TakeRow({
           <Text style={[styles.statusText, { color: statusColor }]}>{take.status}</Text>
         </View>
       </View>
+      {openError ? <Text accessibilityRole="alert" style={styles.error}>{openError}</Text> : null}
+      {detailError ? <View>
+        <Text accessibilityRole="alert" style={styles.error}>{detailError}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Retry details for ${take.filename}`} style={styles.retryButton} onPress={() => setDetailAttempt(attempt => attempt + 1)}>
+          <Text style={styles.boothBtnText}>Try again</Text>
+        </Pressable>
+      </View> : null}
       {take.status === "error" && take.errorMessage ? (
         <Text style={styles.analysisError}>{take.errorMessage}</Text>
       ) : null}
@@ -888,7 +930,7 @@ function TakeRow({
         {take.storageUrl ? <UniversalAudioPlayer url={take.storageUrl} label={take.filename} /> : null}
         {take.producerDecision ? <Text style={styles.consensusText}>Producer decision: {take.producerDecision === 'keeper' ? 'Keeper' : 'Re-do requested'}</Text> : null}
         {take.producerNote ? <Text style={styles.analysisNotes}>{take.producerNote}</Text> : null}
-        {take.externalTrackId && take.projectId ? <Pressable accessibilityRole="button" accessibilityLabel="View lyrics and producer feedback" style={styles.boothBtn} onPress={() => router.push({ pathname: '/booth/[trackId]', params: { trackId: take.externalTrackId!, projectId: take.projectId! } })}>
+        {take.externalTrackId && take.projectId ? <Pressable accessibilityRole="button" accessibilityLabel="View lyrics and producer feedback" style={styles.boothBtn} onPress={openTake}>
           <Text style={styles.boothBtnText}>Lyrics & producer feedback</Text>
         </Pressable> : null}
       </View>}
@@ -965,8 +1007,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderGlass,
     gap: 8,
   },
+  retryButton: { minHeight: 48, justifyContent: "center", alignSelf: "flex-start", paddingHorizontal: 8 },
   takeRowHeader: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 8,
   },

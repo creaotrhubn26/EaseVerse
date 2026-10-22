@@ -23,7 +23,8 @@ export async function buildLinkedBoothPayload(
   } = {},
 ) {
   const { rows: links } = await p.query(
-    `SELECT link.* FROM creatorhub_project_links link
+    `SELECT link.*, project.name AS project_name FROM creatorhub_project_links link
+       JOIN projects project ON project.id=link.easeverse_project_id
        JOIN project_members member ON member.project_id=link.easeverse_project_id AND member.user_id=$1
       WHERE link.external_track_id=$2 AND ($3::text IS NULL OR link.easeverse_project_id=$3)
       LIMIT 2`,
@@ -36,7 +37,9 @@ export async function buildLinkedBoothPayload(
   if (!link) {
     // Keep existing unlinked takes usable, but only for their owner/members.
     const scopes = await p.query(
-      `SELECT DISTINCT t.project_id FROM takes t WHERE t.external_track_id=$1
+      `SELECT DISTINCT t.project_id, project.name AS project_name FROM takes t
+        LEFT JOIN projects project ON project.id=t.project_id
+        WHERE t.external_track_id=$1
         AND (t.user_id=$2 OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id=t.project_id AND m.user_id=$2))
         AND ($3::text IS NULL OR t.project_id=$3) LIMIT 2`,
       [trackId, userId, projectId || null],
@@ -45,6 +48,7 @@ export async function buildLinkedBoothPayload(
     legacy = true;
     link = {
       easeverse_project_id: scopes.rows[0].project_id,
+      project_name: scopes.rows[0].project_name,
       owner_user_id: userId,
     };
   }
@@ -214,6 +218,9 @@ export async function buildLinkedBoothPayload(
     collaborationUnavailable: collaboration.unavailable === true,
     recordingRequests: collaboration.requests || [],
     projectId: link.easeverse_project_id,
+    project: link.easeverse_project_id
+      ? { id: link.easeverse_project_id, name: link.project_name || null }
+      : null,
     takes: linked.map(({ take: t, audioUrl, extraRegions }) => ({
       id: t.id,
       recordingContext: takeContext.get(t.id) || null,

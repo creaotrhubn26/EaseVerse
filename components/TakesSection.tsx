@@ -63,7 +63,7 @@ function TakesSectionAuthed({ horizontalMargin = 16, collapsible = false }: Prop
   const [projects, setProjectsList] = useState<ProjectListItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const { activeSong } = useApp();
+  const { activeSong, settings } = useApp();
 
   const reload = useCallback(async () => {
     if (!isSignedIn) return;
@@ -287,6 +287,7 @@ function TakesSectionAuthed({ horizontalMargin = 16, collapsible = false }: Prop
               take={t}
               canProduce={!t.projectId || projects.find(project => project.id === t.projectId)?.role === 'producer'}
               projectName={projects.find(project => project.id === t.projectId)?.name}
+              projectLabel={settings.language === 'Norwegian' ? 'Studioøkt' : 'Studio session'}
               getToken={getToken}
               onTakeUpdated={(updated) =>
                 setTakes((prev) => prev.map((tt) => (tt.id === updated.id ? { ...tt, ...updated } : tt)))
@@ -304,12 +305,14 @@ function TakeRow({
   take,
   canProduce,
   projectName,
+  projectLabel,
   getToken,
   onTakeUpdated,
 }: {
   take: TakeRecord;
   canProduce: boolean;
   projectName?: string;
+  projectLabel: string;
   getToken: () => Promise<string | null>;
   onTakeUpdated: (updated: TakeRecord) => void;
 }) {
@@ -617,8 +620,8 @@ function TakeRow({
           <Text style={styles.takeName} numberOfLines={1}>
             {take.filename}
           </Text>
+          {projectName ? <Text style={styles.takeProject}>{projectLabel}: {projectName}</Text> : null}
           <Text style={styles.takeMeta}>
-            {projectName ? `${projectName} · ` : !take.projectId && take.externalTrackId ? `${take.externalTrackId} · ` : ""}
             {take.byteSize ? `${(take.byteSize / 1024 / 1024).toFixed(1)} MB · ` : ""}
             {take.durationSec ? `${take.durationSec.toFixed(1)}s · ` : ""}
             {new Date(take.uploadedAt).toLocaleString()}
@@ -1052,6 +1055,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   takeName: { color: Colors.textPrimary, fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  takeProject: { color: Colors.textSecondary, fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 18, marginTop: 4 },
   takeMeta: { color: Colors.textTertiary, fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 2 },
   boothBtn: {
     flexDirection: "row",

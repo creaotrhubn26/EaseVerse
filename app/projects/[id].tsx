@@ -1,3 +1,4 @@
+import { MusicIdentityCard } from "@/components/MusicIdentityCard";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -234,6 +235,7 @@ function ProjectDetailInner() {
       {linkedTrackId ? <Pressable accessibilityRole="button" accessibilityLabel="Open lyrics, audio and producer feedback" style={styles.primaryBtn} onPress={() => router.push({ pathname: '/booth/[trackId]', params: { trackId: linkedTrackId, projectId: String(id) } })}><Text style={styles.primaryBtnText}>Lyrics & producer feedback</Text></Pressable> : null}
         {linkedTrackId ? <StudioBookingsCard key={project.id} projectId={project.id} /> : null}
         <ProToolsProjectSyncCard projectId={project.id} />
+        {linkedTrackId ? <MusicIdentityCard key={project.id} projectId={project.id} /> : null}
 
       <View style={styles.refCard}>
         <Text style={styles.cardLabel}>Reference track</Text>

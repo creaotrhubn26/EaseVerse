@@ -1,3 +1,4 @@
+import SpotifyArtistField from "@/components/SpotifyArtistField";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -166,7 +167,7 @@ export default function SoundRoomInvitation() {
         }
       );
       if (!response.ok)
-        throw new Error(response.status === 404 ? "unavailable" : "save");
+        throw new Error(response.status === 404 ? "unavailable" : response.status === 400 ? "spotify" : "save");
       const data = (await response.json()) as Invite;
       if (active.current !== who) return;
       setInvite(data);
@@ -174,8 +175,8 @@ export default function SoundRoomInvitation() {
     } catch (e) {
       if (active.current === who)
         setError(
-          e instanceof Error && e.message === "unavailable"
-            ? "unavailable"
+          e instanceof Error && ["unavailable", "spotify"].includes(e.message)
+            ? e.message
             : "save"
         );
     } finally {
@@ -194,6 +195,8 @@ export default function SoundRoomInvitation() {
           "Bildet kunne ikke brukes. Velg et mindre JPG- eller PNG-bilde.",
           "Could not use this image. Choose a smaller JPG or PNG image."
         )
+      : error === "spotify"
+      ? t("Kontroller profilfeltene og velg en gyldig Spotify-artist. Du kan også tømme Spotify-feltet.", "Check your profile fields and select a valid Spotify artist. You can also clear the Spotify field.")
       : error === "save"
       ? t(
           "Profilen kunne ikke lagres. Opplysningene er fortsatt her. Prøv igjen.",
@@ -443,7 +446,8 @@ export default function SoundRoomInvitation() {
                       "Social accounts (optional)"
                     )}
                   </Text>
-                  {["instagram", "tiktok", "spotify", "youtube"].map((key) => (
+                  <SpotifyArtistField value={profile.links.spotify || ""} onChange={(value) => set("links", { ...profile.links, spotify: value })} inviteToken={token} getToken={getToken} en={en} disabled={saving} />
+                  {["instagram", "tiktok", "youtube"].map((key) => (
                     <View style={styles.field} key={key}>
                       <Text style={styles.label}>
                         {key === "tiktok"

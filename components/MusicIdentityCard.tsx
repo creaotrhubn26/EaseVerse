@@ -1,5 +1,5 @@
 import { FontAwesome } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Image,
   Linking,
@@ -38,10 +38,12 @@ function MusicIdentitySession({ projectId }: { projectId: string }) {
   const auth = useAuth(),
     alive = useRef(true),
     pending = useRef(false);
+  const latestRevision = useRef(-1);
+  const getToken = auth.getToken;
   const en = !/^n[bon](?:-|$)/i.test(
     Intl.DateTimeFormat().resolvedOptions().locale
   );
-  const t = (no: string, eng: string) => (en ? eng : no);
+  const t = useCallback((no: string, eng: string) => (en ? eng : no), [en]);
   const [data, setData] = useState<Data | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -51,37 +53,37 @@ function MusicIdentitySession({ projectId }: { projectId: string }) {
     [preview, setPreview] = useState<Track | null>(null),
     [artistLink, setArtistLink] = useState(""),
     [selected, setSelected] = useState<string[]>([]);
-  const request = async (
-    action = "read",
-    payload: Record<string, unknown> = {}
-  ) => {
-    const response = await authedFetch(
-      action === "read"
-        ? `/api/music-identity?projectId=${encodeURIComponent(projectId)}`
-        : "/api/music-identity",
-      await auth.getToken(),
-      action === "read"
-        ? {}
-        : {
-            method: "POST",
-            body: JSON.stringify({
-              projectId,
-              action,
-              revision: data?.identity.revision,
-              ...payload,
-            }),
-          }
-    );
-    if (!response.ok) throw new Error(String(response.status));
-    return response.json();
-  };
-  const accept = (r: Data) => {
-    if (alive.current) {
+  const request = useCallback(
+    async (action = "read", payload: Record<string, unknown> = {}) => {
+      const response = await authedFetch(
+        action === "read"
+          ? `/api/music-identity?projectId=${encodeURIComponent(projectId)}`
+          : "/api/music-identity",
+        await getToken(),
+        action === "read"
+          ? {}
+          : {
+              method: "POST",
+              body: JSON.stringify({
+                projectId,
+                action,
+                ...payload,
+              }),
+            }
+      );
+      if (!response.ok) throw new Error(String(response.status));
+      return response.json();
+    },
+    [projectId, getToken]
+  );
+  const accept = useCallback((r: Data) => {
+    if (alive.current && r.identity.revision >= latestRevision.current) {
+      latestRevision.current = r.identity.revision;
       setData(r);
       setSelected(r.identity.artists.map((a) => a.spotifyId || a.id));
     }
-  };
-  const load = async () => {
+  }, []);
+  const load = useCallback(async () => {
     try {
       accept(await request());
     } catch {
@@ -93,14 +95,14 @@ function MusicIdentitySession({ projectId }: { projectId: string }) {
           )
         );
     }
-  };
+  }, [accept, request, t]);
   useEffect(() => {
     alive.current = true;
     void load();
     return () => {
       alive.current = false;
     };
-  }, [projectId]);
+  }, [load]);
   async function run(action: string, payload: Record<string, unknown> = {}) {
     if (pending.current) return;
     pending.current = true;
@@ -108,7 +110,10 @@ function MusicIdentitySession({ projectId }: { projectId: string }) {
     setError("");
     setNotice("");
     try {
-      const r = await request(action, payload);
+      const r = await request(action, {
+        revision: data?.identity.revision,
+        ...payload,
+      });
       if (alive.current) {
         if (action === "preview") setPreview(r.track);
         else {
